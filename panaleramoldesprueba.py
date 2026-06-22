@@ -495,13 +495,22 @@ else:
         lista_destinos = repartos_validos.to_dict('records')
         
         # 3. Llamamos al optimizador (usamos punto_origen, ej: (-24.78, -65.41))
-        ruta_optima = optimizar_ruta(punto_origen, lista_destinos)
-        
-        # 4. Ahora mostramos la lista ordenada
+        ruta_optima = optimizar_ruta(punto_origen, grupo.to_dict('records'))
+    
         st.write("### 🚚 Ruta Optimizada")
+        
+        # Recorremos la ruta optimizada
         for i, v in enumerate(ruta_optima, 1):
-            st.write(f"{i}. **{v['Cliente']}**")
-            st.link_button(f"📍 Ir a {v['Cliente']}", v['Link_Maps_Entrega'])
+            # Aseguramos que los valores existan, si no, ponemos "Sin dato"
+            monto = v.get('Monto', '0')
+            metodo = v.get('Metodo_Pago', 'N/A')
+            
+            # Mostramos la línea completa tal como querías
+            st.write(f"{i}. **{v['Cliente']}** - ${monto} - {metodo}")
+            
+            # Botón para ir a Maps
+            if v.get('Link_Maps_Entrega'):
+                st.link_button(f"📍 Ir a {v['Cliente']}", v['Link_Maps_Entrega'])
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
