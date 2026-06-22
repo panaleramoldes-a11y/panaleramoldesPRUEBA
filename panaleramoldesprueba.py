@@ -501,14 +501,20 @@ else:
         
         # Recorremos la ruta optimizada
         for i, v in enumerate(ruta_optima, 1):
-            # Aseguramos que los valores existan, si no, ponemos "Sin dato"
-            monto = v.get('Monto', '0')
-            metodo = v.get('Metodo_Pago', 'N/A')
+            # Usamos las claves exactas en minúsculas que tiene tu JSON
+            monto = v.get('monto', '0') 
+            metodo = v.get('metodo', 'N/A')
             
-            # Mostramos la línea completa tal como querías
+            # Si tienes una columna 'Total' en la tabla, úsala si 'monto' no está
+            if monto == '0' and 'Total' in v:
+                monto = v['Total']
+            
+            # Mostramos en pantalla
             st.write(f"{i}. **{v['Cliente']}** - ${monto} - {metodo}")
             
-            # Botón para ir a Maps
+            # Agregamos al texto de WhatsApp
+            texto_whatsapp += f"{i}. {v['Cliente']} ${monto} {metodo}\n"
+            
             if v.get('Link_Maps_Entrega'):
                 st.link_button(f"📍 Ir a {v['Cliente']}", v['Link_Maps_Entrega'])
 
@@ -1363,7 +1369,8 @@ else:
 
                 # Botón de optimización (Ahora usa 'punto_partida' definido arriba)
                 if st.button(f"🚀 Generar Diagrama Optimizado para {fecha}", key=f"btn_{fecha}"):
-                    generar_diagrama_optimizada(grupo, punto_partida)
+                    # Pasamos 'fecha' como tercer argumento
+                    generar_diagrama_optimizada(grupo, punto_partida, fecha)
                 # --- AQUÍ TERMINA LA MODIFICACIÓN ---
                 
                 # 3. Iteramos sobre los repartos de ESE día
