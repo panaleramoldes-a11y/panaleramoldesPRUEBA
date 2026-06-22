@@ -6,6 +6,7 @@ import re
 import requests
 import math
 import json
+import pydeck as pdk
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -497,9 +498,42 @@ else:
         if f"orden_{fecha}" not in st.session_state:
             st.session_state[f"orden_{fecha}"] = {v['Cliente']: i+1 for i, v in enumerate(ruta_optima)}
     
-        # Mapa
         st.write("### 🗺️ Previsualización de Ruta")
-        st.map(pd.DataFrame(ruta_optima).rename(columns={'Latitud': 'lat', 'Longitud': 'lon'}))
+    
+        # Preparamos el DataFrame con lat/lon y el nombre
+        df_mapa = pd.DataFrame(ruta_optima).rename(columns={'Latitud': 'lat', 'Longitud': 'lon'})
+        
+        # Creamos el mapa con PyDeck
+        st.pydeck_chart(pdk.Deck(
+            map_style=None,
+            initial_view_state=pdk.ViewState(
+                latitude=df_mapa['lat'].mean(),
+                longitude=df_mapa['lon'].mean(),
+                zoom=12,
+                pitch=0,
+            ),
+            layers=[
+                # Capa de puntos
+                pdk.Layer(
+                    'ScatterplotLayer',
+                    df_mapa,
+                    get_position='[lon, lat]',
+                    get_color='[200, 30, 0, 160]',
+                    get_radius=100,
+                ),
+                # Capa de etiquetas de texto
+                pdk.Layer(
+                    'TextLayer',
+                    df_mapa,
+                    get_position='[lon, lat]',
+                    get_text='Cliente',
+                    get_color='[0, 0, 0, 200]',
+                    get_size=16,
+                    get_alignment_baseline='"bottom"',
+                    get_pixel_offset='[0, -15]', # Mueve el texto un poco arriba del punto
+                ),
+            ],
+        ))
         
         # Formulario de orden
         with st.form(key=f"form_orden_{fecha}"):
