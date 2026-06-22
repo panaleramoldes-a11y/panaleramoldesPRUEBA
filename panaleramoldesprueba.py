@@ -1330,7 +1330,7 @@ else:
                     col_org1, col_org2 = st.columns(2)
                     
                     opciones = {
-                        "Pañalera (Local)": (-24.7825, -65.4111), # Tus coords
+                        "Pañalera (Local)": (-24.793734909695726, -65.42769672376464), # Tus coords
                         "Otro (Manual)": None
                     }
                     
