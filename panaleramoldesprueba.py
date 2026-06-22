@@ -1365,10 +1365,16 @@ else:
                     
                     sel_origen = col_org1.selectbox("¿Desde dónde sale el reparto?", list(opciones.keys()), key=f"sel_{fecha}")
                     
-                    if sel_origen == "Otro (Manual)":
-                        lat = col_org2.number_input("Latitud", value=-24.7825, format="%.6f", key=f"lat_{fecha}")
-                        lng = col_org2.number_input("Longitud", value=-65.4111, format="%.6f", key=f"lng_{fecha}")
-                        punto_partida = (lat, lng)
+                    if sel_origen == "Otro (Link de Maps)":
+                        link_maps = st.text_input("Pega el link de Google Maps aquí:")
+                        if link_maps:
+                            coords = extraer_coords_desde_link(link_maps)
+                            if coords:
+                                st.success(f"Coordenadas detectadas: {coords}")
+                                punto_partida = coords
+                            else:
+                                st.error("No pude leer el link. Asegúrate de copiarlo desde el botón 'Compartir' de Google Maps.")
+                                punto_partida = (-24.7825, -65.4111) # Default
                     else:
                         punto_partida = opciones[sel_origen]
 
