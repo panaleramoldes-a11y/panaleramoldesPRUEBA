@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import re
 import requests
 import math
+import json
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -487,27 +488,29 @@ else:
             
         return ruta_ordenada
 
-    def generar_diagrama_optimizada(grupo_repartos, punto_origen):
-        # 1. Filtramos solo los que tienen coordenadas (ignoramos los antiguos/nulos)
+    def generar_diagrama_optimizada(grupo_repartos, punto_origen, fecha):
+        # 1. Filtramos y preparamos
         repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
+        ruta_optima = optimizar_ruta(punto_origen, repartos_validos.to_dict('records'))
         
-        # 2. Convertimos el DataFrame a una lista de diccionarios para el algoritmo
-        lista_destinos = repartos_validos.to_dict('records')
-        
-        # 3. Llamamos al optimizador (usamos punto_origen, ej: (-24.78, -65.41))
-        ruta_optima = optimizar_ruta(punto_origen, grupo.to_dict('records'))
-    
         st.write("### 🚚 Ruta Optimizada")
+        texto_whatsapp = f"*DIAGRAMA DE REPARTOS {fecha}*\n\n"
         
-        # Recorremos la ruta optimizada
         for i, v in enumerate(ruta_optima, 1):
-            # Usamos las claves exactas en minúsculas que tiene tu JSON
-            monto = v.get('monto', '0') 
-            metodo = v.get('metodo', 'N/A')
+            # --- EXTRACCIÓN DE DATOS CORREGIDA ---
+            metodo = v.get('Metodo_Pago', 'N/A')
+            monto = "0"
             
-            # Si tienes una columna 'Total' en la tabla, úsala si 'monto' no está
-            if monto == '0' and 'Total' in v:
-                monto = v['Total']
+            # Intentamos obtener el monto del JSON de pagos
+            try:
+                if v.get('Pagos_JSON'):
+                    # Si es un string que parece JSON, lo cargamos
+                    pagos = json.loads(v['Pagos_JSON'])
+                    # Si es una lista como: [{"metodo": "...", "monto": 5000.0}]
+                    if isinstance(pagos, list) and len(pagos) > 0:
+                        monto = pagos[0].get('monto', '0')
+            except:
+                monto = "0"
             
             # Mostramos en pantalla
             st.write(f"{i}. **{v['Cliente']}** - ${monto} - {metodo}")
@@ -517,15 +520,10 @@ else:
             
             if v.get('Link_Maps_Entrega'):
                 st.link_button(f"📍 Ir a {v['Cliente']}", v['Link_Maps_Entrega'])
-
-        texto_whatsapp = f"*DIAGRAMA DE REPARTOS {fecha}*\n\n"
-        for i, v in enumerate(ruta_optima, 1):
-            texto_whatsapp += f"{i}. {v['Cliente']} ${v['Monto']} {v['Metodo_Pago']}\n"
-        
-        # Mostramos el área de texto para que el usuario pueda copiarlo fácilmente
+    
         st.divider()
         st.write("### 📋 Copiar para WhatsApp")
-        st.text_area("Selecciona y copia el texto:", value=texto_whatsapp, height=200)
+        st.text_area("Selecciona y copia:", value=texto_whatsapp, height=200)
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
@@ -1369,7 +1367,6 @@ else:
 
                 # Botón de optimización (Ahora usa 'punto_partida' definido arriba)
                 if st.button(f"🚀 Generar Diagrama Optimizado para {fecha}", key=f"btn_{fecha}"):
-                    # Pasamos 'fecha' como tercer argumento
                     generar_diagrama_optimizada(grupo, punto_partida, fecha)
                 # --- AQUÍ TERMINA LA MODIFICACIÓN ---
                 
