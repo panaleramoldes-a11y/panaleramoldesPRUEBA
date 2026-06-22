@@ -486,7 +486,23 @@ else:
             pendientes.remove(mas_cercano)
             
         return ruta_ordenada
+
+    def generar_diagrama_optimizada(grupo_repartos, punto_origen):
+        # 1. Filtramos solo los que tienen coordenadas (ignoramos los antiguos/nulos)
+        repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
         
+        # 2. Convertimos el DataFrame a una lista de diccionarios para el algoritmo
+        lista_destinos = repartos_validos.to_dict('records')
+        
+        # 3. Llamamos al optimizador (usamos punto_origen, ej: (-24.78, -65.41))
+        ruta_optima = optimizar_ruta(punto_origen, lista_destinos)
+        
+        # 4. Ahora mostramos la lista ordenada
+        st.write("### 🚚 Ruta Optimizada")
+        for i, v in enumerate(ruta_optima, 1):
+            st.write(f"{i}. **{v['Cliente']}**")
+            st.link_button(f"📍 Ir a {v['Cliente']}", v['Link_Maps_Entrega'])
+    
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
 
@@ -1306,7 +1322,31 @@ else:
             
             # 2. Agrupamos por fecha
             for fecha, grupo in df.groupby('Fecha_Entrega'):
-                st.subheader(f"📅 Fecha de Entrega: {fecha}")
+                st.subheader(f"📅 {fecha}")
+                
+                # --- AQUÍ EMPIEZA LA MODIFICACIÓN ---
+                # Usamos una clave única basada en la fecha para que no haya conflictos
+                with st.expander(f"⚙️ Configurar Origen para {fecha}"):
+                    col_org1, col_org2 = st.columns(2)
+                    
+                    opciones = {
+                        "Pañalera (Local)": (-24.7825, -65.4111), # Tus coords
+                        "Otro (Manual)": None
+                    }
+                    
+                    sel_origen = col_org1.selectbox("¿Desde dónde sale el reparto?", list(opciones.keys()), key=f"sel_{fecha}")
+                    
+                    if sel_origen == "Otro (Manual)":
+                        lat = col_org2.number_input("Latitud", value=-24.7825, format="%.6f", key=f"lat_{fecha}")
+                        lng = col_org2.number_input("Longitud", value=-65.4111, format="%.6f", key=f"lng_{fecha}")
+                        punto_partida = (lat, lng)
+                    else:
+                        punto_partida = opciones[sel_origen]
+
+                # Botón de optimización (Ahora usa 'punto_partida' definido arriba)
+                if st.button(f"🚀 Generar Diagrama Optimizado para {fecha}", key=f"btn_{fecha}"):
+                    generar_diagrama_optimizada(grupo, punto_partida)
+                # --- AQUÍ TERMINA LA MODIFICACIÓN ---
                 
                 # 3. Iteramos sobre los repartos de ESE día
                 for _, v in grupo.iterrows():
