@@ -1228,20 +1228,30 @@ else:
         if not ventas_reparto:
             st.info("No hay repartos pendientes.")
         else:
-            for v in ventas_reparto:
-                with st.container(border=True):
-                    # Desglosamos datos
-                    c1, c2, c3 = st.columns([2, 2, 1])
-                    c1.write(f"👤 **Cliente:** {v['Cliente']}")
-                    c2.write(f"📍 **Dir:** {v['Direccion_Entrega']}")
-                    
-                    # Botón de Maps (usando el link que guardamos)
-                    # Ojo: Si guardaste el link en la tabla, úsalo aquí. 
-                    # Si no, podrías tener que buscarlo en la tabla CLIENTES.
-                    if v.get('Link_Maps_Entrega'):
-                        c3.link_button("📍 Abrir Maps", v['Link_Maps_Entrega'])
-                    
-                    st.caption(f"💰 {v['Metodo_Pago']}")
+            # 1. Convertimos a DataFrame para agrupar fácilmente
+            df = pd.DataFrame(ventas_reparto)
+            
+            # Aseguramos que la fecha sea tipo datetime para ordenar bien
+            df['Fecha_Entrega'] = pd.to_datetime(df['Fecha_Entrega']).dt.date
+            
+            # Ordenamos por fecha
+            df = df.sort_values(by='Fecha_Entrega')
+            
+            # 2. Agrupamos por fecha
+            for fecha, grupo in df.groupby('Fecha_Entrega'):
+                st.subheader(f"📅 Fecha de Entrega: {fecha}")
+                
+                # 3. Iteramos sobre los repartos de ESE día
+                for _, v in grupo.iterrows():
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([2, 2, 1])
+                        c1.write(f"👤 **Cliente:** {v['Cliente']}")
+                        c2.write(f"📍 **Dir:** {v['Direccion_Entrega']}")
+                        
+                        if v.get('Link_Maps_Entrega'):
+                            c3.link_button("📍 Maps", v['Link_Maps_Entrega'])
+                        
+                        st.caption(f"💰 {v['Metodo_Pago']}")
 
     # =====================================================================
     # MODULO: 📦 PRODUCTOS
