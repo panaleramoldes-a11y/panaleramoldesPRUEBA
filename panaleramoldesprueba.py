@@ -493,20 +493,24 @@ else:
         repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
         ruta_optima = optimizar_ruta(punto_origen, repartos_validos.to_dict('records'))
         
+        # 2. Mapa
+        st.write("### 🗺️ Previsualización de Ruta")
+        df_mapa = pd.DataFrame(ruta_optima)
+        df_mapa = df_mapa.rename(columns={'Latitud': 'lat', 'Longitud': 'lon'})
+        st.map(df_mapa)
+        
+        # 3. Lista y WhatsApp
         st.write("### 🚚 Ruta Optimizada")
         texto_whatsapp = f"*DIAGRAMA DE REPARTOS {fecha}*\n\n"
         
         for i, v in enumerate(ruta_optima, 1):
-            # --- EXTRACCIÓN DE DATOS CORREGIDA ---
             metodo = v.get('Metodo_Pago', 'N/A')
             monto = "0"
             
-            # Intentamos obtener el monto del JSON de pagos
+            # Intentamos obtener el monto
             try:
                 if v.get('Pagos_JSON'):
-                    # Si es un string que parece JSON, lo cargamos
                     pagos = json.loads(v['Pagos_JSON'])
-                    # Si es una lista como: [{"metodo": "...", "monto": 5000.0}]
                     if isinstance(pagos, list) and len(pagos) > 0:
                         monto = pagos[0].get('monto', '0')
             except:
