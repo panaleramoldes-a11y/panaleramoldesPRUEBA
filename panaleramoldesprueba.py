@@ -3,6 +3,7 @@ from supabase import create_client # Importamos el cliente de Supabase
 import pandas as pd
 from datetime import datetime, timedelta
 import re
+import requests
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -434,6 +435,27 @@ else:
         
         st.dataframe(df_filtrado[['Fecha', 'Nombre', 'Rubro', 'Marca', 'Cantidad', 'Utilidad_Bruta']])
 
+    def obtener_coordenadas(link_maps):
+        """
+        Intenta extraer coordenadas de un link de Google Maps acortado.
+        Como los links de google (goo.gl o maps.app.goo.gl) son redirecciones,
+        primero resolvemos la URL final y luego buscamos los números en el texto.
+        """
+        try:
+            # Resolvemos el link corto a la URL real
+            response = requests.head(link_maps, allow_redirects=True)
+            url_final = response.url
+            
+            # Buscamos patrones de coordenadas en la URL (ej: /@lat,lng)
+            # Esto busca números decimales separados por coma después de un @
+            coordenadas = re.findall(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
+            
+            if coordenadas:
+                return float(coordenadas[0][0]), float(coordenadas[0][1])
+        except:
+            return None, None
+        return None, None
+    
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
 
@@ -1089,7 +1111,18 @@ else:
             with col_f2:
                 if st.button("⏳ GUARDAR COMO PENDIENTE", use_container_width=True):
                     import json
+                    import re # Asegúrate de importar re al principio de tu archivo
+                    
                     try:
+                        # --- NUEVO: Lógica de extracción de coordenadas ---
+                        lat, lng = None, None
+                        link = st.session_state.link_maps_entrega
+                        if link:
+                            # Busca números decimales después de un '@' o en parámetros 'll='
+                            coords = re.findall(r'@(-?\d+\.\d+),(-?\d+\.\d+)', link)
+                            if coords:
+                                lat, lng = float(coords[0][0]), float(coords[0][1])
+                        
                         desglose_pagos = " | ".join([f"{p['metodo']}: ${p['monto']:,.0f}" for p in st.session_state.pagos_split])
                         
                         data_to_save = {
@@ -1103,8 +1136,11 @@ else:
                             "Detalle_JSON": json.dumps(st.session_state.carrito_vta),
                             "Forma_Entrega": st.session_state.tipo_entrega,
                             "Direccion_Entrega": st.session_state.direccion_entrega,
-                            "Link_Maps_Entrega": st.session_state.link_maps_entrega,
-                            "Fecha_Entrega": st.session_state.fecha_reparto
+                            "Link_Maps_Entrega": link,
+                            "Fecha_Entrega": st.session_state.fecha_reparto,
+                            # --- AGREGAMOS LAS NUEVAS COLUMNAS ---
+                            "Latitud": lat,
+                            "Longitud": lng
                         }
 
                         # --- LA LOGICA DE DETECCIÓN ---
