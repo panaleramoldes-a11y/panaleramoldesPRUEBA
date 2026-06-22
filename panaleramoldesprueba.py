@@ -511,6 +511,15 @@ else:
             # Botón para ir a Maps
             if v.get('Link_Maps_Entrega'):
                 st.link_button(f"📍 Ir a {v['Cliente']}", v['Link_Maps_Entrega'])
+
+        texto_whatsapp = f"*DIAGRAMA DE REPARTOS {fecha}*\n\n"
+        for i, v in enumerate(ruta_optima, 1):
+            texto_whatsapp += f"{i}. {v['Cliente']} ${v['Monto']} {v['Metodo_Pago']}\n"
+        
+        # Mostramos el área de texto para que el usuario pueda copiarlo fácilmente
+        st.divider()
+        st.write("### 📋 Copiar para WhatsApp")
+        st.text_area("Selecciona y copia el texto:", value=texto_whatsapp, height=200)
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
