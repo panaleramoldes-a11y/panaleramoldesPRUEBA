@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import re
 import requests
+import math
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -455,7 +456,37 @@ else:
         except:
             return None, None
         return None, None
+
+    def calcular_distancia(coord1, coord2):
+        # Fórmula de Haversine para calcular distancia en línea recta entre dos puntos
+        lat1, lon1 = coord1
+        lat2, lon2 = coord2
+        R = 6371  # Radio de la tierra en km
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        return R * c
     
+    def optimizar_ruta(origen, destinos):
+        """
+        Ordena los destinos usando el algoritmo del 'vecino más cercano'
+        origen: (lat, lng)
+        destinos: lista de diccionarios con {'Cliente': '...', 'Latitud': x, 'Longitud': y}
+        """
+        ruta_ordenada = []
+        pendientes = destinos.copy()
+        actual = origen
+        
+        while pendientes:
+            # Busca el destino más cercano al punto actual
+            mas_cercano = min(pendientes, key=lambda p: calcular_distancia(actual, (p['Latitud'], p['Longitud'])))
+            ruta_ordenada.append(mas_cercano)
+            actual = (mas_cercano['Latitud'], mas_cercano['Longitud'])
+            pendientes.remove(mas_cercano)
+            
+        return ruta_ordenada
+        
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
 
