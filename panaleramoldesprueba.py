@@ -1356,14 +1356,8 @@ else:
                 # --- AQUÍ EMPIEZA LA MODIFICACIÓN ---
                 # Usamos una clave única basada en la fecha para que no haya conflictos
                 with st.expander(f"⚙️ Configurar Origen para {fecha}"):
-                    col_org1, col_org2 = st.columns(2)
-                    
-                    opciones = {
-                        "Pañalera (Local)": (-24.793734909695726, -65.42769672376464), # Tus coords
-                        "Otro (Manual)": None
-                    }
-                    
-                    sel_origen = col_org1.selectbox("¿Desde dónde sale el reparto?", list(opciones.keys()), key=f"sel_{fecha}")
+                    opciones = {"Pañalera (Local)": (-24.793734909695726, -65.42769672376464), "Otro (Link de Maps)": "link"}
+                    sel_origen = st.selectbox("¿Desde dónde sale el reparto?", list(opciones.keys()), key=f"sel_{fecha}")
                     
                     if sel_origen == "Otro (Link de Maps)":
                         link_maps = st.text_input("Pega el link de Google Maps aquí:")
