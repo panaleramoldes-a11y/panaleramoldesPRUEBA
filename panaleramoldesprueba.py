@@ -524,6 +524,13 @@ else:
         st.divider()
         st.write("### 📋 Copiar para WhatsApp")
         st.text_area("Selecciona y copia:", value=texto_whatsapp, height=200)
+
+    def extraer_coords_desde_link(link):
+        # Busca el patrón @-XX.XXXX,-YY.YYYY en el link
+        match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', link)
+        if match:
+            return float(match.group(1)), float(match.group(2))
+        return None # Si no encuentra nada
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
