@@ -489,51 +489,55 @@ else:
             
         return ruta_ordenada
 
-    def generar_diagrama_optimizada(grupo_repartos, punto_origen, fecha):
-        # 1. Filtramos y preparamos
-        repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
-        ruta_optima = optimizar_ruta(punto_origen, repartos_validos.to_dict('records'))
-        
-        # 2. Inicializamos el estado del orden en la sesión si no existe
-        if f"orden_{fecha}" not in st.session_state:
-            st.session_state[f"orden_{fecha}"] = {v['Cliente']: i+1 for i, v in enumerate(ruta_optima)}
-    
         st.write("### 🗺️ Previsualización de Ruta")
     
-        # Preparamos el DataFrame con lat/lon y el nombre
-        df_mapa = pd.DataFrame(ruta_optima).rename(columns={'Latitud': 'lat', 'Longitud': 'lon'})
-        
-        # Creamos el mapa con PyDeck
-        st.pydeck_chart(pdk.Deck(
-            map_style=None,
-            initial_view_state=pdk.ViewState(
-                latitude=df_mapa['lat'].mean(),
-                longitude=df_mapa['lon'].mean(),
-                zoom=12,
-                pitch=0,
-            ),
-            layers=[
-                # Capa de puntos
-                pdk.Layer(
-                    'ScatterplotLayer',
-                    df_mapa,
-                    get_position='[lon, lat]',
-                    get_color='[200, 30, 0, 160]',
-                    get_radius=100,
-                ),
-                # Capa de etiquetas de texto
-                pdk.Layer(
-                    'TextLayer',
-                    df_mapa,
-                    get_position='[lon, lat]',
-                    get_text='Cliente',
-                    get_color='[0, 0, 0, 200]',
-                    get_size=16,
-                    get_alignment_baseline='"bottom"',
-                    get_pixel_offset='[0, -15]', # Mueve el texto un poco arriba del punto
-                ),
-            ],
-        ))
+        # 1. Blindaje: Verificamos si hay datos antes de intentar crear el mapa
+        if not ruta_optima:
+            st.warning("No hay suficientes datos con coordenadas para mostrar el mapa.")
+        else:
+            # Creamos el DataFrame y forzamos a que las coordenadas sean números
+            df_mapa = pd.DataFrame(ruta_optima)
+            df_mapa['Latitud'] = pd.to_numeric(df_mapa['Latitud'], errors='coerce')
+            df_mapa['Longitud'] = pd.to_numeric(df_mapa['Longitud'], errors='coerce')
+            
+            # Limpiamos filas con coordenadas nulas después de la conversión
+            df_mapa = df_mapa.dropna(subset=['Latitud', 'Longitud'])
+            
+            if df_mapa.empty:
+                st.warning("No se pudieron procesar las coordenadas para el mapa.")
+            else:
+                # Renombramos para PyDeck
+                df_mapa = df_mapa.rename(columns={'Latitud': 'lat', 'Longitud': 'lon'})
+                
+                # Creamos el mapa solo si hay datos válidos
+                st.pydeck_chart(pdk.Deck(
+                    map_style=None,
+                    initial_view_state=pdk.ViewState(
+                        latitude=df_mapa['lat'].mean(),
+                        longitude=df_mapa['lon'].mean(),
+                        zoom=12,
+                        pitch=0,
+                    ),
+                    layers=[
+                        pdk.Layer(
+                            'ScatterplotLayer',
+                            df_mapa,
+                            get_position='[lon, lat]',
+                            get_color='[200, 30, 0, 160]',
+                            get_radius=100,
+                        ),
+                        pdk.Layer(
+                            'TextLayer',
+                            df_mapa,
+                            get_position='[lon, lat]',
+                            get_text='Cliente',
+                            get_color='[0, 0, 0, 200]',
+                            get_size=16,
+                            get_alignment_baseline='"bottom"',
+                            get_pixel_offset='[0, -15]',
+                        ),
+                    ],
+                ))
         
         # Formulario de orden
         with st.form(key=f"form_orden_{fecha}"):
