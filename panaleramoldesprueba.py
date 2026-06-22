@@ -493,21 +493,40 @@ else:
         repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
         ruta_optima = optimizar_ruta(punto_origen, repartos_validos.to_dict('records'))
         
-        # 2. Mapa
+        # 2. Inicializamos el estado del orden en la sesión si no existe
+        if f"orden_{fecha}" not in st.session_state:
+            st.session_state[f"orden_{fecha}"] = {v['Cliente']: i+1 for i, v in enumerate(ruta_optima)}
+    
+        # Mapa
         st.write("### 🗺️ Previsualización de Ruta")
-        df_mapa = pd.DataFrame(ruta_optima)
-        df_mapa = df_mapa.rename(columns={'Latitud': 'lat', 'Longitud': 'lon'})
-        st.map(df_mapa)
+        st.map(pd.DataFrame(ruta_optima).rename(columns={'Latitud': 'lat', 'Longitud': 'lon'}))
         
-        # 3. Lista y WhatsApp
-        st.write("### 🚚 Ruta Optimizada")
+        # Formulario de orden
+        with st.form(key=f"form_orden_{fecha}"):
+            orden_manual = {}
+            for idx, v in enumerate(ruta_optima):
+                orden_manual[v['Cliente']] = st.number_input(
+                    f"Orden para {v['Cliente']}", min_value=1, max_value=len(ruta_optima),
+                    value=st.session_state.get(f"pos_{v['Cliente']}_{fecha}", idx + 1)
+                )
+            submit = st.form_submit_button("Aplicar nuevo orden")
+            
+            if submit:
+                # Guardamos los nuevos valores en session_state
+                for cliente, valor in orden_manual.items():
+                    st.session_state[f"pos_{cliente}_{fecha}"] = valor
+                st.rerun() # Fuerza la recarga para que se ordene la lista
+    
+        # Generación de lista final
+        # Usamos el orden guardado en session_state o el original
+        ruta_reordenada = sorted(ruta_optima, key=lambda x: st.session_state.get(f"pos_{x['Cliente']}_{fecha}", 0))
+        
+        # 3. Mostrar resultados finales
+        st.write("### 🚚 Ruta Optimizada Final")
         texto_whatsapp = f"*DIAGRAMA DE REPARTOS {fecha}*\n\n"
         
-        for i, v in enumerate(ruta_optima, 1):
-            metodo = v.get('Metodo_Pago', 'N/A')
+        for i, v in enumerate(ruta_reordenada, 1):
             monto = "0"
-            
-            # Intentamos obtener el monto
             try:
                 if v.get('Pagos_JSON'):
                     pagos = json.loads(v['Pagos_JSON'])
@@ -516,17 +535,10 @@ else:
             except:
                 monto = "0"
             
-            # Mostramos en pantalla
-            st.write(f"{i}. **{v['Cliente']}** - ${monto} - {metodo}")
-            
-            # Agregamos al texto de WhatsApp
-            texto_whatsapp += f"{i}. {v['Cliente']} ${monto} {metodo}\n"
-            
-            if v.get('Link_Maps_Entrega'):
-                st.link_button(f"📍 Ir a {v['Cliente']}", v['Link_Maps_Entrega'])
-    
+            st.write(f"{i}. **{v['Cliente']}** - ${monto} - {v.get('Metodo_Pago', 'N/A')}")
+            texto_whatsapp += f"{i}. {v['Cliente']} ${monto} {v.get('Metodo_Pago', 'N/A')}\n"
+        
         st.divider()
-        st.write("### 📋 Copiar para WhatsApp")
         st.text_area("Selecciona y copia:", value=texto_whatsapp, height=200)
 
     def extraer_coords_desde_link(link):
@@ -1378,6 +1390,10 @@ else:
 
                 # Botón de optimización (Ahora usa 'punto_partida' definido arriba)
                 if st.button(f"🚀 Generar Diagrama Optimizado para {fecha}", key=f"btn_{fecha}"):
+                    st.session_state[f"mostrar_diagrama_{fecha}"] = True
+                
+                # Si la bandera es True, mostramos la función SIEMPRE (para que el formulario sobreviva)
+                if st.session_state.get(f"mostrar_diagrama_{fecha}", False):
                     generar_diagrama_optimizada(grupo, punto_partida, fecha)
                 # --- AQUÍ TERMINA LA MODIFICACIÓN ---
                 
