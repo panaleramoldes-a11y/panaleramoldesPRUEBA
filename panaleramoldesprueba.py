@@ -439,26 +439,34 @@ else:
         st.dataframe(df_filtrado[['Fecha', 'Nombre', 'Rubro', 'Marca', 'Cantidad', 'Utilidad_Bruta']])
 
     def obtener_coordenadas(link_maps):
+        """
+        Algoritmo de búsqueda de coordenadas con múltiples estrategias (Multimodal).
+        """
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
+        
         try:
             response = requests.get(link_maps, headers=headers, allow_redirects=True, timeout=10)
-            url_final = response.url
+            url = response.url
             
-            # AQUÍ ESTÁ EL CAMBIO: Imprimiremos la URL final obligatoriamente
-            st.error(f"DEBUG: Link {link_maps} redirigió a -> {url_final}")
+            # Estrategia 1: Formato estándar @lat,lng
+            m1 = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url)
+            if m1: return float(m1.group(1)), float(m1.group(2))
             
-            coordenadas = re.findall(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
+            # Estrategia 2: Formato de parámetros !3dLat!4dLon (Muy común en links de escritorio)
+            m2 = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url)
+            if m2: return float(m2.group(1)), float(m2.group(2))
             
-            if coordenadas:
-                return float(coordenadas[0][0]), float(coordenadas[0][1])
-                
-        except Exception as e:
-            st.error(f"Error de conexión en {link_maps}: {e}")
+            # Estrategia 3: Formato de búsqueda de places (a veces ocurre en links acortados)
+            m3 = re.search(r'place/(-?\d+\.\d+),(-?\d+\.\d+)', url)
+            if m3: return float(m3.group(1)), float(m3.group(2))
+            
+            # Si llegamos aquí, ninguna estrategia funcionó
             return None, None
             
-        return None, None
+        except:
+            return None, None
     
     def calcular_distancia(coord1, coord2):
         # Fórmula de Haversine para calcular distancia en línea recta entre dos puntos
