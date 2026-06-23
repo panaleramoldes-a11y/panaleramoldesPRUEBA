@@ -768,22 +768,22 @@ else:
                         if guardar_btn:
                             
                             db.table("CLIENTES").update({
-                                "Nombre": nuevo_nombre.upper(),
-                                "Apellido": nuevo_apellido.upper(),
-                                "DNI": nuevo_dni,
-                                "Razón Social": nueva_razon.upper(),
-                                "CUIT": nuevo_cuit,
-                                "Telefono": nuevo_telefono,
-                                "Direccion_1": nuevo_dir1.upper(),
-                                "Link_Direccion_1": nuevo_link1,
-                                "Direccion_2": nuevo_dir2.upper(),
-                                "Link_Direccion_2": nuevo_link2,
-                                "Direccion_3": nuevo_dir3.upper(),
-                                "Link_Direccion_3": nuevo_link3,
-                                "Observaciones": nueva_obs,
-                                "Zona": input_zona,
-                                "Tipo_Cliente": input_tipo
-                            }).eq("ID_Cliente", int(id_modificar)).execute()
+                            "Nombre": (nuevo_nombre or "").upper(),
+                            "Apellido": (nuevo_apellido or "").upper(),
+                            "DNI": nuevo_dni,
+                            "Razón Social": (nueva_razon or "").upper(),
+                            "CUIT": nuevo_cuit,
+                            "Telefono": nuevo_telefono,
+                            "Direccion_1": (nuevo_dir1 or "").upper(),
+                            "Link_Direccion_1": nuevo_link1,
+                            "Direccion_2": (nuevo_dir2 or "").upper(),
+                            "Link_Direccion_2": nuevo_link2,
+                            "Direccion_3": (nuevo_dir3 or "").upper(),
+                            "Link_Direccion_3": nuevo_link3,
+                            "Observaciones": nueva_obs,
+                            "Zona": input_zona,
+                            "Tipo_Cliente": input_tipo
+                        }).eq("ID_Cliente", int(id_modificar)).execute()
                             
                             st.success("✅ ¡Cliente actualizado!")
                             st.rerun()
