@@ -439,26 +439,23 @@ else:
         st.dataframe(df_filtrado[['Fecha', 'Nombre', 'Rubro', 'Marca', 'Cantidad', 'Utilidad_Bruta']])
 
     def obtener_coordenadas(link_maps):
-        # Simulamos ser un navegador real para que Google no nos bloquee
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         try:
-            # Usamos GET en lugar de HEAD y añadimos headers
             response = requests.get(link_maps, headers=headers, allow_redirects=True, timeout=10)
             url_final = response.url
             
-            # Buscamos el patrón @lat,lng que es el estándar de Google Maps
+            # AQUÍ ESTÁ EL CAMBIO: Imprimiremos la URL final obligatoriamente
+            st.error(f"DEBUG: Link {link_maps} redirigió a -> {url_final}")
+            
             coordenadas = re.findall(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
             
             if coordenadas:
                 return float(coordenadas[0][0]), float(coordenadas[0][1])
-            
-            # SI FALLA: Imprime la URL final para que veas qué está leyendo realmente
-            # st.write(f"DEBUG: No se hallaron coordenadas en {url_final}")
-            
+                
         except Exception as e:
-            # st.write(f"DEBUG: Error en conexión: {e}")
+            st.error(f"Error de conexión en {link_maps}: {e}")
             return None, None
             
         return None, None
