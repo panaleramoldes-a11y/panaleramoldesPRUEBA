@@ -443,21 +443,25 @@ else:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
         try:
-            # Descargamos el contenido total de la página
-            response = requests.get(link_maps, headers=headers, allow_redirects=True, timeout=10)
-            html_content = response.text # Leemos el texto de la página
+            # Creamos una sesión para mantener las cookies y estados de redirección
+            session = requests.Session()
+            # Hacemos el primer GET
+            response = session.get(link_maps, headers=headers, allow_redirects=True, timeout=15)
             
-            # BUSCAMOS EN EL TEXTO, no solo en la URL
-            # El formato !3dlat!4dlon suele estar impreso dentro del código fuente de la página
-            coordenadas = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', html_content)
+            # 'response.url' ya nos da la dirección final después de todas las redirecciones
+            url_final = response.url
             
-            if coordenadas:
-                return float(coordenadas.group(1)), float(coordenadas.group(2))
+            # DEBUG: Imprimir esto nos dirá si estamos llegando al destino que tú ves en tu PC
+            # st.write(f"Destino final alcanzado: {url_final}")
+            
+            # Ahora que tenemos la URL final, aplicamos nuestra búsqueda multimodal
+            coords_exactas = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url_final)
+            if coords_exactas:
+                return float(coords_exactas.group(1)), float(coords_exactas.group(2))
                 
-            # Respaldo: intentar buscar en la URL final si no está en el contenido
-            coords_url = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', response.url)
-            if coords_url:
-                return float(coords_url.group(1)), float(coords_url.group(2))
+            coords_vista = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
+            if coords_vista:
+                return float(coords_vista.group(1)), float(coords_vista.group(2))
     
         except Exception as e:
             return None, None
