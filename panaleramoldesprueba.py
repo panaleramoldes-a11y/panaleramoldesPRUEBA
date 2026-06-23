@@ -722,7 +722,7 @@ else:
         if tab_modificar is not None:
             with tab_modificar:
                 st.subheader("Modificar Cliente Existente")
-    
+        
                 # 1. Selector de Cliente
                 lista_clientes = df_clientes['Nombre'].astype(str) + " " + \
                                 df_clientes['Apellido'].astype(str) + " (ID: " + \
@@ -733,8 +733,8 @@ else:
                 if cliente_seleccionado and cliente_seleccionado != "":
                     id_modificar = cliente_seleccionado.split("(ID: ")[1].replace(")", "")
                     fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
-    
-                    # 2. Formulario único (Toda la lógica dentro)
+        
+                    # 2. Formulario de Modificación
                     with st.form("form_modificar_cliente"):
                         c1, c2 = st.columns(2)
                         with c1:
@@ -764,10 +764,10 @@ else:
                         input_tipo = st.selectbox("Tipo Cliente", tipos_lista, index=idx_tipo)
                         
                         guardar_btn = st.form_submit_button("Guardar Cambios")
-    
-                        if guardar_btn:
-                            
-                            db.table("CLIENTES").update({
+        
+                    # 3. Lógica de Guardado (Fuera del form, reacciona al click del botón)
+                    if guardar_btn:
+                        db.table("CLIENTES").update({
                             "Nombre": (nuevo_nombre or "").upper(),
                             "Apellido": (nuevo_apellido or "").upper(),
                             "DNI": nuevo_dni,
@@ -784,10 +784,11 @@ else:
                             "Zona": input_zona,
                             "Tipo_Cliente": input_tipo
                         }).eq("ID_Cliente", int(id_modificar)).execute()
-                            
-                            st.success("✅ ¡Cliente actualizado!")
-    
-                    # 3. Zona de eliminación (fuera del form, para evitar submit accidental)
+                        
+                        st.success("✅ ¡Cliente actualizado!")
+                        st.rerun()
+        
+                    # 4. Zona de eliminación (Fuera del form para evitar el bloqueo)
                     st.divider()
                     if st.session_state.rol == "Administrador":
                         confirmar = st.checkbox("Confirmar eliminación", key="chk_eliminar")
