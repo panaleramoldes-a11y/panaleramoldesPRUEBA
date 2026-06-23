@@ -766,6 +766,36 @@ else:
                         
                         # --- Botón de guardar ---
                         guardar_btn = st.form_submit_button("Guardar Cambios")
+                        
+                        if guardar_btn:
+                            # 1. Obtenemos nuevas coordenadas si el link cambió
+                            # (Opcional: solo recalcular si el link es diferente al original)
+                            lat, lng = obtener_coords_desde_direccion(nuevo_link1) if nuevo_link1 else (None, None)
+                            
+                            # 2. Preparamos el diccionario de actualización
+                            datos_actualizados = {
+                                "Nombre": nuevo_nombre.upper(),
+                                "Apellido": nuevo_apellido.upper(),
+                                "DNI": nuevo_dni,
+                                "Razón Social": nueva_razon.upper(),
+                                "CUIT": nuevo_cuit,
+                                "Telefono": nuevo_telefono,
+                                "Direccion_1": nuevo_dir1.upper(),
+                                "Link_Direccion_1": nuevo_link1,
+                                "Direccion_2": nuevo_dir2.upper(),
+                                "Link_Direccion_2": nuevo_link2,
+                                "Direccion_3": nuevo_dir3.upper(),
+                                "Link_Direccion_3": nuevo_link3,
+                                "Observaciones": nueva_obs,
+                                "Zona": input_zona,
+                                "Tipo_Cliente": input_tipo
+                            }
+                            
+                            # 3. Ejecutamos el UPDATE en Supabase
+                            db.table("CLIENTES").update(datos_actualizados).eq("ID_Cliente", id_modificar).execute()
+                            
+                            st.success("✅ ¡Cliente actualizado exitosamente!")
+                            st.rerun() # Esto refresca la app para mostrar los cambios
 
                     # 3. ZONA DE ACCIONES (Fuera del formulario)
                     col_g, col_e = st.columns(2)
