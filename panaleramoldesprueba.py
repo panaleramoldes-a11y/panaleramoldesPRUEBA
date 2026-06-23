@@ -489,6 +489,14 @@ else:
             
         return ruta_ordenada
 
+    def generar_diagrama_optimizada(grupo_repartos, punto_origen, fecha):
+        repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
+        ruta_optima = optimizar_ruta(punto_origen, repartos_validos.to_dict('records'))
+        
+        # 2. Inicializamos el estado del orden
+        if f"orden_{fecha}" not in st.session_state:
+            st.session_state[f"orden_{fecha}"] = {v['Cliente']: i+1 for i, v in enumerate(ruta_optima)}
+    
         st.write("### 🗺️ Previsualización de Ruta")
     
         # 1. Blindaje: Verificamos si hay datos antes de intentar crear el mapa
