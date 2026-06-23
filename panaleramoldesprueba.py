@@ -438,35 +438,30 @@ else:
         
         st.dataframe(df_filtrado[['Fecha', 'Nombre', 'Rubro', 'Marca', 'Cantidad', 'Utilidad_Bruta']])
 
-    def obtener_coordenadas(link_maps):
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    def obtener_coords_desde_direccion(direccion):
+        # La API Key se lee automáticamente desde los 'Secrets' de Streamlit
+        api_key = st.secrets["desarrollo"]["GOOGLE_API_KEY"]
+        url = "https://maps.googleapis.com/maps/api/geocode/json"
+        
+        params = {
+            "address": direccion,
+            "key": api_key,
+            "language": "es"
         }
+        
         try:
-            # Creamos una sesión para mantener las cookies y estados de redirección
-            session = requests.Session()
-            # Hacemos el primer GET
-            response = session.get(link_maps, headers=headers, allow_redirects=True, timeout=15)
+            response = requests.get(url, params=params)
+            data = response.json()
             
-            # 'response.url' ya nos da la dirección final después de todas las redirecciones
-            url_final = response.url
-            
-            # DEBUG: Imprimir esto nos dirá si estamos llegando al destino que tú ves en tu PC
-            # st.write(f"Destino final alcanzado: {url_final}")
-            
-            # Ahora que tenemos la URL final, aplicamos nuestra búsqueda multimodal
-            coords_exactas = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url_final)
-            if coords_exactas:
-                return float(coords_exactas.group(1)), float(coords_exactas.group(2))
-                
-            coords_vista = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
-            if coords_vista:
-                return float(coords_vista.group(1)), float(coords_vista.group(2))
-    
+            if data["status"] == "OK":
+                location = data["results"][0]["geometry"]["location"]
+                return location["lat"], location["lng"]
+            else:
+                st.error(f"Google no pudo encontrar la dirección: {direccion}")
+                return None, None
         except Exception as e:
+            st.error(f"Error de conexión con la API: {e}")
             return None, None
-            
-        return None, None
     
     def calcular_distancia(coord1, coord2):
         # Fórmula de Haversine para calcular distancia en línea recta entre dos puntos
@@ -775,6 +770,36 @@ else:
                         
                         # --- Botón de guardar ---
                         guardar_btn = st.form_submit_button("Guardar Cambios")
+                        
+                        if guardar_btn:
+                            # 1. Obtenemos nuevas coordenadas si el link cambió
+                            # (Opcional: solo recalcular si el link es diferente al original)
+                            lat, lng = obtener_coords_desde_direccion(nuevo_link1) if nuevo_link1 else (None, None)
+                            
+                            # 2. Preparamos el diccionario de actualización
+                            datos_actualizados = {
+                                "Nombre": nuevo_nombre.upper(),
+                                "Apellido": nuevo_apellido.upper(),
+                                "DNI": nuevo_dni,
+                                "Razón Social": nueva_razon.upper(),
+                                "CUIT": nuevo_cuit,
+                                "Telefono": nuevo_telefono,
+                                "Direccion_1": nuevo_dir1.upper(),
+                                "Link_Direccion_1": nuevo_link1,
+                                "Direccion_2": nuevo_dir2.upper(),
+                                "Link_Direccion_2": nuevo_link2,
+                                "Direccion_3": nuevo_dir3.upper(),
+                                "Link_Direccion_3": nuevo_link3,
+                                "Observaciones": nueva_obs,
+                                "Zona": input_zona,
+                                "Tipo_Cliente": input_tipo
+                            }
+                            
+                            # 3. Ejecutamos el UPDATE en Supabase
+                            db.table("CLIENTES").update(datos_actualizados).eq("ID_Cliente", id_modificar).execute()
+                            
+                            st.success("✅ ¡Cliente actualizado exitosamente!")
+                            st.rerun() # Esto refresca la app para mostrar los cambios
 
                     # 3. ZONA DE ACCIONES (Fuera del formulario)
                     col_g, col_e = st.columns(2)
