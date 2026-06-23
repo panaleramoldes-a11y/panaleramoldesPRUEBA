@@ -787,9 +787,11 @@ else:
                     # ACCIÓN DE ELIMINAR (FUERA DEL FORM Y CON KEY ÚNICA)
                     st.divider()
                     if st.session_state.get('rol') == "Administrador":
-                        if st.checkbox("Confirmar eliminación", key="check_del_final"):
-                            if st.button("🗑️ Eliminar Cliente", key="btn_del_final"):
+                        confirmar_del = st.checkbox("Confirmar eliminación", key="check_del_final")
+                        if st.button("🗑️ Eliminar Cliente", key="btn_del_final"):
+                            if confirmar_del:
                                 db.table("CLIENTES").delete().eq("ID_Cliente", int(id_modificar)).execute()
+                                st.success("🗑️ Cliente eliminado.")
                                 st.rerun()
                             else:
                                 st.warning("⚠️ Debes marcar la casilla de confirmación.")
