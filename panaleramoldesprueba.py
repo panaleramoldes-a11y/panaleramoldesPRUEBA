@@ -438,31 +438,27 @@ else:
         
         st.dataframe(df_filtrado[['Fecha', 'Nombre', 'Rubro', 'Marca', 'Cantidad', 'Utilidad_Bruta']])
 
-    def obtener_coords_desde_direccion(direccion):
-        # La API Key se lee automáticamente desde los 'Secrets' de Streamlit
-        api_key = st.secrets["desarrollo"]["GOOGLE_API_KEY"]
-        url = "https://maps.googleapis.com/maps/api/geocode/json"
-        
-        params = {
-            "address": direccion,
-            "key": api_key,
-            "language": "es"
-        }
-        
+    def obtener_coordenadas(link_maps):
+        """
+        Intenta extraer coordenadas de un link de Google Maps acortado.
+        Como los links de google (goo.gl o maps.app.goo.gl) son redirecciones,
+        primero resolvemos la URL final y luego buscamos los números en el texto.
+        """
         try:
-            response = requests.get(url, params=params)
-            data = response.json()
+            # Resolvemos el link corto a la URL real
+            response = requests.head(link_maps, allow_redirects=True)
+            url_final = response.url
             
-            if data["status"] == "OK":
-                location = data["results"][0]["geometry"]["location"]
-                return location["lat"], location["lng"]
-            else:
-                st.error(f"Google no pudo encontrar la dirección: {direccion}")
-                return None, None
-        except Exception as e:
-            st.error(f"Error de conexión con la API: {e}")
+            # Buscamos patrones de coordenadas en la URL (ej: /@lat,lng)
+            # Esto busca números decimales separados por coma después de un @
+            coordenadas = re.findall(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
+            
+            if coordenadas:
+                return float(coordenadas[0][0]), float(coordenadas[0][1])
+        except:
             return None, None
-    
+        return None, None
+
     def calcular_distancia(coord1, coord2):
         # Fórmula de Haversine para calcular distancia en línea recta entre dos puntos
         lat1, lon1 = coord1
@@ -770,36 +766,6 @@ else:
                         
                         # --- Botón de guardar ---
                         guardar_btn = st.form_submit_button("Guardar Cambios")
-                        
-                        if guardar_btn:
-                            # 1. Obtenemos nuevas coordenadas si el link cambió
-                            # (Opcional: solo recalcular si el link es diferente al original)
-                            lat, lng = obtener_coords_desde_direccion(nuevo_link1) if nuevo_link1 else (None, None)
-                            
-                            # 2. Preparamos el diccionario de actualización
-                            datos_actualizados = {
-                                "Nombre": nuevo_nombre.upper(),
-                                "Apellido": nuevo_apellido.upper(),
-                                "DNI": nuevo_dni,
-                                "Razón Social": nueva_razon.upper(),
-                                "CUIT": nuevo_cuit,
-                                "Telefono": nuevo_telefono,
-                                "Direccion_1": nuevo_dir1.upper(),
-                                "Link_Direccion_1": nuevo_link1,
-                                "Direccion_2": nuevo_dir2.upper(),
-                                "Link_Direccion_2": nuevo_link2,
-                                "Direccion_3": nuevo_dir3.upper(),
-                                "Link_Direccion_3": nuevo_link3,
-                                "Observaciones": nueva_obs,
-                                "Zona": input_zona,
-                                "Tipo_Cliente": input_tipo
-                            }
-                            
-                            # 3. Ejecutamos el UPDATE en Supabase
-                            db.table("CLIENTES").update(datos_actualizados).eq("ID_Cliente", id_modificar).execute()
-                            
-                            st.success("✅ ¡Cliente actualizado exitosamente!")
-                            st.rerun() # Esto refresca la app para mostrar los cambios
 
                     # 3. ZONA DE ACCIONES (Fuera del formulario)
                     col_g, col_e = st.columns(2)
