@@ -722,20 +722,17 @@ else:
         if tab_modificar is not None:
             with tab_modificar:
                 st.subheader("Modificar Cliente Existente")
-        
-                # 1. Selector de Cliente
-                lista_clientes = df_clientes['Nombre'].astype(str) + " " + \
-                                df_clientes['Apellido'].astype(str) + " (ID: " + \
-                                df_clientes['ID_Cliente'].astype(str) + ")"
+
+                # 1. Selector
+                lista_clientes = df_clientes['Nombre'].astype(str) + " " + df_clientes['Apellido'].astype(str) + " (ID: " + df_clientes['ID_Cliente'].astype(str) + ")"
+                seleccion = st.selectbox("Seleccione el cliente", [""] + lista_clientes.tolist(), key="sel_modificar")
                 
-                cliente_seleccionado = st.selectbox("Seleccione el cliente a modificar", [""] + lista_clientes.tolist(), key="sel_modificar")
-                
-                if cliente_seleccionado and cliente_seleccionado != "":
-                    id_modificar = cliente_seleccionado.split("(ID: ")[1].replace(")", "")
+                if seleccion:
+                    id_modificar = seleccion.split("(ID: ")[1].replace(")", "")
                     fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
-        
-                    # 2. Formulario de Modificación
-                    with st.form("form_modificar_cliente"):
+
+                    # 2. Formulario
+                    with st.form("form_datos"):
                         c1, c2 = st.columns(2)
                         with c1:
                             nuevo_nombre = st.text_input("Nombre", value=fila.get('Nombre', ''))
@@ -764,11 +761,11 @@ else:
                         input_tipo = st.selectbox("Tipo Cliente", tipos_lista, index=idx_tipo)
                         
                         guardar_btn = st.form_submit_button("Guardar Cambios")
-        
-                    # 3. Lógica de Guardado (Fuera del form, reacciona al click del botón)
+            
+                    # ACCIÓN DE GUARDAR (FUERA DEL FORM)
                     if guardar_btn:
                         db.table("CLIENTES").update({
-                            "Nombre": (nuevo_nombre or "").upper(),
+                            "Nombre": str(nuevo_nombre or "").upper(),
                             "Apellido": (nuevo_apellido or "").upper(),
                             "DNI": nuevo_dni,
                             "Razón Social": (nueva_razon or "").upper(),
@@ -784,18 +781,15 @@ else:
                             "Zona": input_zona,
                             "Tipo_Cliente": input_tipo
                         }).eq("ID_Cliente", int(id_modificar)).execute()
-                        
-                        st.success("✅ ¡Cliente actualizado!")
+                        st.success("Guardado")
                         st.rerun()
-        
-                    # 4. Zona de eliminación (Fuera del form para evitar el bloqueo)
+
+                    # ACCIÓN DE ELIMINAR (FUERA DEL FORM Y CON KEY ÚNICA)
                     st.divider()
-                    if st.session_state.rol == "Administrador":
-                        confirmar = st.checkbox("Confirmar eliminación", key="chk_eliminar")
-                        if st.button("🗑️ Eliminar Cliente", type="primary"):
-                            if confirmar:
+                    if st.session_state.get('rol') == "Administrador":
+                        if st.checkbox("Confirmar eliminación", key="check_del_final"):
+                            if st.button("🗑️ Eliminar Cliente", key="btn_del_final"):
                                 db.table("CLIENTES").delete().eq("ID_Cliente", int(id_modificar)).execute()
-                                st.success("🗑️ Cliente eliminado.")
                                 st.rerun()
                             else:
                                 st.warning("⚠️ Debes marcar la casilla de confirmación.")
