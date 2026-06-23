@@ -786,7 +786,6 @@ else:
                         }).eq("ID_Cliente", int(id_modificar)).execute()
                             
                             st.success("✅ ¡Cliente actualizado!")
-                            st.rerun()
     
                     # 3. Zona de eliminación (fuera del form, para evitar submit accidental)
                     st.divider()
