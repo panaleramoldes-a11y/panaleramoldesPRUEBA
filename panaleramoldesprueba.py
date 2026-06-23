@@ -439,26 +439,30 @@ else:
         st.dataframe(df_filtrado[['Fecha', 'Nombre', 'Rubro', 'Marca', 'Cantidad', 'Utilidad_Bruta']])
 
     def obtener_coordenadas(link_maps):
-        """
-        Intenta extraer coordenadas de un link de Google Maps acortado.
-        Como los links de google (goo.gl o maps.app.goo.gl) son redirecciones,
-        primero resolvemos la URL final y luego buscamos los números en el texto.
-        """
+        # Simulamos ser un navegador real para que Google no nos bloquee
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         try:
-            # Resolvemos el link corto a la URL real
-            response = requests.head(link_maps, allow_redirects=True)
+            # Usamos GET en lugar de HEAD y añadimos headers
+            response = requests.get(link_maps, headers=headers, allow_redirects=True, timeout=10)
             url_final = response.url
             
-            # Buscamos patrones de coordenadas en la URL (ej: /@lat,lng)
-            # Esto busca números decimales separados por coma después de un @
+            # Buscamos el patrón @lat,lng que es el estándar de Google Maps
             coordenadas = re.findall(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
             
             if coordenadas:
                 return float(coordenadas[0][0]), float(coordenadas[0][1])
-        except:
+            
+            # SI FALLA: Imprime la URL final para que veas qué está leyendo realmente
+            # st.write(f"DEBUG: No se hallaron coordenadas en {url_final}")
+            
+        except Exception as e:
+            # st.write(f"DEBUG: Error en conexión: {e}")
             return None, None
+            
         return None, None
-
+    
     def calcular_distancia(coord1, coord2):
         # Fórmula de Haversine para calcular distancia en línea recta entre dos puntos
         lat1, lon1 = coord1
