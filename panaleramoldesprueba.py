@@ -439,34 +439,28 @@ else:
         st.dataframe(df_filtrado[['Fecha', 'Nombre', 'Rubro', 'Marca', 'Cantidad', 'Utilidad_Bruta']])
 
     def obtener_coordenadas(link_maps):
-        """
-        Algoritmo de búsqueda de coordenadas con múltiples estrategias (Multimodal).
-        """
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-        
         try:
             response = requests.get(link_maps, headers=headers, allow_redirects=True, timeout=10)
-            url = response.url
+            url_final = response.url
             
-            # Estrategia 1: Formato estándar @lat,lng
-            m1 = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url)
-            if m1: return float(m1.group(1)), float(m1.group(2))
+            # PRIORIDAD 1: Buscar el bloque 'data' que contiene el marcador exacto (!3dlat!4dlng)
+            # Este es el más preciso porque es el punto exacto del cliente.
+            coords_exactas = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url_final)
+            if coords_exactas:
+                return float(coords_exactas.group(1)), float(coords_exactas.group(2))
             
-            # Estrategia 2: Formato de parámetros !3dLat!4dLon (Muy común en links de escritorio)
-            m2 = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url)
-            if m2: return float(m2.group(1)), float(m2.group(2))
-            
-            # Estrategia 3: Formato de búsqueda de places (a veces ocurre en links acortados)
-            m3 = re.search(r'place/(-?\d+\.\d+),(-?\d+\.\d+)', url)
-            if m3: return float(m3.group(1)), float(m3.group(2))
-            
-            # Si llegamos aquí, ninguna estrategia funcionó
+            # PRIORIDAD 2: Si no está lo anterior, buscar el formato @lat,lng (centro de vista)
+            coords_vista = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
+            if coords_vista:
+                return float(coords_vista.group(1)), float(coords_vista.group(2))
+                
+        except Exception as e:
             return None, None
             
-        except:
-            return None, None
+        return None, None
     
     def calcular_distancia(coord1, coord2):
         # Fórmula de Haversine para calcular distancia en línea recta entre dos puntos
