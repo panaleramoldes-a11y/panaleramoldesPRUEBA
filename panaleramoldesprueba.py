@@ -720,120 +720,85 @@ else:
                         st.rerun()
 
         if tab_modificar is not None:
-            with tab_modificar:
-                st.subheader("Modificar Cliente Existente")
+        with tab_modificar:
+            st.subheader("Modificar Cliente Existente")
 
-                # 1. Selector de Cliente (fuera del form)
-                lista_clientes = df_clientes['Nombre'].astype(str) + " " + \
-                                df_clientes['Apellido'].astype(str) + " (ID: " + \
-                                df_clientes['ID_Cliente'].astype(str) + ")"
-                
-                cliente_seleccionado = st.selectbox("Seleccione el cliente a modificar", [""] + lista_clientes.tolist(), key="sel_modificar")
-                
-                if cliente_seleccionado and cliente_seleccionado != "":
-                    id_modificar = cliente_seleccionado.split("(ID: ")[1].replace(")", "")
-                    fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
+            # 1. Selector de Cliente
+            lista_clientes = df_clientes['Nombre'].astype(str) + " " + \
+                            df_clientes['Apellido'].astype(str) + " (ID: " + \
+                            df_clientes['ID_Cliente'].astype(str) + ")"
+            
+            cliente_seleccionado = st.selectbox("Seleccione el cliente a modificar", [""] + lista_clientes.tolist(), key="sel_modificar")
+            
+            if cliente_seleccionado and cliente_seleccionado != "":
+                id_modificar = cliente_seleccionado.split("(ID: ")[1].replace(")", "")
+                fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
 
-                    # 2. Formulario de Modificación
-                    with st.form("form_modificar_cliente"):
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            nuevo_nombre = st.text_input("Nombre", value=fila.get('Nombre', ''))
-                            nuevo_apellido = st.text_input("Apellido", value=fila.get('Apellido', ''))
-                            nuevo_dni = st.text_input("DNI", value=fila.get('DNI', ''))
-                            nueva_razon = st.text_input("Razón Social", value=fila.get('Razón Social', ''))
-                            nuevo_cuit = st.text_input("CUIT", value=fila.get('CUIT', ''))
-                            nuevo_telefono = st.text_input("Teléfono", value=fila.get('Telefono', ''), max_chars=10)
-                        
-                        with c2:
-                            nuevo_dir1 = st.text_input("Dirección 1", value=fila.get('Direccion_1', ''))
-                            nuevo_link1 = st.text_input("Link Dirección 1", value=fila.get('Link_Direccion_1', ''))
-                            nuevo_dir2 = st.text_input("Dirección 2", value=fila.get('Direccion_2', ''))
-                            nuevo_link2 = st.text_input("Link Dirección 2", value=fila.get('Link_Direccion_2', ''))
-                            nuevo_dir3 = st.text_input("Dirección 3", value=fila.get('Direccion_3', ''))
-                            nuevo_link3 = st.text_input("Link Dirección 3", value=fila.get('Link_Direccion_3', ''))
-                        
-                        nueva_obs = st.text_area("Observaciones", value=fila.get('Observaciones', ''))
-                        
-                        # Definimos los inputs de selección DENTRO del form
-                        zonas_lista = ["NORTE", "SUR", "CENTRO", "ESTE", "OESTE", "SANLO CHICO"]
-                        idx_zona = zonas_lista.index(fila.get('Zona')) if fila.get('Zona') in zonas_lista else 0
-                        input_zona = st.selectbox("Zona", zonas_lista, index=idx_zona)
-                        
-                        tipos_lista = ["CONSUMIDOR FINAL", "MAYORISTA"]
-                        idx_tipo = 0 if fila.get('Tipo_Cliente') == "CONSUMIDOR FINAL" else 1
-                        input_tipo = st.selectbox("Tipo Cliente", tipos_lista, index=idx_tipo)
-                        
-                        # --- Botón de guardar ---
-                        guardar_btn = st.form_submit_button("Guardar Cambios")
-                        
-                        if guardar_btn:
-                            # 1. Obtenemos nuevas coordenadas si el link cambió
-                            # (Opcional: solo recalcular si el link es diferente al original)
-                            lat, lng = obtener_coords_desde_direccion(nuevo_link1) if nuevo_link1 else (None, None)
-                            
-                            # 2. Preparamos el diccionario de actualización
-                            datos_actualizados = {
-                                "Nombre": nuevo_nombre.upper(),
-                                "Apellido": nuevo_apellido.upper(),
-                                "DNI": nuevo_dni,
-                                "Razón Social": nueva_razon.upper(),
-                                "CUIT": nuevo_cuit,
-                                "Telefono": nuevo_telefono,
-                                "Direccion_1": nuevo_dir1.upper(),
-                                "Link_Direccion_1": nuevo_link1,
-                                "Direccion_2": nuevo_dir2.upper(),
-                                "Link_Direccion_2": nuevo_link2,
-                                "Direccion_3": nuevo_dir3.upper(),
-                                "Link_Direccion_3": nuevo_link3,
-                                "Observaciones": nueva_obs,
-                                "Zona": input_zona,
-                                "Tipo_Cliente": input_tipo
-                            }
-                            
-                            # 3. Ejecutamos el UPDATE en Supabase
-                            db.table("CLIENTES").update(datos_actualizados).eq("ID_Cliente", id_modificar).execute()
-                            
-                            st.success("✅ ¡Cliente actualizado exitosamente!")
-                            st.rerun() # Esto refresca la app para mostrar los cambios
-
-                    # 3. ZONA DE ACCIONES (Fuera del formulario)
-                    col_g, col_e = st.columns(2)
+                # 2. Formulario único (Toda la lógica dentro)
+                with st.form("form_modificar_cliente"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        nuevo_nombre = st.text_input("Nombre", value=fila.get('Nombre', ''))
+                        nuevo_apellido = st.text_input("Apellido", value=fila.get('Apellido', ''))
+                        nuevo_dni = st.text_input("DNI", value=fila.get('DNI', ''))
+                        nueva_razon = st.text_input("Razón Social", value=fila.get('Razón Social', ''))
+                        nuevo_cuit = st.text_input("CUIT", value=fila.get('CUIT', ''))
+                        nuevo_telefono = st.text_input("Teléfono", value=fila.get('Telefono', ''), max_chars=10)
                     
-                    if st.session_state.rol == "Administrador":
-                        confirmar_eliminar = col_e.checkbox("Confirmar eliminación", key="confirmar_eliminar")
-                        eliminar_btn = col_e.button("🗑️ Eliminar Cliente", type="primary")
-                    else:
-                        col_e.button("🗑️ Eliminar Cliente", disabled=True)
-                        eliminar_btn = False
+                    with c2:
+                        nuevo_dir1 = st.text_input("Dirección 1", value=fila.get('Direccion_1', ''))
+                        nuevo_link1 = st.text_input("Link Dirección 1", value=fila.get('Link_Direccion_1', ''))
+                        nuevo_dir2 = st.text_input("Dirección 2", value=fila.get('Direccion_2', ''))
+                        nuevo_link2 = st.text_input("Link Dirección 2", value=fila.get('Link_Direccion_2', ''))
+                        nuevo_dir3 = st.text_input("Dirección 3", value=fila.get('Direccion_3', ''))
+                        nuevo_link3 = st.text_input("Link Dirección 3", value=fila.get('Link_Direccion_3', ''))
+                    
+                    nueva_obs = st.text_area("Observaciones", value=fila.get('Observaciones', ''))
+                    
+                    zonas_lista = ["NORTE", "SUR", "CENTRO", "ESTE", "OESTE", "SANLO CHICO"]
+                    idx_zona = zonas_lista.index(fila.get('Zona')) if fila.get('Zona') in zonas_lista else 0
+                    input_zona = st.selectbox("Zona", zonas_lista, index=idx_zona)
+                    
+                    tipos_lista = ["CONSUMIDOR FINAL", "MAYORISTA"]
+                    idx_tipo = 0 if fila.get('Tipo_Cliente') == "CONSUMIDOR FINAL" else 1
+                    input_tipo = st.selectbox("Tipo Cliente", tipos_lista, index=idx_tipo)
+                    
+                    guardar_btn = st.form_submit_button("Guardar Cambios")
 
-                    # 4. Lógica de Guardado (Usamos input_zona e input_tipo)
                     if guardar_btn:
+                        
                         db.table("CLIENTES").update({
                             "Nombre": nuevo_nombre.upper(),
-                            "Apellido": nuevo_apellido.upper() if nuevo_apellido else None,
+                            "Apellido": nuevo_apellido.upper(),
                             "DNI": nuevo_dni,
-                            "Razón Social": nueva_razon,
+                            "Razón Social": nueva_razon.upper(),
                             "CUIT": nuevo_cuit,
                             "Telefono": nuevo_telefono,
                             "Direccion_1": nuevo_dir1.upper(),
+                            "Link_Direccion_1": nuevo_link1,
                             "Direccion_2": nuevo_dir2.upper(),
+                            "Link_Direccion_2": nuevo_link2,
                             "Direccion_3": nuevo_dir3.upper(),
-                            "Zona": input_zona,      # <--- Usamos la variable del form
-                            "Tipo_Cliente": input_tipo, # <--- Usamos la variable del form
-                            "Observaciones": nueva_obs
+                            "Link_Direccion_3": nuevo_link3,
+                            "Observaciones": nueva_obs,
+                            "Zona": input_zona,
+                            "Tipo_Cliente": input_tipo
                         }).eq("ID_Cliente", int(id_modificar)).execute()
-                        st.success("✅ Cliente actualizado!")
+                        
+                        st.success("✅ ¡Cliente actualizado!")
                         st.rerun()
 
-                    # 5. Lógica de Eliminación
-                    if eliminar_btn and st.session_state.rol == "Administrador":
-                        if confirmar_eliminar:
+                # 3. Zona de eliminación (fuera del form, para evitar submit accidental)
+                st.divider()
+                if st.session_state.rol == "Administrador":
+                    confirmar = st.checkbox("Confirmar eliminación", key="chk_eliminar")
+                    if st.button("🗑️ Eliminar Cliente", type="primary"):
+                        if confirmar:
                             db.table("CLIENTES").delete().eq("ID_Cliente", int(id_modificar)).execute()
-                            st.success("🗑️ Cliente eliminado!")
+                            st.success("🗑️ Cliente eliminado.")
                             st.rerun()
                         else:
-                            st.warning("⚠️ Debes marcar 'Confirmar eliminación' para borrar.")
+                            st.warning("⚠️ Debes marcar la casilla de confirmación.")
 
     # =====================================================================
     # MODULO: 🛒 PUNTO DE VENTA
