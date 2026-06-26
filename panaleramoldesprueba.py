@@ -1646,68 +1646,75 @@ else:
                 else:
                     st.info("No hay productos para modificar.")
 
-            # --- PESTAÑA CAMBIOS ---
+            # --- PESTAÑA CAMBIOS (Mejorada) ---
             with tab_cambios:
                 st.subheader("🔄 Gestión de Cambios y Devoluciones")
-                
-                with st.form("form_cambios_completo"):
-                    c1, c2 = st.columns(2)
-                    nombres_prod = st.session_state.df_prod['Nombre'].tolist()
+            
+                # 1. Inicializar lista de items si no existe
+                if 'lista_cambios' not in st.session_state:
+                    st.session_state.lista_cambios = []
+            
+                # 2. Formulario para agregar items
+                with st.expander("➕ Agregar producto al movimiento", expanded=True):
+                    c1, c2, c3 = st.columns([2, 1, 1])
+                    prod_sel = c1.selectbox("Producto:", [""] + st.session_state.df_prod['Nombre'].tolist())
+                    cant_sel = c2.number_input("Cantidad:", min_value=1, value=1)
+                    tipo_sel = c3.radio("Tipo:", ["ENTRA", "SALE"], horizontal=True)
                     
-                    with c1:
-                        p_entra = st.selectbox("Producto que ENTRA:", [""] + nombres_prod)
-                        cant_entra = st.number_input("Cantidad que ENTRA:", min_value=0, value=0)
-                    with c2:
-                        p_sale = st.selectbox("Producto que SALE:", [""] + nombres_prod)
-                        cant_sale = st.number_input("Cantidad que SALE:", min_value=0, value=0)
+                    if st.button("Añadir a la lista"):
+                        if prod_sel and cant_sel > 0:
+                            st.session_state.lista_cambios.append({
+                                "Producto": prod_sel,
+                                "Cantidad": cant_sel,
+                                "Tipo": tipo_sel
+                            })
+                            st.rerun()
+            
+                # 3. Mostrar resumen de lo que se va a procesar
+                if st.session_state.lista_cambios:
+                    st.write("Resumen del movimiento:")
+                    st.table(st.DataFrame(st.session_state.lista_cambios))
                     
-                    motivo = st.text_input("Motivo / Descripción del cambio:")
-                    btn_registrar = st.form_submit_button("💾 Registrar Movimiento en el Sistema")
-
-                    if btn_registrar:
+                    if st.button("❌ Limpiar lista"):
+                        st.session_state.lista_cambios = []
+                        st.rerun()
+            
+                    motivo = st.text_input("Motivo del cambio:")
+                    
+                    # 4. Procesar todo
+                    if st.button("💾 Registrar TODOS los movimientos"):
                         try:
-                            # Función para actualizar stock en Supabase (CORREGIDA)
-                            def ajustar_stock(nombre, cantidad, tipo):
+                            for item in st.session_state.lista_cambios:
+                                nombre = item['Producto']
+                                cantidad = item['Cantidad']
+                                tipo = item['Tipo']
+                                
+                                # Lógica de actualización (tu función ajustar_stock adaptada)
                                 fila = st.session_state.df_prod[st.session_state.df_prod['Nombre'] == nombre].iloc[0]
                                 id_prod = fila['ID_Producto']
                                 stock_actual = int(fila['Stock_Actual'])
+                                nuevo_stock = (stock_actual + cantidad) if tipo == 'ENTRA' else max(0, stock_actual - cantidad)
                                 
-                                if tipo == 'ENTRA':
-                                    nuevo_stock = stock_actual + cantidad
-                                else:
-                                    nuevo_stock = max(0, stock_actual - cantidad)
-                                
-                                # 1. Actualizar en tabla PRODUCTOS
+                                # Actualizar Supabase
                                 db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock}).eq("ID_Producto", id_prod).execute()
-                                
-                                # 2. Registrar en tabla CAMBIOS (Usando nombres exactos de tus columnas)
                                 db.table("CAMBIOS").insert({
-                                    "Fecha": datetime.now().isoformat(), # Formato recomendado para timestamp
+                                    "Fecha": datetime.now().isoformat(),
                                     "Código": str(id_prod),
                                     "Nombre": str(nombre),
-                                    "Descripción": str(motivo) if motivo else "Sin motivo",
+                                    "Descripción": str(motivo),
                                     "Entra": int(cantidad) if tipo == 'ENTRA' else 0,
                                     "Sale": int(cantidad) if tipo == 'SALE' else 0,
                                     "Existencia Ant.": int(stock_actual),
                                     "Existencia Actual": int(nuevo_stock)
                                 }).execute()
-                                
-                                return stock_actual, nuevo_stock
-
-                            # Procesar entradas
-                            if p_entra and cant_entra > 0:
-                                ajustar_stock(p_entra, cant_entra, 'ENTRA')
-                            
-                            # Procesar salidas
-                            if p_sale and cant_sale > 0:
-                                ajustar_stock(p_sale, cant_sale, 'SALE')
-
-                            st.success("✅ Stock actualizado y registro guardado en Supabase.")
+            
+                            st.success("✅ ¡Movimientos registrados correctamente!")
+                            st.session_state.lista_cambios = [] # Limpiamos
                             if 'df_prod' in st.session_state: del st.session_state['df_prod']
                             st.rerun()
-
+                            
                         except Exception as e:
-                            st.error(f"Error al registrar el movimiento: {e}")
+                            st.error(f"Error: {e}")
 
             # --- PESTAÑA IMPORTAR (Versión Optimizada) ---
             with tab_importar:
