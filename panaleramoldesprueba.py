@@ -1673,7 +1673,8 @@ else:
                 # 3. Mostrar resumen de lo que se va a procesar
                 if st.session_state.lista_cambios:
                     st.write("Resumen del movimiento:")
-                    st.table(st.DataFrame(st.session_state.lista_cambios))
+                    # CAMBIO AQUÍ: Usa pd.DataFrame en lugar de st.DataFrame
+                    st.table(pd.DataFrame(st.session_state.lista_cambios))
                     
                     if st.button("❌ Limpiar lista"):
                         st.session_state.lista_cambios = []
