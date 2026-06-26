@@ -1551,7 +1551,7 @@ else:
                                             "Descripción": new_desc,
                                             "Entra": new_cant if new_tipo == 'ENTRA' else 0,
                                             "Sale": new_cant if new_tipo == 'SALE' else 0,
-                                            "Existencia_Ant": stock_viejo,     # Asegúrate que estas columnas existan en tu tabla CAMBIOS
+                                            "Existencia_Ant.": stock_viejo,     # Asegúrate que estas columnas existan en tu tabla CAMBIOS
                                             "Existencia_Actual": stock_nuevo
                                         }).execute()
                                         
