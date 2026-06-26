@@ -1568,25 +1568,25 @@ else:
             
                 motivo = st.text_input("Motivo del cambio:")
                    
-                    # PANEL VENDEDOR
-                    if st.button("📤 Enviar Pre-cambio a Revisión"):
-                        try:
-                            for item in st.session_state.lista_cambios:
-                                db.table("PRE_CAMBIOS").insert({
-                                    "Fecha": datetime.now().isoformat(),
-                                    "Código": item['ID'],
-                                    "Nombre": item['Producto'],
-                                    "Descripción": motivo,
-                                    "Entra": int(item['Cantidad']) if item['Tipo'] == 'ENTRA' else 0,
-                                    "Sale": int(item['Cantidad']) if item['Tipo'] == 'SALE' else 0,
-                                    "Estado": "PENDIENTE",
-                                    "Usuario": st.session_state.get('usuario', 'Desconocido')
-                                }).execute()
-                            st.success("✅ Enviado a revisión.")
-                            st.session_state.lista_cambios = []
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
+                # PANEL VENDEDOR
+                if st.button("📤 Enviar Pre-cambio a Revisión"):
+                    try:
+                        for item in st.session_state.lista_cambios:
+                            db.table("PRE_CAMBIOS").insert({
+                                "Fecha": datetime.now().isoformat(),
+                                "Código": item['ID'],
+                                "Nombre": item['Producto'],
+                                "Descripción": motivo,
+                                "Entra": int(item['Cantidad']) if item['Tipo'] == 'ENTRA' else 0,
+                                "Sale": int(item['Cantidad']) if item['Tipo'] == 'SALE' else 0,
+                                "Estado": "PENDIENTE",
+                                "Usuario": st.session_state.get('usuario', 'Desconocido')
+                            }).execute()
+                        st.success("✅ Enviado a revisión.")
+                        st.session_state.lista_cambios = []
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
         # --- PESTAÑAS DE ADMINISTRADOR ---
         if st.session_state.rol == "Administrador":
