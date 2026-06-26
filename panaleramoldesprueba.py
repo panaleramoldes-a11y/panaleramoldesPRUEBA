@@ -1528,38 +1528,34 @@ else:
                                 # Botones alineados en el mismo formulario
                                 btn_col1, btn_col2 = st.columns(2)
                                 if btn_col1.form_submit_button("💾 Aprobar y Procesar", use_container_width=True):
-                                    # 1. Obtener datos actuales del producto desde Supabase
+                                    # 1. Obtener datos actuales
                                     prod_data = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", p['Código']).execute().data
                                     
                                     if prod_data:
-                                        stock_viejo = prod_data[0]['Stock_Actual']
-                                        
-                                        # 2. Calcular el nuevo stock
-                                        if new_tipo == 'ENTRA':
-                                            stock_nuevo = stock_viejo + new_cant
-                                        else:
-                                            stock_nuevo = stock_viejo - new_cant
+                                        stock_viejo = int(prod_data[0]['Stock_Actual'])
+                                        stock_nuevo = (stock_viejo + new_cant) if new_tipo == 'ENTRA' else (stock_viejo - new_cant)
                                             
-                                        # 3. Actualizar la tabla PRODUCTOS
+                                        # 2. Actualizar stock
                                         db.table("PRODUCTOS").update({"Stock_Actual": stock_nuevo}).eq("ID_Producto", p['Código']).execute()
                                         
-                                        # 4. Insertar en CAMBIOS con los valores calculados
-                                        db.table("CAMBIOS").insert({
-                                            "Fecha": datetime.now().isoformat(),
-                                            "Código": p['Código'],
-                                            "Nombre": p['Nombre'],
-                                            "Descripción": new_desc,
-                                            "Entra": new_cant if new_tipo == 'ENTRA' else 0,
-                                            "Sale": new_cant if new_tipo == 'SALE' else 0,
-                                            "Existencia_Ant.": stock_viejo,     # Asegúrate que estas columnas existan en tu tabla CAMBIOS
-                                            "Existencia_Actual": stock_nuevo
-                                        }).execute()
-                                        
-                                        # 5. Marcar como procesado
-                                        db.table("PRE_CAMBIOS").update({"Estado": "PROCESADO"}).eq("id", p['id']).execute()
-                                        
-                                        st.success("✅ Stock actualizado y cambio registrado.")
-                                        st.rerun()
+                                        # 3. Insertar en CAMBIOS (con nombres de columnas sin espacios)
+                                        try:
+                                            db.table("CAMBIOS").insert({
+                                                "Fecha": datetime.now().isoformat(),
+                                                "Código": p['Código'],
+                                                "Nombre": p['Nombre'],
+                                                "Descripción": new_desc,
+                                                "Entra": int(new_cant) if new_tipo == 'ENTRA' else 0,
+                                                "Sale": int(new_cant) if new_tipo == 'SALE' else 0,
+                                                "existencia_ant": stock_viejo,      # Nombre nuevo
+                                                "existencia_actual": stock_nuevo    # Nombre nuevo
+                                            }).execute()
+                                            
+                                            # 4. Marcar como procesado
+                                            db.table("PRE_CAMBIOS").update({"Estado": "PROCESADO"}).eq("id", p['id']).execute()
+                                            
+                                            st.success("✅ Stock actualizado correctamente.")
+                                            st.rerun()
                                 
                                 if btn_col2.form_submit_button("❌ Rechazar", use_container_width=True):
                                     db.table("PRE_CAMBIOS").update({"Estado": "RECHAZADO"}).eq("id", p['id']).execute()
