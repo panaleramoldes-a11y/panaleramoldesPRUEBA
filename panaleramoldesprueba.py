@@ -1556,6 +1556,9 @@ else:
                                             
                                             st.success("✅ Stock actualizado correctamente.")
                                             st.rerun()
+
+                                        except Exception as e:
+                                            st.error(f"Error al insertar en CAMBIOS: {e}")
                                 
                                 if btn_col2.form_submit_button("❌ Rechazar", use_container_width=True):
                                     db.table("PRE_CAMBIOS").update({"Estado": "RECHAZADO"}).eq("id", p['id']).execute()
