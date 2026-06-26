@@ -1504,6 +1504,32 @@ else:
         with tab_cambios:
             st.subheader("🔄 Gestión de Cambios y Devoluciones")
 
+            # 1. PANEL ADMINISTRADOR (SIEMPRE VISIBLE PARA ADMIN)
+            if st.session_state.get('rol') == "Administrador":
+                    # PANEL ADMINISTRADOR
+                    st.divider()
+                    st.subheader("🛡️ Panel de Supervisión (Admin)")
+                    pendientes = db.table("PRE_CAMBIOS").select("*").eq("Estado", "PENDIENTE").execute().data
+                    
+                    if pendientes:
+                        for p in pendientes:
+                            with st.expander(f"Cambio: {p['Nombre']} | Por: {p['Usuario']}"):
+                                with st.form(f"form_edit_{p['id']}"):
+                                    new_cant = st.number_input("Cantidad:", value=max(p['Entra'], p['Sale']))
+                                    new_tipo = st.selectbox("Tipo:", ["ENTRA", "SALE"], index=0 if p['Entra'] > 0 else 1)
+                                    new_desc = st.text_input("Motivo:", value=p['Descripción'])
+                                    if st.form_submit_button("💾 Aprobar y Procesar"):
+                                        # Aquí iría tu lógica de actualización de stock real
+                                        db.table("CAMBIOS").insert({"Fecha": datetime.now().isoformat(), "Código": p['Código'], "Nombre": p['Nombre'], "Descripción": new_desc, "Entra": new_cant if new_tipo=='ENTRA' else 0, "Sale": new_cant if new_tipo=='SALE' else 0}).execute()
+                                        db.table("PRE_CAMBIOS").update({"Estado": "PROCESADO"}).eq("id", p['id']).execute()
+                                        st.rerun()
+                                if st.button(f"❌ Rechazar ID: {p['id']}", key=f"rech_{p['id']}"):
+                                    db.table("PRE_CAMBIOS").update({"Estado": "RECHAZADO"}).eq("id", p['id']).execute()
+                                    st.rerun()
+                    else:
+                        st.info("No hay cambios pendientes.")
+                    st.divider()
+            
             # 1. Inicializar lista de items
             if 'lista_cambios' not in st.session_state:
                 st.session_state.lista_cambios = []
@@ -1541,33 +1567,7 @@ else:
                     st.rerun()
             
                 motivo = st.text_input("Motivo del cambio:")
-            
-                # --- LÓGICA DIFERENCIADA POR ROL ---
-                if st.session_state.get('rol') == "Administrador":
-                    # PANEL ADMINISTRADOR
-                    st.divider()
-                    st.subheader("🛡️ Panel de Supervisión (Admin)")
-                    pendientes = db.table("PRE_CAMBIOS").select("*").eq("Estado", "PENDIENTE").execute().data
-                    
-                    if pendientes:
-                        for p in pendientes:
-                            with st.expander(f"Cambio: {p['Nombre']} | Por: {p['Usuario']}"):
-                                with st.form(f"form_edit_{p['id']}"):
-                                    new_cant = st.number_input("Cantidad:", value=max(p['Entra'], p['Sale']))
-                                    new_tipo = st.selectbox("Tipo:", ["ENTRA", "SALE"], index=0 if p['Entra'] > 0 else 1)
-                                    new_desc = st.text_input("Motivo:", value=p['Descripción'])
-                                    if st.form_submit_button("💾 Aprobar y Procesar"):
-                                        # Aquí iría tu lógica de actualización de stock real
-                                        db.table("CAMBIOS").insert({"Fecha": datetime.now().isoformat(), "Código": p['Código'], "Nombre": p['Nombre'], "Descripción": new_desc, "Entra": new_cant if new_tipo=='ENTRA' else 0, "Sale": new_cant if new_tipo=='SALE' else 0}).execute()
-                                        db.table("PRE_CAMBIOS").update({"Estado": "PROCESADO"}).eq("id", p['id']).execute()
-                                        st.rerun()
-                                if st.button(f"❌ Rechazar ID: {p['id']}", key=f"rech_{p['id']}"):
-                                    db.table("PRE_CAMBIOS").update({"Estado": "RECHAZADO"}).eq("id", p['id']).execute()
-                                    st.rerun()
-                    else:
-                        st.info("No hay cambios pendientes.")
-                        
-                else:
+                   
                     # PANEL VENDEDOR
                     if st.button("📤 Enviar Pre-cambio a Revisión"):
                         try:
