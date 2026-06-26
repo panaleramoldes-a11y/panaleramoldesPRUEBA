@@ -1654,21 +1654,38 @@ else:
                 if 'lista_cambios' not in st.session_state:
                     st.session_state.lista_cambios = []
             
-                # 2. Formulario para agregar items
-                with st.expander("➕ Agregar producto al movimiento", expanded=True):
-                    c1, c2, c3 = st.columns([2, 1, 1])
-                    prod_sel = c1.selectbox("Producto:", [""] + st.session_state.df_prod['Nombre'].tolist())
-                    cant_sel = c2.number_input("Cantidad:", min_value=1, value=1)
-                    tipo_sel = c3.radio("Tipo:", ["ENTRA", "SALE"], horizontal=True)
+                # 1. Asegurar la lista de opciones (Nombre + Código)
+                # Suponiendo que tienes un formato como "Nombre (ID: 123)" o similar
+                opciones_productos = (st.session_state.df_prod['Nombre'] + " (ID: " + 
+                                      st.session_state.df_prod['ID_Producto'].astype(str) + ")").tolist()
+            
+                # 2. Buscador estilo Carrito
+                prod_seleccionado = st.selectbox(
+                    "Buscar por nombre o código",
+                    options=opciones_productos,
+                    index=None,
+                    placeholder="Escriba para buscar producto...",
+                    key="prod_cambios_key"
+                )
+            
+                # 3. Inputs de cantidad y tipo
+                if prod_seleccionado:
+                    # Extraemos el nombre real (quitando el (ID: ...))
+                    nombre_real = prod_seleccionado.split(" (ID: ")[0]
                     
-                    if st.button("Añadir a la lista"):
-                        if prod_sel and cant_sel > 0:
-                            st.session_state.lista_cambios.append({
-                                "Producto": prod_sel,
-                                "Cantidad": cant_sel,
-                                "Tipo": tipo_sel
-                            })
-                            st.rerun()
+                    c1, c2 = st.columns(2)
+                    cant_sel = c1.number_input("Cantidad:", min_value=1, value=1)
+                    tipo_sel = c2.radio("Tipo de movimiento:", ["ENTRA", "SALE"], horizontal=True)
+                    
+                    if st.button("➕ Añadir a la lista de cambios"):
+                        st.session_state.lista_cambios.append({
+                            "Producto": nombre_real,
+                            "Cantidad": cant_sel,
+                            "Tipo": tipo_sel
+                        })
+                        # Limpiamos el buscador para la próxima búsqueda
+                        st.session_state.prod_cambios_key = None 
+                        st.rerun()
             
                 # 3. Mostrar resumen de lo que se va a procesar
                 if st.session_state.lista_cambios:
