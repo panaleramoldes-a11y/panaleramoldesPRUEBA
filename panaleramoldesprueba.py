@@ -1659,32 +1659,30 @@ else:
                 opciones_productos = (st.session_state.df_prod['Nombre'] + " (ID: " + 
                                       st.session_state.df_prod['ID_Producto'].astype(str) + ")").tolist()
             
-                # 2. Buscador estilo Carrito
+                # Buscador (quitamos el key del selectbox para evitar el error de reseteo)
                 prod_seleccionado = st.selectbox(
-                    "Buscar por nombre o código",
+                    "Buscar producto",
                     options=opciones_productos,
                     index=None,
-                    placeholder="Escriba para buscar producto...",
-                    key="prod_cambios_key"
+                    placeholder="Escriba para buscar...",
+                    key="buscador_cambios" # Cambiamos el nombre de la key
                 )
-            
-                # 3. Inputs de cantidad y tipo
+    
                 if prod_seleccionado:
-                    # Extraemos el nombre real (quitando el (ID: ...))
                     nombre_real = prod_seleccionado.split(" (ID: ")[0]
                     
                     c1, c2 = st.columns(2)
-                    cant_sel = c1.number_input("Cantidad:", min_value=1, value=1)
-                    tipo_sel = c2.radio("Tipo de movimiento:", ["ENTRA", "SALE"], horizontal=True)
+                    cant_sel = c1.number_input("Cantidad:", min_value=1, value=1, key="cant_input")
+                    tipo_sel = c2.radio("Tipo:", ["ENTRA", "SALE"], horizontal=True, key="tipo_input")
                     
-                    if st.button("➕ Añadir a la lista de cambios"):
+                    if st.button("➕ Añadir a la lista"):
                         st.session_state.lista_cambios.append({
                             "Producto": nombre_real,
                             "Cantidad": cant_sel,
                             "Tipo": tipo_sel
                         })
-                        # Limpiamos el buscador para la próxima búsqueda
-                        st.session_state.prod_cambios_key = None 
+                        # En lugar de setear la key a None, simplemente forzamos el rerun.
+                        # El selectbox perderá el foco automáticamente al recargar.
                         st.rerun()
             
                 # 3. Mostrar resumen de lo que se va a procesar
