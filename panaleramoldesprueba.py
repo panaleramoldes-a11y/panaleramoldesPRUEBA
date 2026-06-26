@@ -1649,83 +1649,90 @@ else:
             # --- PESTAÑA CAMBIOS (Mejorada) ---
             with tab_cambios:
                 st.subheader("🔄 Gestión de Cambios y Devoluciones")
-            
-                # --- EN LA PESTAÑA DE CARGA (USUARIO) ---
-                if st.button("💾 Enviar Pre-cambio a Revisión"):
-                    try:
-                        for item in st.session_state.lista_cambios:
-                            # Aquí calculamos lo necesario (asumiendo que los datos ya están en lista_cambios)
-                            db.table("PRE_CAMBIOS").insert({
-                                "Fecha": datetime.now().isoformat(),
-                                "Código": str(item['ID']), # Asegúrate de guardar el ID al añadir a la lista
-                                "Nombre": str(item['Producto']),
-                                "Descripción": str(motivo),
-                                "Entra": int(item['Cantidad']) if item['Tipo'] == 'ENTRA' else 0,
-                                "Sale": int(item['Cantidad']) if item['Tipo'] == 'SALE' else 0,
-                                "Estado": "PENDIENTE",
-                                "Usuario": st.session_state.get('usuario', 'Desconocido') 
-                            }).execute()
-                        st.success("✅ Pre-cambio enviado. Esperando aprobación del Admin.")
+
+                # 1. Inicializar lista de items
+                if 'lista_cambios' not in st.session_state:
+                    st.session_state.lista_cambios = []
+                
+                # 2. Buscador (Solo se muestra para cargar items)
+                opciones_productos = (st.session_state.df_prod['Nombre'] + " (ID: " + 
+                                     st.session_state.df_prod['ID_Producto'].astype(str) + ")").tolist()
+                
+                prod_seleccionado = st.selectbox("Buscar producto", options=opciones_productos, index=None, placeholder="Escriba para buscar...", key="buscador_cambios")
+                
+                if prod_seleccionado:
+                    nombre_real = prod_seleccionado.split(" (ID: ")[0]
+                    id_real = prod_seleccionado.split("(ID: ")[1].replace(")", "")
+                    
+                    c1, c2 = st.columns(2)
+                    cant_sel = c1.number_input("Cantidad:", min_value=1, value=1, key="cant_input")
+                    tipo_sel = c2.radio("Tipo:", ["ENTRA", "SALE"], horizontal=True, key="tipo_input")
+                    
+                    if st.button("➕ Añadir a la lista"):
+                        st.session_state.lista_cambios.append({
+                            "ID": id_real,
+                            "Producto": nombre_real,
+                            "Cantidad": cant_sel,
+                            "Tipo": tipo_sel
+                        })
+                        st.rerun()
+                
+                # 3. Mostrar resumen y botones de acción
+                if st.session_state.lista_cambios:
+                    st.write("Resumen del movimiento:")
+                    st.table(pd.DataFrame(st.session_state.lista_cambios))
+                    
+                    if st.button("❌ Limpiar lista"):
                         st.session_state.lista_cambios = []
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al enviar: {e}")
-
-                # --- EN LA PESTAÑA DE ADMINISTRACIÓN (Supervisión con Edición) ---
-                if st.session_state.get('rol') == "Administrador":
-                    st.subheader("🛡️ Panel de Supervisión de Cambios")
-                    
-                    # Traemos solo los pendientes
-                    pendientes = db.table("PRE_CAMBIOS").select("*").eq("Estado", "PENDIENTE").execute().data
-                    
-                    if pendientes:
-                        for p in pendientes:
-                            with st.expander(f"Cambio: {p['Nombre']} | Usuario: {p['Usuario']} | ID: {p['id']}"):
-                                
-                                # --- FORMULARIO DE EDICIÓN ---
-                                with st.form(f"form_edit_{p['id']}"):
-                                    c1, c2 = st.columns(2)
-                                    new_cant = c1.number_input("Cantidad:", value=max(p['Entra'], p['Sale']))
-                                    new_tipo = c2.selectbox("Tipo:", ["ENTRA", "SALE"], index=0 if p['Entra'] > 0 else 1)
-                                    new_desc = st.text_input("Descripción/Motivo:", value=p['Descripción'])
-                                    
-                                    submitted = st.form_submit_button("💾 Guardar cambios y Aprobar")
-                                    
-                                # --- LÓGICA DE APROBACIÓN ---
-                                if submitted:
-                                    # 1. Definir valores para el insert en CAMBIOS
-                                    entra_val = new_cant if new_tipo == 'ENTRA' else 0
-                                    sale_val = new_cant if new_tipo == 'SALE' else 0
-                                    
-                                    # 2. Actualizar Stock (Lógica de ajuste real)
-                                    # NOTA: Aquí deberías llamar a tu función ajustar_stock()
-                                    # O realizar el update de stock en PRODUCTOS aquí mismo
-                                    
-                                    # 3. Mover a tabla CAMBIOS oficial
-                                    data_to_move = {
-                                        "Fecha": datetime.now().isoformat(),
-                                        "Código": p['Código'],
-                                        "Nombre": p['Nombre'],
-                                        "Descripción": new_desc,
-                                        "Entra": entra_val,
-                                        "Sale": sale_val,
-                                        "Existencia Ant.": 0, # Opcional: calcular existencia actual real
-                                        "Existencia Actual": 0
-                                    }
-                                    db.table("CAMBIOS").insert(data_to_move).execute()
-                                    
-                                    # 4. Marcar como PROCESADO en PRE_CAMBIOS
-                                    db.table("PRE_CAMBIOS").update({"Estado": "PROCESADO"}).eq("id", p['id']).execute()
-                                    
-                                    st.success("✅ Cambios editados y aprobados con éxito.")
-                                    st.rerun()
                 
-                                # --- BOTÓN DE RECHAZO (Fuera del form) ---
-                                if st.button(f"❌ Rechazar cambio ID: {p['id']}", key=f"rech_{p['id']}"):
-                                    db.table("PRE_CAMBIOS").update({"Estado": "RECHAZADO"}).eq("id", p['id']).execute()
-                                    st.rerun()
+                    motivo = st.text_input("Motivo del cambio:")
+                
+                    # --- LÓGICA DIFERENCIADA POR ROL ---
+                    if st.session_state.get('rol') == "Administrador":
+                        # PANEL ADMINISTRADOR
+                        st.divider()
+                        st.subheader("🛡️ Panel de Supervisión (Admin)")
+                        pendientes = db.table("PRE_CAMBIOS").select("*").eq("Estado", "PENDIENTE").execute().data
+                        
+                        if pendientes:
+                            for p in pendientes:
+                                with st.expander(f"Cambio: {p['Nombre']} | Por: {p['Usuario']}"):
+                                    with st.form(f"form_edit_{p['id']}"):
+                                        new_cant = st.number_input("Cantidad:", value=max(p['Entra'], p['Sale']))
+                                        new_tipo = st.selectbox("Tipo:", ["ENTRA", "SALE"], index=0 if p['Entra'] > 0 else 1)
+                                        new_desc = st.text_input("Motivo:", value=p['Descripción'])
+                                        if st.form_submit_button("💾 Aprobar y Procesar"):
+                                            # Aquí iría tu lógica de actualización de stock real
+                                            db.table("CAMBIOS").insert({"Fecha": datetime.now().isoformat(), "Código": p['Código'], "Nombre": p['Nombre'], "Descripción": new_desc, "Entra": new_cant if new_tipo=='ENTRA' else 0, "Sale": new_cant if new_tipo=='SALE' else 0}).execute()
+                                            db.table("PRE_CAMBIOS").update({"Estado": "PROCESADO"}).eq("id", p['id']).execute()
+                                            st.rerun()
+                                    if st.button(f"❌ Rechazar ID: {p['id']}", key=f"rech_{p['id']}"):
+                                        db.table("PRE_CAMBIOS").update({"Estado": "RECHAZADO"}).eq("id", p['id']).execute()
+                                        st.rerun()
+                        else:
+                            st.info("No hay cambios pendientes.")
+                            
                     else:
-                        st.info("No hay cambios pendientes de revisión.")
+                        # PANEL VENDEDOR
+                        if st.button("📤 Enviar Pre-cambio a Revisión"):
+                            try:
+                                for item in st.session_state.lista_cambios:
+                                    db.table("PRE_CAMBIOS").insert({
+                                        "Fecha": datetime.now().isoformat(),
+                                        "Código": item['ID'],
+                                        "Nombre": item['Producto'],
+                                        "Descripción": motivo,
+                                        "Entra": int(item['Cantidad']) if item['Tipo'] == 'ENTRA' else 0,
+                                        "Sale": int(item['Cantidad']) if item['Tipo'] == 'SALE' else 0,
+                                        "Estado": "PENDIENTE",
+                                        "Usuario": st.session_state.get('usuario', 'Desconocido')
+                                    }).execute()
+                                st.success("✅ Enviado a revisión.")
+                                st.session_state.lista_cambios = []
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
 
             # --- PESTAÑA IMPORTAR (Versión Optimizada) ---
             with tab_importar:
