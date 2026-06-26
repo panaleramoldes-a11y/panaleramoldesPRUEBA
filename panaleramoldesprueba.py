@@ -1479,11 +1479,13 @@ else:
             tabs = st.tabs(nombres_tabs)
             tab_buscar, tab_alta, tab_modificar, tab_cambios, tab_importar = tabs
         else:
-            nombres_tabs = ["🔍 Buscar"]
+            # AGREGAMOS "🔄 Cambios" AQUÍ TAMBIÉN
+            nombres_tabs = ["🔍 Buscar", "🔄 Cambios"] 
             tabs = st.tabs(nombres_tabs)
             tab_buscar = tabs[0]
-            tab_alta = tab_modificar = tab_cambios = tab_importar = None
-
+            tab_cambios = tabs[1] # Ahora sí existe
+            tab_alta = tab_modificar = tab_importar = None
+            
         # --- PESTAÑA BUSCAR (VISIBLE PARA TODOS) ---
         with tab_buscar:
             st.subheader("Buscador de Productos")
