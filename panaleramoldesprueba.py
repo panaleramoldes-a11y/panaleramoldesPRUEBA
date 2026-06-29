@@ -1310,16 +1310,13 @@ else:
         df_prod = pd.DataFrame(db.table("PRODUCTOS").select("*").execute().data)
         df_prov = pd.DataFrame(db.table("PROVEEDORES").select("*").execute().data)
         
-        # --- BUSCADOR ESTILO CARRITO ---
-        st.subheader("🔍 Buscar Producto")
-        opciones_productos = (df_prod['Nombre'] + " - " + df_prod['ID_Producto'].astype(str)).tolist()
+        # --- BUSCADOR FLEXIBLE ---
+        st.subheader("🔍 Buscar Artículos")
         
-        seleccion_busqueda = st.selectbox(
-            "Buscar por nombre o código", 
-            options=[""] + opciones_productos, 
-            index=0,
-            placeholder="Escriba para buscar...",
-            key="buscador_stock"
+        # Usamos text_input para escritura libre
+        busqueda_texto = st.text_input(
+            "Escriba para filtrar por nombre o código:", 
+            placeholder="Ej: babydry, pampers, 779..."
         )
         
         # --- FILTROS ---
@@ -1335,10 +1332,12 @@ else:
         # Aplicar filtros
         df_f = df_prod.copy()
         
-        # Si se seleccionó algo en el buscador, ignoramos los otros filtros y mostramos solo eso
-        if seleccion_busqueda:
-            id_buscado = seleccion_busqueda.split(" - ")[-1]
-            df_f = df_f[df_f['ID_Producto'].astype(str) == id_buscado]
+        # 1. Filtro de texto flexible (busca en Nombre y en ID)
+        if busqueda_texto:
+            busqueda_texto = busqueda_texto.lower()
+            mask = df_f['Nombre'].str.lower().str.contains(busqueda_texto, na=False) | \
+                   df_f['ID_Producto'].astype(str).str.lower().str.contains(busqueda_texto, na=False)
+            df_f = df_f[mask]
         else:
             # Si no hay buscador, aplicamos los filtros normales
             if filtro_rubro != "Todos": df_f = df_f[df_f['Rubro'] == filtro_rubro]
