@@ -595,6 +595,7 @@ else:
         return None # Si no encuentra nada
 
     # --- DIÁLOGO DE ALTA RÁPIDA ---
+    # --- DIÁLOGO DE ALTA RÁPIDA ---
     @st.dialog("➕ Nuevo Cliente Rápido")
     def abrir_alta_cliente_rapida():
         with st.form("form_nuevo_cliente_rapido"):
@@ -602,6 +603,7 @@ else:
             apellido = st.text_input("Apellido*")
             telefono = st.text_input("Teléfono* (10 dígitos)", max_chars=10)
             dir1 = st.text_input("Dirección 1*")
+            link1 = st.text_input("Link Dirección 1 (Google Maps)") # <--- NUEVO CAMPO
             zona = st.selectbox("Zona*", ["NORTE", "SUR", "CENTRO", "ESTE", "OESTE", "SANLO CHICO"])
             
             submitted = st.form_submit_button("Guardar Cliente")
@@ -610,13 +612,17 @@ else:
                     st.error("Faltan completar campos obligatorios")
                 else:
                     nuevo_cliente = {
-                        "Nombre": nombre.upper(), "Apellido": apellido.upper(),
-                        "Telefono": telefono, "Direccion_1": dir1.upper(),
-                        "Zona": zona, "Tipo_Cliente": "CONSUMIDOR FINAL"
+                        "Nombre": nombre.upper(), 
+                        "Apellido": apellido.upper(),
+                        "Telefono": telefono, 
+                        "Direccion_1": dir1.upper(),
+                        "Link_Direccion_1": link1, # <--- SE AGREGA AL GUARDADO
+                        "Zona": zona, 
+                        "Tipo_Cliente": "CONSUMIDOR FINAL"
                     }
                     db.table("CLIENTES").insert(nuevo_cliente).execute()
                     st.success("✅ Cliente guardado!")
-                    st.rerun() # Recarga para actualizar el selector de clientes
+                    st.rerun()
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
