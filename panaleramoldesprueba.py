@@ -884,17 +884,19 @@ else:
 
         # 2. INTERFAZ: SELECTORES
         with st.container(border=True):
-            # Agregamos una columna más (c4) para que el vendedor no choque con el botón ➕
             c1, c2, c3, c4 = st.columns([2.5, 0.5, 1, 1]) 
             
-            # --- LOGICA DE PERSISTENCIA ---
+            # --- 1. CREAR LA COLUMNA DISPLAY PRIMERO ---
+            df_clie['Display'] = (df_clie['Nombre'].astype(str) + " " + df_clie['Apellido'].astype(str) + " (" + df_clie['Telefono'].astype(str) + ")")
+            
+            # --- 2. AHORA SÍ: LÓGICA DE PERSISTENCIA ---
             valor_inicial = None
             if 'id_cliente_recuperado' in st.session_state:
                 candidatos = df_clie[df_clie['ID_Cliente'].astype(str) == str(st.session_state.id_cliente_recuperado)]
                 if not candidatos.empty:
                     valor_inicial = candidatos.iloc[0]['Display']
 
-            # --- SELECTOR DE CLIENTE ---
+            # --- 3. SELECTOR DE CLIENTE ---
             cliente_display = c1.selectbox(
                 "👤 Buscar Cliente", 
                 options=df_clie['Display'].tolist(),
