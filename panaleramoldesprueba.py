@@ -774,7 +774,11 @@ else:
             with tab_modificar:
                 st.subheader("Modificar Cliente Existente")
 
-                # 1. Selector
+                # 1. Selector (Mover esto fuera del 'if seleccion')
+                lista_clientes = df_clientes['Nombre'].astype(str) + " " + df_clientes['Apellido'].astype(str) + " (ID: " + df_clientes['ID_Cliente'].astype(str) + ")"
+                seleccion = st.selectbox("Seleccione el cliente", [""] + lista_clientes.tolist(), key="sel_modificar")
+                
+                # Ahora evaluamos seleccion aquí:
                 if seleccion:
                     id_modificar = seleccion.split("(ID: ")[1].replace(")", "")
                     fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
