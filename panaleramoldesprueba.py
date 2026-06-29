@@ -1310,6 +1310,18 @@ else:
         df_prod = pd.DataFrame(db.table("PRODUCTOS").select("*").execute().data)
         df_prov = pd.DataFrame(db.table("PROVEEDORES").select("*").execute().data)
         
+        # --- BUSCADOR ESTILO CARRITO ---
+        st.subheader("🔍 Buscar Producto")
+        opciones_productos = (df_prod['Nombre'] + " - " + df_prod['ID_Producto'].astype(str)).tolist()
+        
+        seleccion_busqueda = st.selectbox(
+            "Buscar por nombre o código", 
+            options=[""] + opciones_productos, 
+            index=0,
+            placeholder="Escriba para buscar...",
+            key="buscador_stock"
+        )
+        
         # --- FILTROS ---
         c1, c2, c3 = st.columns(3)
         rubros = ["Todos"] + df_prod['Rubro'].unique().tolist()
@@ -1320,12 +1332,19 @@ else:
         filtro_marca = c2.selectbox("Filtrar por Marca", marcas)
         filtro_prov = c3.selectbox("Filtrar por Proveedor", provs)
         
-        # Aplicar filtros al DataFrame
+        # Aplicar filtros
         df_f = df_prod.copy()
-        if filtro_rubro != "Todos": df_f = df_f[df_f['Rubro'] == filtro_rubro]
-        if filtro_marca != "Todos": df_f = df_f[df_f['Marca'] == filtro_marca]
         
-        # 2. Cálculos en tiempo real para la tabla
+        # Si se seleccionó algo en el buscador, ignoramos los otros filtros y mostramos solo eso
+        if seleccion_busqueda:
+            id_buscado = seleccion_busqueda.split(" - ")[-1]
+            df_f = df_f[df_f['ID_Producto'].astype(str) == id_buscado]
+        else:
+            # Si no hay buscador, aplicamos los filtros normales
+            if filtro_rubro != "Todos": df_f = df_f[df_f['Rubro'] == filtro_rubro]
+            if filtro_marca != "Todos": df_f = df_f[df_f['Marca'] == filtro_marca]
+        
+        # 2. Cálculos en tiempo real
         df_f['Faltante_Min'] = (df_f['Stock_Min'] - df_f['Stock_Actual']).clip(lower=0)
         df_f['Faltante_Max'] = (df_f['Stock_Max'] - df_f['Stock_Actual']).clip(lower=0)
         
