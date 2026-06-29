@@ -1393,18 +1393,24 @@ else:
         if not ventas_reparto:
             st.info("No hay repartos pendientes.")
         else:
-            # 1. Convertimos a DataFrame para agrupar fácilmente
             df = pd.DataFrame(ventas_reparto)
-            
-            # Aseguramos que la fecha sea tipo datetime para ordenar bien
             df['Fecha_Entrega'] = pd.to_datetime(df['Fecha_Entrega']).dt.date
-            
-            # Ordenamos por fecha
             df = df.sort_values(by='Fecha_Entrega')
+            
+            # --- TOTALIZADOR GENERAL ---
+            total_general = len(df)
+            st.metric("📦 Pedidos Totales Pendientes", total_general)
+            st.divider()
             
             # 2. Agrupamos por fecha
             for fecha, grupo in df.groupby('Fecha_Entrega'):
-                st.subheader(f"📅 {fecha}")
+                # --- TOTALIZADOR POR DÍA ---
+                # Usamos columnas para poner el título y el contador al lado
+                c_head1, c_head2 = st.columns([4, 1])
+                with c_head1:
+                    st.subheader(f"📅 {fecha}")
+                with c_head2:
+                    st.metric("Pedidos", len(grupo)) # Contador específico del grupo (día)
                 
                 # --- AQUÍ EMPIEZA LA MODIFICACIÓN ---
                 # Usamos una clave única basada en la fecha para que no haya conflictos
