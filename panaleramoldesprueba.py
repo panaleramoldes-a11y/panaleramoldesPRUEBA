@@ -2568,7 +2568,15 @@ else:
 
             # --- MOSTRAR TABLA O AVISO ---
             if not df_filtrado.empty:
-                st.dataframe(df_filtrado, use_container_width=True)
+                # Definimos las columnas que SÍ queremos mostrar
+                columnas_a_mostrar = ['Fecha', 'Tipo', 'Concepto', 'Monto', 'Forma_Pago']
+                
+                # Renderizamos solo esas columnas y ocultamos el índice
+                st.dataframe(
+                    df_filtrado[columnas_a_mostrar], 
+                    use_container_width=True, 
+                    hide_index=True  # Esto oculta el número de fila a la izquierda
+                )
             else:
                 st.info("No hay movimientos registrados para la fecha seleccionada.")
 
