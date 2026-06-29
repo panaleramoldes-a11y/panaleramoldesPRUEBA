@@ -623,6 +623,27 @@ else:
                     db.table("CLIENTES").insert(nuevo_cliente).execute()
                     st.success("✅ Cliente guardado!")
                     st.rerun()
+
+    @st.dialog("➕ Asignar Nueva Gift Card")
+    def abrir_asignacion_gift_card(id_cliente, nombre_cliente):
+        st.write(f"Asignando Gift Card a: **{nombre_cliente}**")
+        
+        with st.form("form_asignar_gift"):
+            monto = st.number_input("Monto inicial de la Gift Card", min_value=0.0, step=100.0)
+            
+            if st.form_submit_button("Confirmar Emisión"):
+                # Insertamos en la tabla GIFT_CARDS
+                nueva_gc = {
+                    "ID_Cliente": str(id_cliente), # Ya es text
+                    "Saldo_Actual": float(monto),
+                    "Estado": True,
+                    "Fecha_Creacion": datetime.now().isoformat()
+                    # ID_GiftCard se autogenera si en Supabase tiene serial o lo dejamos como text
+                }
+                db.table("GIFT_CARDS").insert(nueva_gc).execute()
+                
+                st.success(f"✅ Gift Card de ${monto:,.2f} asignada exitosamente.")
+                st.rerun()
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
@@ -754,12 +775,14 @@ else:
                 st.subheader("Modificar Cliente Existente")
 
                 # 1. Selector
-                lista_clientes = df_clientes['Nombre'].astype(str) + " " + df_clientes['Apellido'].astype(str) + " (ID: " + df_clientes['ID_Cliente'].astype(str) + ")"
-                seleccion = st.selectbox("Seleccione el cliente", [""] + lista_clientes.tolist(), key="sel_modificar")
-                
                 if seleccion:
                     id_modificar = seleccion.split("(ID: ")[1].replace(")", "")
                     fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
+                    
+                    # --- NUEVO: BOTÓN ASIGNAR GIFT CARD ---
+                    if st.button("🎁 Gestionar Gift Card"):
+                        abrir_asignacion_gift_card(id_modificar, f"{fila['Nombre']} {fila['Apellido']}")
+                    # --------------------------------------
 
                     # 2. Formulario
                     with st.form("form_datos"):
