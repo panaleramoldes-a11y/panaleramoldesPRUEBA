@@ -2550,17 +2550,21 @@ else:
             else:
                 df_filtrado = pd.DataFrame() # Tabla vacía si no hay datos
 
-            # --- MOSTRAR MÉTRICAS SIEMPRE ---
-            c1, c2, c3 = st.columns(3)
+            # --- MOSTRAR MÉTRICAS (SOLO SALDO) ---
+            # Ajustamos a una sola columna para que el saldo quede centrado o destacado
+            col_saldo = st.columns(1)
+            
             if not df_filtrado.empty:
                 ingresos = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']['Monto'].sum()
                 egresos = df_filtrado[df_filtrado['Tipo'] == 'Egreso']['Monto'].sum()
+                saldo_final = ingresos - egresos
             else:
-                ingresos, egresos = 0.0, 0.0
-                
-            c1.metric("Ingresos", f"${ingresos:,.2f}")
-            c2.metric("Egresos", f"${egresos:,.2f}")
-            c3.metric("Saldo", f"${ingresos - egresos:,.2f}")
+                saldo_final = 0.0
+            
+            # Mostramos únicamente la métrica del saldo
+            st.metric("Saldo del Día", f"${saldo_final:,.2f}")
+            
+            st.divider() # Un separador visual para que quede más prolijo
 
             # --- MOSTRAR TABLA O AVISO ---
             if not df_filtrado.empty:
