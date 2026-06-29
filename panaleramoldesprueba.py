@@ -1381,7 +1381,6 @@ else:
     # MODULO: 🚚 GESTION DE REPARTOS
     # =====================================================================
     if menu == "🚚 Gestión de Repartos":
-        st.header("🗺️ Planificación de Repartos")
         
         # Obtenemos ventas pendientes de reparto
         # NOTA: Asegúrate de que las columnas existan en VENTAS_PENDIENTES
