@@ -2562,7 +2562,7 @@ else:
                 saldo_final = 0.0
             
             # Mostramos únicamente la métrica del saldo
-            st.metric("Saldo del Día", f"${saldo_final:,.2f}")
+            st.metric("Saldo", f"${saldo_final:,.2f}")
             
             st.divider() # Un separador visual para que quede más prolijo
 
