@@ -936,8 +936,14 @@ else:
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([2.5, 0.5, 1, 1]) 
             
-            # --- 1. CREAR LA COLUMNA DISPLAY PRIMERO ---
-            df_clie['Display'] = (df_clie['Nombre'].astype(str) + " " + df_clie['Apellido'].astype(str) + " (" + df_clie['Telefono'].astype(str) + ")")
+            # --- 1. CREAR LA COLUMNA DISPLAY ---
+            # Incluimos el ID de forma oculta pero estructurada para poder extraerlo fácil
+            df_clie['Display'] = (
+                df_clie['Nombre'].astype(str) + " " + 
+                df_clie['Apellido'].astype(str) + " (" + 
+                df_clie['Telefono'].astype(str) + ") - ID: " + 
+                df_clie['ID_Cliente'].astype(str)
+            )
             
             # --- 2. AHORA SÍ: LÓGICA DE PERSISTENCIA ---
             valor_inicial = None
@@ -953,6 +959,17 @@ else:
                 index=df_clie['Display'].tolist().index(valor_inicial) if valor_inicial and valor_inicial in df_clie['Display'].tolist() else None, 
                 placeholder="Seleccione o busque un cliente..."
             )
+
+            # --- EXTRACCIÓN NUEVA ---
+            if cliente_display:
+                try:
+                    # Buscamos el texto que está después de " - ID: "
+                    id_extraido = int(cliente_display.split(" - ID: ")[1])
+                    st.session_state.cliente_actual_id = id_extraido
+                except Exception as e:
+                    st.error("No se pudo extraer el ID del cliente.")
+            else:
+                st.session_state.cliente_actual_id = None
 
             # --- AGREGAR ESTO PARA GUARDAR EL ID ---
             if cliente_display:
