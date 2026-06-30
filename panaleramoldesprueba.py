@@ -1091,6 +1091,7 @@ else:
 
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
+            st.write(f"DEBUG: ID Cliente actual: {st.session_state.get('cliente_actual_id')}")
             
             # 1. Obtener métodos base desde DB
             metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute()
