@@ -1004,9 +1004,7 @@ else:
                     except Exception as e:
                         st.error(f"Error procesando ID: {e}")
                 else:
-                    st.warning("El formato del cliente no contiene '(ID: '. Verifica la columna 'Display' de tu dataframe.")
-            else:
-                st.session_state.cliente_actual_id = None
+                    st.session_state.cliente_actual_id = None
             
             # --- BOTÓN DE ACCESO DIRECTO ---
             if c2.button("➕", help="Agregar nuevo cliente"):
