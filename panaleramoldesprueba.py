@@ -953,6 +953,18 @@ else:
                 index=df_clie['Display'].tolist().index(valor_inicial) if valor_inicial and valor_inicial in df_clie['Display'].tolist() else None, 
                 placeholder="Seleccione o busque un cliente..."
             )
+
+            # --- AGREGAR ESTO PARA GUARDAR EL ID ---
+            if cliente_display:
+                # Extraemos el ID del string (asumiendo que el formato es "Nombre (ID: X)")
+                try:
+                    id_extraido = int(cliente_display.split("(ID: ")[1].replace(")", ""))
+                    st.session_state.cliente_actual_id = id_extraido
+                except (IndexError, ValueError):
+                    st.error("Error al obtener el ID del cliente.")
+            else:
+                # Si se borra la selección, limpiamos el ID
+                st.session_state.cliente_actual_id = None
             
             # --- BOTÓN DE ACCESO DIRECTO ---
             if c2.button("➕", help="Agregar nuevo cliente"):
