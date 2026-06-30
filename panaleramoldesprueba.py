@@ -1658,21 +1658,36 @@ else:
             
         # --- PESTAÑA BUSCAR (VISIBLE PARA TODOS) ---
         with tab_buscar:
-            st.subheader("Buscador de Productos")
-            termino = st.text_input("Buscar producto por nombre o ID:", key="busc_prod").lower()
+            st.subheader("🔍 Buscador de Productos")
             
-            if st.session_state.rol == "Administrador":
-                df_v = st.session_state.df_prod.copy()
+            # 1. Crear las opciones igual que en el carrito
+            opciones_productos = (st.session_state.df_prod['Nombre'] + " (ID: " + 
+                                 st.session_state.df_prod['ID_Producto'].astype(str) + ")").tolist()
+            
+            # 2. Usar el selectbox flexible
+            seleccion = st.selectbox(
+                "Buscar producto por nombre o código:",
+                options=opciones_productos,
+                index=None,
+                placeholder="Escriba para buscar...",
+                key="buscador_productos_tab"
+            )
+            
+            # 3. Lógica para filtrar el dataframe
+            if seleccion:
+                # Extraer el ID de la selección (el texto entre paréntesis)
+                id_seleccionado = seleccion.split("(ID: ")[1].replace(")", "")
+                df_filtrado = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == id_seleccionado]
             else:
-                cols_vendedor = ['Nombre', 'Precio_1', 'Precio_2', 'Precio_3']
-                df_v = st.session_state.df_prod[cols_vendedor].copy()
+                # Si no hay selección, mostrar todo (o podrías mostrar vacío si prefieres)
+                df_filtrado = st.session_state.df_prod
 
-            if termino:
-                mask = (st.session_state.df_prod['Nombre'].str.lower().str.contains(termino)) | \
-                       (st.session_state.df_prod['ID_Producto'].str.lower().str.contains(termino))
-                df_v = df_v[mask]
-                
-            st.dataframe(df_v, use_container_width=True, hide_index=True)
+            # 4. Mostrar según el rol
+            if st.session_state.rol != "Administrador":
+                cols_vendedor = ['Nombre', 'Precio_1', 'Precio_2', 'Precio_3']
+                df_filtrado = df_filtrado[cols_vendedor]
+
+            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
         # --- PESTAÑA CAMBIOS (Mejorada) ---
         with tab_cambios:
