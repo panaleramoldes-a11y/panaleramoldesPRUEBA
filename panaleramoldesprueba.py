@@ -1818,15 +1818,27 @@ else:
         with tab_divisor:
             st.subheader("✂️ Divisor de Fardos")
             
-            # Buscador de productos
-            opciones_prod = (st.session_state.df_prod['ID_Producto'].astype(str) + " - " + st.session_state.df_prod['Nombre']).tolist()
-            id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
+            # --- FILTRO INTELIGENTE ---
+            # 1. Filtramos el DataFrame antes de crear la lista
+            # Asegúrate de que 'Rubro' exista en tu tabla y los valores sean consistentes
+            df_filtrado_div = st.session_state.df_prod[
+                (st.session_state.df_prod['Rubro'] == 'LECHE') & 
+                (st.session_state.df_prod['Stock_Actual'] > 0)
+            ].copy()
             
-            if id_fardo_sel:
-                id_fardo = id_fardo_sel.split(" - ")[0]
-                fila_fardo = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == id_fardo].iloc[0]
+            if df_filtrado_div.empty:
+                st.warning("No hay fardos de 'LECHE' con stock disponible para dividir.")
+            else:
+                # 2. Creamos la lista solo con los filtrados
+                opciones_prod = (df_filtrado_div['ID_Producto'].astype(str) + " - " + df_filtrado_div['Nombre']).tolist()
+                id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
                 
-                st.info(f"Fardo: {fila_fardo['Nombre']} | Stock: {fila_fardo['Stock_Actual']}")
+                if id_fardo_sel:
+                    id_fardo = id_fardo_sel.split(" - ")[0]
+                    # Buscamos la fila en el dataframe filtrado
+                    fila_fardo = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo].iloc[0]
+                    
+                    st.info(f"Fardo: {fila_fardo['Nombre']} | Stock: {fila_fardo['Stock_Actual']}")
                 
                 with st.form("form_divisor"):
                     c1, c2 = st.columns(2)
