@@ -632,16 +632,22 @@ else:
         with st.form("form_asignar_gift"):
             monto = st.number_input("Monto inicial de la Gift Card", min_value=0.0, step=100.0)
             
+            # Obtenemos las formas de pago disponibles
+            metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute()
+            opciones = [item['Nombre_Pago'] for item in metodos_db.data] if metodos_db.data else ["Efectivo"]
+            forma_pago = st.selectbox("Forma de pago de la Gift Card", opciones)
+            
             if st.form_submit_button("Confirmar Emisión"):
-                # Generamos un ID único universal (UUID) para evitar colisiones
                 nueva_gc = {
                     "ID_GiftCard": str(uuid.uuid4()), 
-                    "ID_Cliente": str(id_cliente),
+                    "ID_Cliente": int(id_cliente), # Ya aseguramos que es int8/bigint
                     "Saldo_Actual": float(monto),
+                    "Saldo_Inicial": float(monto), # <--- NUEVO
+                    "Forma_Pago_Adquisicion": forma_pago, # <--- NUEVO
                     "Estado": True,
                     "Fecha_Creacion": datetime.now().isoformat()
                 }
-                
+
                 try:
                     db.table("GIFT_CARDS").insert(nueva_gc).execute()
                     st.success(f"✅ Gift Card de ${monto:,.2f} asignada!")
@@ -786,6 +792,20 @@ else:
                 if seleccion:
                     id_modificar = seleccion.split("(ID: ")[1].replace(")", "")
                     fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
+
+                    # --- AQUÍ ES DONDE DEBE IR ---
+                    # Primero buscamos si tiene gift card activa
+                    gc_data = db.table("GIFT_CARDS").select("*").eq("ID_Cliente", int(id_modificar)).eq("Estado", True).execute().data
+                    
+                    if gc_data:
+                        gc = gc_data[0]
+                        st.info(f"""
+                        **Detalles de Gift Card Activa:**
+                        - Saldo Inicial: ${gc['Saldo_Inicial']:,.2f}
+                        - Saldo Actual: ${gc['Saldo_Actual']:,.2f}
+                        - Pagada con: {gc['Forma_Pago_Adquisicion']}
+                        """)
+                    # -----------------------------
                     
                     # --- NUEVO: BOTÓN ASIGNAR GIFT CARD ---
                     if st.button("🎁 Gestionar Gift Card"):
