@@ -15,10 +15,6 @@ import uuid
 def init_connection():
     # Lee específicamente la sección [desarrollo]
     url = st.secrets["desarrollo"]["SUPABASE_URL"]
-    key = st.secrets["desarrollo"]["SUPABASE_KEY"]
-    return create_client(url, key)
-
-# Inicializamos la conexión globalmente
 db = init_connection()
 
 # 2. LÓGICA DE LOGIN
@@ -1815,27 +1811,31 @@ else:
                         st.error(f"Error: {e}")
 
         # --- PESTAÑA DIVISOR ---
-with tab_divisor:
-    st.subheader("✂️ Divisor de Fardos")
-    
-    # 1. Filtramos el DF
-    df_filtrado_div = st.session_state.df_prod[
-        (st.session_state.df_prod['Rubro'] == 'LECHE') & 
-        (st.session_state.df_prod['Stock_Actual'] > 0)
-    ].copy()
-    
-    if df_filtrado_div.empty:
-        st.warning("No hay fardos de 'LECHE' con stock disponible para dividir.")
-    else:
-        opciones_prod = (df_filtrado_div['ID_Producto'].astype(str) + " - " + df_filtrado_div['Nombre']).tolist()
-        
-        # Al seleccionar, guardamos la info en session_state
-        id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
-        
-        if id_fardo_sel:
-            id_fardo = id_fardo_sel.split(" - ")[0]
-            # Guardamos la fila seleccionada en session_state para que el formulario la vea
-            st.session_state.fila_fardo_temp = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo].iloc[0]
+        with tab_divisor:
+            st.subheader("✂️ Divisor de Fardos")
+            
+            # 1. Definimos los patrones de fardo
+            patrones_fardo = ['x12', 'x24', 'x30', 'X12', 'X24', 'X30']
+            # Creamos una expresión regular para buscar cualquiera de ellos
+            regex_patron = '|'.join(patrones_fardo)
+            
+            # 2. Filtramos: Rubro LECHE + Stock > 0 + Que contenga algún patrón de fardo
+            df_filtrado_div = st.session_state.df_prod[
+                (st.session_state.df_prod['Rubro'] == 'LECHE') & 
+                (st.session_state.df_prod['Stock_Actual'] > 0) &
+                (st.session_state.df_prod['Nombre'].str.contains(regex_patron, na=False))
+            ].copy()
+            
+            if df_filtrado_div.empty:
+                st.warning("No hay productos de 'LECHE' identificados como fardos (x12, x24, x30) con stock disponible.")
+            else:
+                opciones_prod = (df_filtrado_div['ID_Producto'].astype(str) + " - " + df_filtrado_div['Nombre']).tolist()
+                id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
+                
+                if id_fardo_sel:
+                    id_fardo = id_fardo_sel.split(" - ")[0]
+                    # Guardamos en sesión para que el formulario pueda acceder
+                    st.session_state.fila_fardo_temp = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo].iloc[0]
             
             st.info(f"Fardo: {st.session_state.fila_fardo_temp['Nombre']} | Stock: {st.session_state.fila_fardo_temp['Stock_Actual']}")
             
