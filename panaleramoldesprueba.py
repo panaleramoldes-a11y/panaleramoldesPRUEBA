@@ -1819,15 +1819,16 @@ else:
             st.subheader("✂️ Divisor de Fardos")
             
             # 1. Definimos los patrones de fardo
-            patrones_fardo = ['x12', 'x24', 'x30', 'X12', 'X24', 'X30']
-            # Creamos una expresión regular para buscar cualquiera de ellos
+            patrones_fardo = [r'\bx12\b', r'\bx24\b', r'\bx30\b', 
+                              r'\bX12\b', r'\bX24\b', r'\bX30\b']
+            
             regex_patron = '|'.join(patrones_fardo)
             
-            # 2. Filtramos: Rubro LECHE + Stock > 0 + Que contenga algún patrón de fardo
+            # 2. Filtramos: Rubro LECHE + Stock > 0 + Que contenga el patrón exacto como palabra
             df_filtrado_div = st.session_state.df_prod[
                 (st.session_state.df_prod['Rubro'] == 'LECHE') & 
                 (st.session_state.df_prod['Stock_Actual'] > 0) &
-                (st.session_state.df_prod['Nombre'].str.contains(regex_patron, na=False))
+                (st.session_state.df_prod['Nombre'].str.contains(regex_patron, regex=True, na=False))
             ].copy()
             
             if df_filtrado_div.empty:
