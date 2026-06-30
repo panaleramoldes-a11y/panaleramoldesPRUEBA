@@ -1130,24 +1130,29 @@ else:
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
             
-            # PROTECCIÓN: Solo ejecutar si existe el ID
+            # 1. CARGAR MÉTODOS DESDE SUPABASE (Dinámico)
+            try:
+                # Traemos solo los métodos activos
+                metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute().data
+                lista_pagos = [m["Nombre_Pago"] for m in metodos_db]
+            except Exception as e:
+                # Fallback por si hay error en la tabla, para no romper la app
+                lista_pagos = ["Efectivo", "Transferencia", "Débito", "Crédito"]
+            
+            # 2. AGREGAR GIFT CARD SI APLICA
             if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id is not None:
                 id_busqueda = int(st.session_state.cliente_actual_id)
                 
-                # CONSULTA MÁS SEGURA
                 gc_data = db.table("GIFT_CARDS") \
                             .select("Saldo_Actual, ID_GiftCard") \
                             .eq("ID_Cliente", id_busqueda) \
                             .eq("Estado", True) \
                             .execute().data
                 
-                st.write(f"DEBUG: Resultado de consulta DB: {gc_data}") # <--- AQUÍ VEREMOS EL ERROR
-                
                 if gc_data and gc_data[0]['Saldo_Actual'] > 0:
                     saldo_disponible = gc_data[0]['Saldo_Actual']
                     nombre_opcion = f"Gift Card (${saldo_disponible:,.0f})"
                     lista_pagos.append(nombre_opcion)
-                    # Guardamos en sesión para usar después en el botón de registrar venta
                     st.session_state['gc_activa_id'] = gc_data[0]['ID_GiftCard']
                     st.session_state['gc_saldo_disponible'] = saldo_disponible
             # ----------------------------------------
