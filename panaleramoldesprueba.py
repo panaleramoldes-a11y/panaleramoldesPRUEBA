@@ -1815,52 +1815,45 @@ else:
                         st.error(f"Error: {e}")
 
         # --- PESTAÑA DIVISOR ---
-        with tab_divisor:
-            st.subheader("✂️ Divisor de Fardos")
+with tab_divisor:
+    st.subheader("✂️ Divisor de Fardos")
+    
+    # 1. Filtramos el DF
+    df_filtrado_div = st.session_state.df_prod[
+        (st.session_state.df_prod['Rubro'] == 'LECHE') & 
+        (st.session_state.df_prod['Stock_Actual'] > 0)
+    ].copy()
+    
+    if df_filtrado_div.empty:
+        st.warning("No hay fardos de 'LECHE' con stock disponible para dividir.")
+    else:
+        opciones_prod = (df_filtrado_div['ID_Producto'].astype(str) + " - " + df_filtrado_div['Nombre']).tolist()
+        
+        # Al seleccionar, guardamos la info en session_state
+        id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
+        
+        if id_fardo_sel:
+            id_fardo = id_fardo_sel.split(" - ")[0]
+            # Guardamos la fila seleccionada en session_state para que el formulario la vea
+            st.session_state.fila_fardo_temp = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo].iloc[0]
             
-            # Filtramos solo LECHE con stock > 0
-            df_filtrado_div = st.session_state.df_prod[
-                (st.session_state.df_prod['Rubro'] == 'LECHE') & 
-                (st.session_state.df_prod['Stock_Actual'] > 0)
-            ].copy()
+            st.info(f"Fardo: {st.session_state.fila_fardo_temp['Nombre']} | Stock: {st.session_state.fila_fardo_temp['Stock_Actual']}")
             
-            if df_filtrado_div.empty:
-                st.warning("No hay fardos de 'LECHE' con stock disponible para dividir.")
-            else:
-                opciones_prod = (df_filtrado_div['ID_Producto'].astype(str) + " - " + df_filtrado_div['Nombre']).tolist()
-                id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
+            with st.form("form_divisor"):
+                c1, c2 = st.columns(2)
+                unidades = c1.number_input("¿Cuántas unidades trae el fardo?", min_value=1, value=24)
+                id_cajita = c2.text_input("Código de la Cajita Individual:")
                 
-                if id_fardo_sel:
-                    id_fardo = id_fardo_sel.split(" - ")[0]
-                    # Buscamos la fila en el DF filtrado
-                    temp_df = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo]
-                    
-                    if not temp_df.empty:
-                        fila_fardo = temp_df.iloc[0]
-                        
-                        # --- DEPURACIÓN: Aseguramos que Precio_Costo sea tratable ---
-                        try:
-                            # Convertimos a string por si es objeto, luego a float
-                            costo_fardo = float(fila_fardo['Precio_Costo'])
-                        except (ValueError, TypeError, KeyError) as e:
-                            st.error(f"Error al leer Precio_Costo: {e}. Valor encontrado: {fila_fardo.get('Precio_Costo')}")
-                            st.stop()
-                        
-                        st.info(f"Fardo: {fila_fardo['Nombre']} | Stock: {fila_fardo['Stock_Actual']}")
+                # --- AQUÍ USAMOS LA VARIABLE DE SESSION_STATE ---
+                fila_fardo = st.session_state.fila_fardo_temp
+                costo_fardo = float(fila_fardo['Precio_Costo'])
                 
-                with st.form("form_divisor"):
-                    c1, c2 = st.columns(2)
-                    unidades = c1.number_input("¿Cuántas unidades trae el fardo?", min_value=1, value=24)
-                    id_cajita = c2.text_input("Código de la Cajita Individual:")
-                    
-                    # Cálculo automático
-                    costo_fardo = float(fila_fardo['Precio_Costo'])
-                    costo_unitario = costo_fardo / unidades
-                    precio_sugerido = ( (int((costo_unitario * 1.40) // 100) + 1) * 100 )
-                    
-                    st.write(f"Costo unitario: ${costo_unitario:,.2f} | Precio Sugerido: ${precio_sugerido:,.0f}")
-                    
-                    if st.form_submit_button("🚀 Confirmar División"):
+                costo_unitario = costo_fardo / unidades
+                precio_sugerido = ( (int((costo_unitario * 1.40) // 100) + 1) * 100 )
+                
+                st.write(f"Costo unitario: ${costo_unitario:,.2f} | Precio Sugerido: ${precio_sugerido:,.0f}")
+                
+                if st.form_submit_button("🚀 Confirmar División"):
                         # --- VALIDACIÓN DE STOCK ---
                         if int(fila_fardo['Stock_Actual']) <= 0:
                             st.error(f"⚠️ ¡Error! El fardo '{fila_fardo['Nombre']}' no cuenta con existencias para dividir (Stock actual: 0).")
