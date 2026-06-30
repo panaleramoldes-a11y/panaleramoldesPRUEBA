@@ -1130,29 +1130,38 @@ else:
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
             
-            # ... (código de carga de métodos desde tabla FORMAS_PAGO) ...
+            # 1. CARGAR MÉTODOS BASE
+            try:
+                metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute().data
+                lista_pagos = [m["Nombre_Pago"] for m in metodos_db]
+            except:
+                lista_pagos = ["Efectivo", "Transferencia", "Débito", "Crédito"]
             
-            # 2. AGREGAR GIFT CARD SOLO SI ES ADMINISTRADOR
+            # 2. LÓGICA DE GIFT CARD (DISPONIBLE PARA TODOS PARA COBRAR)
             if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id is not None:
-                # Solo intentamos cargar la Gift Card si el usuario tiene rol de 'admin'
-                # (Asegúrate de que 'admin' coincida exactamente con lo que guardas en la tabla USUARIOS)
-                if st.session_state.get('rol') == 'admin':
-                    id_busqueda = int(st.session_state.cliente_actual_id)
+                id_busqueda = int(st.session_state.cliente_actual_id)
+                
+                # Todos pueden ver si el cliente tiene saldo para cobrar
+                gc_data = db.table("GIFT_CARDS") \
+                            .select("Saldo_Actual, ID_GiftCard") \
+                            .eq("ID_Cliente", id_busqueda) \
+                            .eq("Estado", True) \
+                            .execute().data
+                
+                if gc_data and gc_data[0]['Saldo_Actual'] > 0:
+                    saldo_disponible = gc_data[0]['Saldo_Actual']
+                    nombre_opcion = f"Gift Card (${saldo_disponible:,.0f})"
+                    lista_pagos.append(nombre_opcion)
                     
-                    gc_data = db.table("GIFT_CARDS") \
-                                .select("Saldo_Actual, ID_GiftCard") \
-                                .eq("ID_Cliente", id_busqueda) \
-                                .eq("Estado", True) \
-                                .execute().data
-                    
-                    if gc_data and gc_data[0]['Saldo_Actual'] > 0:
-                        saldo_disponible = gc_data[0]['Saldo_Actual']
-                        nombre_opcion = f"Gift Card (${saldo_disponible:,.0f})"
-                        lista_pagos.append(nombre_opcion)
-                        
-                        # Guardamos para el proceso de venta
-                        st.session_state['gc_activa_id'] = gc_data[0]['ID_GiftCard']
-                        st.session_state['gc_saldo_disponible'] = saldo_disponible
+                    st.session_state['gc_activa_id'] = gc_data[0]['ID_GiftCard']
+                    st.session_state['gc_saldo_disponible'] = saldo_disponible
+            
+            # 3. BOTÓN DE GESTIÓN (SOLO ADMINISTRADOR)
+            # Aquí está el candado: solo el admin verá el botón para dar de alta/editar
+            if st.session_state.get('rol') == 'Administrador':
+                if st.button("🔧 Gestionar Gift Cards del Cliente"):
+                    st.session_state.pagina = "gestion_gc"
+                    st.rerun()
             # ----------------------------------------
             
             # Aquí sigue tu código original que genera los selectores (el for loop)
