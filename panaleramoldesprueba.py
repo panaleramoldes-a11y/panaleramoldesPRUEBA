@@ -1278,42 +1278,56 @@ else:
                                 "Monto": float(pago["monto"])
                             }).execute()
 
-                        # 5. Registrar en Caja
+                        # 5. Registrar en Caja Y Gestión de Gift Cards
                         for pago in st.session_state.pagos_split:
                             metodo = pago["metodo"]
                             monto = float(pago["monto"])
                             
-                            # A. REGISTRO DE INGRESO (Siempre ocurre)
-                            db.table("CAJA").insert({
-                                "ID_Turno": id_turno_val,
-                                "Fecha": datetime.now().isoformat(),
-                                "Tipo": "Ingreso",
-                                "Concepto": f"Venta {id_v} ({metodo})",
-                                "Monto": monto,
-                                "Forma_Pago": metodo
-                            }).execute()
-
-                            # B. EGRESO AUTOMÁTICO (Si es Efectivo + Reparto)
-                            if metodo == "Efectivo" and st.session_state.tipo_entrega == "Reparto":
-                                db.table("CAJA").insert({
-                                    "ID_Turno": id_turno_val,
-                                    "Fecha": datetime.now().isoformat(),
-                                    "Tipo": "Egreso",
-                                    "Concepto": f"RETIRO POR REPARTO (Venta {id_v})",
-                                    "Monto": monto,
-                                    "Forma_Pago": "Efectivo"
-                                }).execute()
+                            # --- LÓGICA DE GIFT CARD ---
+                            if "Gift Card" in metodo:
+                                # 1. Restamos el saldo de la Gift Card
+                                gc_id = st.session_state.get('gc_activa_id')
+                                nuevo_saldo = st.session_state.get('gc_saldo_disponible', 0) - monto
                                 
-                            # C. EGRESO AUTOMÁTICO (Si NO es Efectivo)
-                            elif metodo != "Efectivo":
+                                # Actualizamos Supabase
+                                db.table("GIFT_CARDS").update({"Saldo_Actual": float(nuevo_saldo)}).eq("ID_GiftCard", gc_id).execute()
+                                
+                                # Si llega a cero, la desactivamos
+                                if nuevo_saldo <= 0:
+                                    db.table("GIFT_CARDS").update({"Estado": False}).eq("ID_GiftCard", gc_id).execute()
+                                    
+                                # Registramos en CAJA como "Ingreso" pero con concepto aclaratorio
                                 db.table("CAJA").insert({
                                     "ID_Turno": id_turno_val,
                                     "Fecha": datetime.now().isoformat(),
-                                    "Tipo": "Egreso",
-                                    "Concepto": f"RETIRO PAGO {metodo.upper()}",
+                                    "Tipo": "Ingreso",
+                                    "Concepto": f"Venta {id_v} (Canje Gift Card)",
+                                    "Monto": monto,
+                                    "Forma_Pago": "Gift Card"
+                                }).execute()
+
+                            # --- LÓGICA DE OTROS PAGOS (Efectivo/Transferencia/etc) ---
+                            else:
+                                # A. REGISTRO DE INGRESO
+                                db.table("CAJA").insert({
+                                    "ID_Turno": id_turno_val,
+                                    "Fecha": datetime.now().isoformat(),
+                                    "Tipo": "Ingreso",
+                                    "Concepto": f"Venta {id_v} ({metodo})",
                                     "Monto": monto,
                                     "Forma_Pago": metodo
                                 }).execute()
+
+                                # B. EGRESO AUTOMÁTICO (Reparto o bancos)
+                                if (metodo == "Efectivo" and st.session_state.tipo_entrega == "Reparto") or (metodo != "Efectivo"):
+                                    db.table("CAJA").insert({
+                                        "ID_Turno": id_turno_val,
+                                        "Fecha": datetime.now().isoformat(),
+                                        "Tipo": "Egreso",
+                                        "Concepto": f"RETIRO {metodo.upper()} (Venta {id_v})",
+                                        "Monto": monto,
+                                        "Forma_Pago": metodo
+                                    }).execute()
 
                         if 'id_pendiente_cargado' in st.session_state:
                             db.table("VENTAS_PENDIENTES").delete().eq("ID_Pendiente", st.session_state.id_pendiente_cargado).execute()
