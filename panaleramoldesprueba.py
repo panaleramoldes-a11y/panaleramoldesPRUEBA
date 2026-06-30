@@ -1144,21 +1144,21 @@ else:
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
             
-            # 1. Obtener métodos base desde DB
-            metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute()
-            lista_pagos = [item['Nombre_Pago'] for item in metodos_db.data] if metodos_db.data else ["Efectivo"]
-            
-            # --- AQUÍ VA EL BLOQUE QUE TE PASÉ ---
-            # 2. LÓGICA GIFT CARD: Consultar saldo si hay un cliente seleccionado
-            if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id:
-                # Convertimos a int para asegurar que coincide con el bigint de la DB
-                id_cliente_busqueda = int(st.session_state.cliente_actual_id)
+            # DEBUG: Esto nos dirá exactamente qué está pasando
+            if 'cliente_actual_id' in st.session_state:
+                st.write(f"DEBUG: Buscando GC para ID Cliente: {st.session_state.cliente_actual_id}")
                 
+                # FORZAMOS A ENTERO
+                id_busqueda = int(st.session_state.cliente_actual_id)
+                
+                # CONSULTA MÁS SEGURA
                 gc_data = db.table("GIFT_CARDS") \
                             .select("Saldo_Actual, ID_GiftCard") \
-                            .eq("ID_Cliente", id_cliente_busqueda) \
+                            .eq("ID_Cliente", id_busqueda) \
                             .eq("Estado", True) \
                             .execute().data
+                
+                st.write(f"DEBUG: Resultado de consulta DB: {gc_data}") # <--- AQUÍ VEREMOS EL ERROR
                 
                 if gc_data and gc_data[0]['Saldo_Actual'] > 0:
                     saldo_disponible = gc_data[0]['Saldo_Actual']
