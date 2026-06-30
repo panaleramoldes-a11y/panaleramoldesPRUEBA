@@ -980,31 +980,17 @@ else:
                 placeholder="Seleccione o busque un cliente..."
             )
 
-            # --- EXTRACCIÓN NUEVA ---
-            if cliente_display:
+            # --- EXTRACCIÓN SEGURA Y ÚNICA ---
+            if cliente_display and " - ID: " in cliente_display:
                 try:
-                    # Buscamos el texto que está después de " - ID: "
-                    id_extraido = int(cliente_display.split(" - ID: ")[1])
-                    st.session_state.cliente_actual_id = id_extraido
+                    # Extraemos el ID después de " - ID: "
+                    id_str = cliente_display.split(" - ID: ")[1]
+                    st.session_state.cliente_actual_id = int(id_str)
                 except Exception as e:
-                    st.error("No se pudo extraer el ID del cliente.")
+                    st.error(f"Error al procesar ID: {e}")
+                    st.session_state.cliente_actual_id = None
             else:
                 st.session_state.cliente_actual_id = None
-
-            # --- AGREGAR ESTO PARA GUARDAR EL ID ---
-            if cliente_display:
-                # DEBUG: Vamos a ver exactamente qué contiene la variable
-                # st.write(f"DEBUG: Texto del cliente: '{cliente_display}'") 
-                
-                if "(ID: " in cliente_display:
-                    try:
-                        partes = cliente_display.split("(ID: ")
-                        id_str = partes[1].replace(")", "").strip()
-                        st.session_state.cliente_actual_id = int(id_str)
-                    except Exception as e:
-                        st.error(f"Error procesando ID: {e}")
-                else:
-                    st.session_state.cliente_actual_id = None
             
             # --- BOTÓN DE ACCESO DIRECTO ---
             if c2.button("➕", help="Agregar nuevo cliente"):
@@ -1144,11 +1130,8 @@ else:
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
             
-            # DEBUG: Esto nos dirá exactamente qué está pasando
-            if 'cliente_actual_id' in st.session_state:
-                st.write(f"DEBUG: Buscando GC para ID Cliente: {st.session_state.cliente_actual_id}")
-                
-                # FORZAMOS A ENTERO
+            # PROTECCIÓN: Solo ejecutar si existe el ID
+            if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id is not None:
                 id_busqueda = int(st.session_state.cliente_actual_id)
                 
                 # CONSULTA MÁS SEGURA
