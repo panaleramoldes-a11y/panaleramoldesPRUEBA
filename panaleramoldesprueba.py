@@ -956,14 +956,19 @@ else:
 
             # --- AGREGAR ESTO PARA GUARDAR EL ID ---
             if cliente_display:
-                # Extraemos el ID del string (asumiendo que el formato es "Nombre (ID: X)")
-                try:
-                    id_extraido = int(cliente_display.split("(ID: ")[1].replace(")", ""))
-                    st.session_state.cliente_actual_id = id_extraido
-                except (IndexError, ValueError):
-                    st.error("Error al obtener el ID del cliente.")
+                # DEBUG: Vamos a ver exactamente qué contiene la variable
+                # st.write(f"DEBUG: Texto del cliente: '{cliente_display}'") 
+                
+                if "(ID: " in cliente_display:
+                    try:
+                        partes = cliente_display.split("(ID: ")
+                        id_str = partes[1].replace(")", "").strip()
+                        st.session_state.cliente_actual_id = int(id_str)
+                    except Exception as e:
+                        st.error(f"Error procesando ID: {e}")
+                else:
+                    st.warning("El formato del cliente no contiene '(ID: '. Verifica la columna 'Display' de tu dataframe.")
             else:
-                # Si se borra la selección, limpiamos el ID
                 st.session_state.cliente_actual_id = None
             
             # --- BOTÓN DE ACCESO DIRECTO ---
