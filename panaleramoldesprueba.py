@@ -1130,18 +1130,19 @@ else:
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
             
-            # 1. CARGAR MÉTODOS BASE
+            # 1. CARGAR MÉTODOS DESDE SUPABASE (Dinámico)
             try:
+                # Traemos solo los métodos activos
                 metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute().data
                 lista_pagos = [m["Nombre_Pago"] for m in metodos_db]
-            except:
+            except Exception as e:
+                # Fallback por si hay error en la tabla, para no romper la app
                 lista_pagos = ["Efectivo", "Transferencia", "Débito", "Crédito"]
             
-            # 2. LÓGICA DE GIFT CARD (DISPONIBLE PARA TODOS PARA COBRAR)
+            # 2. AGREGAR GIFT CARD SI APLICA
             if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id is not None:
                 id_busqueda = int(st.session_state.cliente_actual_id)
                 
-                # Todos pueden ver si el cliente tiene saldo para cobrar
                 gc_data = db.table("GIFT_CARDS") \
                             .select("Saldo_Actual, ID_GiftCard") \
                             .eq("ID_Cliente", id_busqueda) \
@@ -1152,16 +1153,8 @@ else:
                     saldo_disponible = gc_data[0]['Saldo_Actual']
                     nombre_opcion = f"Gift Card (${saldo_disponible:,.0f})"
                     lista_pagos.append(nombre_opcion)
-                    
                     st.session_state['gc_activa_id'] = gc_data[0]['ID_GiftCard']
                     st.session_state['gc_saldo_disponible'] = saldo_disponible
-            
-            # 3. BOTÓN DE GESTIÓN (SOLO ADMINISTRADOR)
-            # Aquí está el candado: solo el admin verá el botón para dar de alta/editar
-            if st.session_state.get('rol') == 'Administrador':
-                if st.button("🔧 Gestionar Gift Cards del Cliente"):
-                    st.session_state.pagina = "gestion_gc"
-                    st.rerun()
             # ----------------------------------------
             
             # Aquí sigue tu código original que genera los selectores (el for loop)
