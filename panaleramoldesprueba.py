@@ -1125,33 +1125,33 @@ else:
 
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
-            st.write(f"DEBUG: ID Cliente actual: {st.session_state.get('cliente_actual_id')}")
             
             # 1. Obtener métodos base desde DB
             metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute()
             lista_pagos = [item['Nombre_Pago'] for item in metodos_db.data] if metodos_db.data else ["Efectivo"]
             
+            # --- AQUÍ VA EL BLOQUE QUE TE PASÉ ---
             # 2. LÓGICA GIFT CARD: Consultar saldo si hay un cliente seleccionado
-            # Asegúrate de usar int() para convertir el ID
             if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id:
-                # Usamos int() para que el filtro coincida con el bigint de la base de datos
-                id_busqueda = int(st.session_state.cliente_actual_id) 
+                # Convertimos a int para asegurar que coincide con el bigint de la DB
+                id_cliente_busqueda = int(st.session_state.cliente_actual_id)
                 
                 gc_data = db.table("GIFT_CARDS") \
                             .select("Saldo_Actual, ID_GiftCard") \
-                            .eq("ID_Cliente", id_busqueda) \
+                            .eq("ID_Cliente", id_cliente_busqueda) \
                             .eq("Estado", True) \
                             .execute().data
                 
                 if gc_data and gc_data[0]['Saldo_Actual'] > 0:
                     saldo_disponible = gc_data[0]['Saldo_Actual']
-                    # Etiqueta amigable con el saldo para que el usuario sepa cuánto tiene
                     nombre_opcion = f"Gift Card (${saldo_disponible:,.0f})"
                     lista_pagos.append(nombre_opcion)
-                    # Guardamos el ID en session_state para reconocerlo al confirmar venta
+                    # Guardamos en sesión para usar después en el botón de registrar venta
                     st.session_state['gc_activa_id'] = gc_data[0]['ID_GiftCard']
                     st.session_state['gc_saldo_disponible'] = saldo_disponible
-                
+            # ----------------------------------------
+            
+            # Aquí sigue tu código original que genera los selectores (el for loop)
             if 'pagos_split' not in st.session_state:
                 st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
 
@@ -1258,10 +1258,27 @@ else:
 
             with col_f1:
                 if st.button("🏁 FINALIZAR Y REGISTRAR VENTA", use_container_width=True, type="primary"):
+                    # 0. Verificación de sumas
                     suma_pagos = sum(float(p["monto"]) for p in st.session_state.pagos_split)
                     if abs(suma_pagos - total_final_vta) > 0.01:
                         st.error(f"¡Error! La suma de los pagos (${suma_pagos:.2f}) no coincide con el total (${total_final_vta:.2f})")
                         st.stop()
+                    
+                    # --- NUEVO: BLINDAJE DE SEGURIDAD PARA GIFT CARDS ---
+                    for pago in st.session_state.pagos_split:
+                        if "Gift Card" in pago["metodo"]:
+                            # Re-consultamos el saldo real en la base de datos en este instante
+                            gc_check = db.table("GIFT_CARDS") \
+                                         .select("Saldo_Actual") \
+                                         .eq("ID_GiftCard", st.session_state.get('gc_activa_id')) \
+                                         .single().execute()
+                            
+                            saldo_real = gc_check.data['Saldo_Actual'] if gc_check.data else 0
+                            
+                            if pago["monto"] > saldo_real:
+                                st.error(f"❌ ¡Saldo insuficiente en Gift Card! Disponible: ${saldo_real:,.2f}")
+                                st.stop() # Detiene todo el proceso antes de que se grabe nada
+                    # ----------------------------------------------------
                     
                     try:
                         # 1. DEFINIR DATOS BÁSICOS PRIMERO
