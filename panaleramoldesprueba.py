@@ -1092,8 +1092,27 @@ else:
             # --- SECCIÓN DE PAGOS ---
             st.subheader("💳 Formas de Pago")
             
+            # 1. Obtener métodos base desde DB
             metodos_db = db.table("FORMAS_PAGO").select("Nombre_Pago").eq("Activo", True).execute()
             lista_pagos = [item['Nombre_Pago'] for item in metodos_db.data] if metodos_db.data else ["Efectivo"]
+            
+            # 2. LÓGICA GIFT CARD: Consultar saldo si hay un cliente seleccionado
+            # Asegúrate de tener 'cliente_seleccionado_id' disponible aquí (por ejemplo, desde st.session_state)
+            if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id:
+                gc_data = db.table("GIFT_CARDS") \
+                            .select("Saldo_Actual, ID_GiftCard") \
+                            .eq("ID_Cliente", str(st.session_state.cliente_actual_id)) \
+                            .eq("Estado", True) \
+                            .execute().data
+                
+                if gc_data and gc_data[0]['Saldo_Actual'] > 0:
+                    saldo_disponible = gc_data[0]['Saldo_Actual']
+                    # Etiqueta amigable con el saldo para que el usuario sepa cuánto tiene
+                    nombre_opcion = f"Gift Card (${saldo_disponible:,.0f})"
+                    lista_pagos.append(nombre_opcion)
+                    # Guardamos el ID en session_state para reconocerlo al confirmar venta
+                    st.session_state['gc_activa_id'] = gc_data[0]['ID_GiftCard']
+                    st.session_state['gc_saldo_disponible'] = saldo_disponible
                 
             if 'pagos_split' not in st.session_state:
                 st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
