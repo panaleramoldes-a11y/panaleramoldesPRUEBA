@@ -1814,13 +1814,11 @@ else:
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-        # --- PESTAÑA DIVISOR (VISIBLE PARA TODOS) ---
+        # --- PESTAÑA DIVISOR ---
         with tab_divisor:
             st.subheader("✂️ Divisor de Fardos")
             
-            # --- FILTRO INTELIGENTE ---
-            # 1. Filtramos el DataFrame antes de crear la lista
-            # Asegúrate de que 'Rubro' exista en tu tabla y los valores sean consistentes
+            # Filtramos solo LECHE con stock > 0
             df_filtrado_div = st.session_state.df_prod[
                 (st.session_state.df_prod['Rubro'] == 'LECHE') & 
                 (st.session_state.df_prod['Stock_Actual'] > 0)
@@ -1829,16 +1827,26 @@ else:
             if df_filtrado_div.empty:
                 st.warning("No hay fardos de 'LECHE' con stock disponible para dividir.")
             else:
-                # 2. Creamos la lista solo con los filtrados
                 opciones_prod = (df_filtrado_div['ID_Producto'].astype(str) + " - " + df_filtrado_div['Nombre']).tolist()
                 id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
                 
                 if id_fardo_sel:
                     id_fardo = id_fardo_sel.split(" - ")[0]
-                    # Buscamos la fila en el dataframe filtrado
-                    fila_fardo = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo].iloc[0]
+                    # Buscamos la fila en el DF filtrado
+                    temp_df = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo]
                     
-                    st.info(f"Fardo: {fila_fardo['Nombre']} | Stock: {fila_fardo['Stock_Actual']}")
+                    if not temp_df.empty:
+                        fila_fardo = temp_df.iloc[0]
+                        
+                        # --- DEPURACIÓN: Aseguramos que Precio_Costo sea tratable ---
+                        try:
+                            # Convertimos a string por si es objeto, luego a float
+                            costo_fardo = float(fila_fardo['Precio_Costo'])
+                        except (ValueError, TypeError, KeyError) as e:
+                            st.error(f"Error al leer Precio_Costo: {e}. Valor encontrado: {fila_fardo.get('Precio_Costo')}")
+                            st.stop()
+                        
+                        st.info(f"Fardo: {fila_fardo['Nombre']} | Stock: {fila_fardo['Stock_Actual']}")
                 
                 with st.form("form_divisor"):
                     c1, c2 = st.columns(2)
