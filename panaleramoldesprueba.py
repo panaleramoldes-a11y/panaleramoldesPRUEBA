@@ -16,6 +16,9 @@ def init_connection():
     # Lee específicamente la sección [desarrollo]
     url = st.secrets["desarrollo"]["SUPABASE_URL"]
     key = st.secrets["desarrollo"]["SUPABASE_KEY"]
+    return create_client(url, key)
+
+# Inicializamos la conexión globalmente
 db = init_connection()
 
 # 2. LÓGICA DE LOGIN
