@@ -7,6 +7,7 @@ import requests
 import math
 import json
 import pydeck as pdk
+import uuid
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -632,18 +633,21 @@ else:
             monto = st.number_input("Monto inicial de la Gift Card", min_value=0.0, step=100.0)
             
             if st.form_submit_button("Confirmar Emisión"):
-                # Insertamos en la tabla GIFT_CARDS
+                # Generamos un ID único universal (UUID) para evitar colisiones
                 nueva_gc = {
-                    "ID_Cliente": str(id_cliente), # Ya es text
+                    "ID_GiftCard": str(uuid.uuid4()), 
+                    "ID_Cliente": str(id_cliente),
                     "Saldo_Actual": float(monto),
                     "Estado": True,
                     "Fecha_Creacion": datetime.now().isoformat()
-                    # ID_GiftCard se autogenera si en Supabase tiene serial o lo dejamos como text
                 }
-                db.table("GIFT_CARDS").insert(nueva_gc).execute()
                 
-                st.success(f"✅ Gift Card de ${monto:,.2f} asignada exitosamente.")
-                st.rerun()
+                try:
+                    db.table("GIFT_CARDS").insert(nueva_gc).execute()
+                    st.success(f"✅ Gift Card de ${monto:,.2f} asignada!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al guardar en la base de datos: {e}")
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
