@@ -1647,13 +1647,14 @@ else:
         st.session_state.df_prod = df_prod.copy()
 
         # 2. DEFINICIÓN DINÁMICA DE PESTAÑAS SEGÚN ROL
-        # Definición limpia
         if st.session_state.rol == "Administrador":
             tabs = st.tabs(["🔍 Buscar", "➕ Alta", "✏️ Modificar", "🔄 Cambios", "📥 Importar", "✂️ Divisor"])
             tab_buscar, tab_alta, tab_modificar, tab_cambios, tab_importar, tab_divisor = tabs
         else:
+            # Definimos solo las 3 pestañas y ponemos las otras como None
             tabs = st.tabs(["🔍 Buscar", "🔄 Cambios", "✂️ Divisor"])
             tab_buscar, tab_cambios, tab_divisor = tabs
+            tab_alta, tab_modificar, tab_importar = None, None, None
             
         # --- PESTAÑA BUSCAR (VISIBLE PARA TODOS) ---
         with tab_buscar:
