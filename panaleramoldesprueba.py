@@ -1097,11 +1097,14 @@ else:
             lista_pagos = [item['Nombre_Pago'] for item in metodos_db.data] if metodos_db.data else ["Efectivo"]
             
             # 2. LÓGICA GIFT CARD: Consultar saldo si hay un cliente seleccionado
-            # Asegúrate de tener 'cliente_seleccionado_id' disponible aquí (por ejemplo, desde st.session_state)
+            # Asegúrate de usar int() para convertir el ID
             if 'cliente_actual_id' in st.session_state and st.session_state.cliente_actual_id:
+                # Usamos int() para que el filtro coincida con el bigint de la base de datos
+                id_busqueda = int(st.session_state.cliente_actual_id) 
+                
                 gc_data = db.table("GIFT_CARDS") \
                             .select("Saldo_Actual, ID_GiftCard") \
-                            .eq("ID_Cliente", str(st.session_state.cliente_actual_id)) \
+                            .eq("ID_Cliente", id_busqueda) \
                             .eq("Estado", True) \
                             .execute().data
                 
