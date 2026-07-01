@@ -1806,7 +1806,7 @@ else:
                                 "Entra": int(item['Cantidad']) if item['Tipo'] == 'ENTRA' else 0,
                                 "Sale": int(item['Cantidad']) if item['Tipo'] == 'SALE' else 0,
                                 "Estado": "PENDIENTE",
-                                "Usuario": st.session_state.get('usuario', 'Desconocido')
+                                "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- CAMBIA 'usuario' por 'usuario_actual'
                             }).execute()
                         st.success("✅ Enviado a revisión.")
                         st.session_state.lista_cambios = []
