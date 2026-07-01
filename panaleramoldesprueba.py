@@ -1886,9 +1886,12 @@ else:
                                 db.table("PRODUCTOS").update({"Stock_Actual": stock_cajita_old + unidades}).eq("ID_Producto", id_cajita).execute()
                                 
                                 # --- REGISTRO EN CAMBIOS ---
+                                # Usamos st.session_state.usuario_actual
+                                usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
+                                
                                 db.table("CAMBIOS").insert({
                                     "Fecha": datetime.now().isoformat(),
-                                    "Usuario": usuario_logueado,
+                                    "Usuario": usuario_logueado, # <--- Aquí queda registrado tu nombre
                                     "Código": id_fardo,
                                     "Nombre": fila_fardo['Nombre'],
                                     "Descripción": f"División de fardo: Se transformó en {unidades} unidades de {id_cajita}",
@@ -1899,6 +1902,7 @@ else:
                                 
                                 db.table("CAMBIOS").insert({
                                     "Fecha": datetime.now().isoformat(),
+                                    "Usuario": usuario_logueado, # <--- Aquí también
                                     "Código": id_cajita,
                                     "Nombre": "Cajitas (División)",
                                     "Descripción": f"Ingreso por división de fardo {id_fardo}",
@@ -1907,7 +1911,7 @@ else:
                                     "existencia_actual": stock_cajita_old + unidades
                                 }).execute()
                                 
-                                st.success("✅ ¡División y registro completados!")
+                                st.success(f"✅ ¡División realizada por {usuario_logueado}!")
                                 st.rerun()
                                 
                             except Exception as e:
