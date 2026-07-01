@@ -2762,9 +2762,8 @@ else:
                                 "Concepto": "CIERRE CAJA DIARIO",
                                 "Monto": float(monto_cierre),
                                 "Forma_Pago": "Efectivo",
-                                "ID_Turno": turno_actual['ID_Turno'],
-                                "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
-                            }st.write("Depuración - Enviando a Supabase:", datos_a_enviar) # <--- AGREGA ESTO).execute()
+                                "ID_Turno": turno_actual['ID_Turno']
+                            }).execute()
                             st.success("Turno cerrado correctamente.")
                             st.rerun()
 
@@ -2834,11 +2833,8 @@ else:
                             "Tipo": tipo,
                             "Concepto": concepto,
                             "Monto": float(importe),
-                            "Forma_Pago": forma_pago,
-                            "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
-                        }st.write("Depuración - Enviando a Supabase:", datos_a_enviar) # <--- AGREGA ESTO).execute()
-
-                            
+                            "Forma_Pago": forma_pago
+                        }).execute()
                         
                         if tipo == "Ingreso" and forma_pago != "Efectivo":
                             db.table("CAJA").insert({
@@ -2847,9 +2843,8 @@ else:
                                 "Tipo": "Egreso",
                                 "Concepto": f"RETIRO PAGO {forma_pago.upper()}",
                                 "Monto": float(importe),
-                                "Forma_Pago": forma_pago,
-                                "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
-                            }st.write("Depuración - Enviando a Supabase:", datos_a_enviar) # <--- AGREGA ESTO).execute()
+                                "Forma_Pago": forma_pago
+                            }).execute()
                         st.success("✅ Registro realizado.")
                         st.rerun()
 
