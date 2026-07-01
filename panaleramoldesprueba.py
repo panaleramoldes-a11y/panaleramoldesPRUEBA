@@ -1890,7 +1890,7 @@ else:
                                 # --- REGISTRO EN CAMBIOS ---
                                 db.table("CAMBIOS").insert({
                                     "Fecha": datetime.now().isoformat(),
-                                    "Usuario": st.session_state.get('usuario', 'Desconocido'),
+                                    "Usuario": usuario_logueado,
                                     "Código": id_fardo,
                                     "Nombre": fila_fardo['Nombre'],
                                     "Descripción": f"División de fardo: Se transformó en {unidades} unidades de {id_cajita}",
