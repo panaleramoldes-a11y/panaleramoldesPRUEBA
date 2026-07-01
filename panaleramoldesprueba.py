@@ -1863,52 +1863,54 @@ else:
                         st.write(f"Costo unitario: ${costo_unitario:,.2f} | Precio Sugerido: ${precio_sugerido:,.0f}")
                         
                         if st.form_submit_button("🚀 Confirmar División"):
-                        # --- VALIDACIÓN DE STOCK ---
-                        if int(fila_fardo['Stock_Actual']) <= 0:
-                            st.error(f"⚠️ ¡Error! El fardo '{fila_fardo['Nombre']}' no cuenta con existencias para dividir (Stock actual: 0).")
-                            st.stop() # Detenemos la ejecución aquí
-                        
-                        # --- LÓGICA DE ACTUALIZACIÓN ---
-                        try:
-                            # Descontar 1 al fardo
-                            nuevo_stock_fardo = int(fila_fardo['Stock_Actual']) - 1
-                            db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock_fardo}).eq("ID_Producto", id_fardo).execute()
+                            # --- VALIDACIÓN DE STOCK ---
+                            # Todo esto DEBE estar indentado bajo el if de arriba
+                            if int(fila_fardo['Stock_Actual']) <= 0:
+                                st.error(f"⚠️ ¡Error! El fardo '{fila_fardo['Nombre']}' no cuenta con existencias para dividir (Stock actual: 0).")
+                                st.stop() 
                             
-                            # Sumar unidades a la cajita
-                            prod_cajita = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_cajita).execute().data
-                            if not prod_cajita:
-                                st.error("¡Error! El código de la cajita no existe en la base de datos.")
-                                st.stop()
+                            # --- LÓGICA DE ACTUALIZACIÓN ---
+                            # Todo esto TAMBIÉN debe estar indentado bajo el if
+                            try:
+                                # Descontar 1 al fardo
+                                nuevo_stock_fardo = int(fila_fardo['Stock_Actual']) - 1
+                                db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock_fardo}).eq("ID_Producto", id_fardo).execute()
                                 
-                            stock_cajita_old = int(prod_cajita[0]['Stock_Actual'])
-                            db.table("PRODUCTOS").update({"Stock_Actual": stock_cajita_old + unidades}).eq("ID_Producto", id_cajita).execute()
-                            
-                            # --- REGISTRO EN CAMBIOS ---
-                            db.table("CAMBIOS").insert({
-                                "Fecha": datetime.now().isoformat(),
-                                "Código": id_fardo,
-                                "Nombre": fila_fardo['Nombre'],
-                                "Descripción": f"División de fardo: Se transformó en {unidades} unidades de {id_cajita}",
-                                "Entra": 0, "Sale": 1,
-                                "existencia_ant": int(fila_fardo['Stock_Actual']),
-                                "existencia_actual": nuevo_stock_fardo
-                            }).execute()
-                            
-                            db.table("CAMBIOS").insert({
-                                "Fecha": datetime.now().isoformat(),
-                                "Código": id_cajita,
-                                "Nombre": "Cajitas (División)",
-                                "Descripción": f"Ingreso por división de fardo {id_fardo}",
-                                "Entra": int(unidades), "Sale": 0,
-                                "existencia_ant": stock_cajita_old,
-                                "existencia_actual": stock_cajita_old + unidades
-                            }).execute()
-                            
-                            st.success("✅ ¡División y registro completados!")
-                            st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"Error al procesar la división: {e}")
+                                # Sumar unidades a la cajita
+                                prod_cajita = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_cajita).execute().data
+                                if not prod_cajita:
+                                    st.error("¡Error! El código de la cajita no existe en la base de datos.")
+                                    st.stop()
+                                    
+                                stock_cajita_old = int(prod_cajita[0]['Stock_Actual'])
+                                db.table("PRODUCTOS").update({"Stock_Actual": stock_cajita_old + unidades}).eq("ID_Producto", id_cajita).execute()
+                                
+                                # --- REGISTRO EN CAMBIOS ---
+                                db.table("CAMBIOS").insert({
+                                    "Fecha": datetime.now().isoformat(),
+                                    "Código": id_fardo,
+                                    "Nombre": fila_fardo['Nombre'],
+                                    "Descripción": f"División de fardo: Se transformó en {unidades} unidades de {id_cajita}",
+                                    "Entra": 0, "Sale": 1,
+                                    "existencia_ant": int(fila_fardo['Stock_Actual']),
+                                    "existencia_actual": nuevo_stock_fardo
+                                }).execute()
+                                
+                                db.table("CAMBIOS").insert({
+                                    "Fecha": datetime.now().isoformat(),
+                                    "Código": id_cajita,
+                                    "Nombre": "Cajitas (División)",
+                                    "Descripción": f"Ingreso por división de fardo {id_fardo}",
+                                    "Entra": int(unidades), "Sale": 0,
+                                    "existencia_ant": stock_cajita_old,
+                                    "existencia_actual": stock_cajita_old + unidades
+                                }).execute()
+                                
+                                st.success("✅ ¡División y registro completados!")
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"Error al procesar la división: {e}")
         
         # --- PESTAÑAS DE ADMINISTRADOR ---
         if st.session_state.rol == "Administrador":
