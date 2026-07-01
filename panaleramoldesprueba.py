@@ -48,7 +48,7 @@ else:
     if 'lista_global_vta' not in st.session_state:
         st.session_state.lista_global_vta = "Automática (P1/P2)"
 
-st.write("Contenido de session_state:", st.session_state)
+    st.write("Contenido de session_state:", st.session_state)
 
     # --- FUNCIONES DE UTILIDAD ---    
     def normalizar_numero(valor):
