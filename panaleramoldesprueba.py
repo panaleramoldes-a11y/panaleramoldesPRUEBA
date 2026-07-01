@@ -2762,7 +2762,8 @@ else:
                                 "Concepto": "CIERRE CAJA DIARIO",
                                 "Monto": float(monto_cierre),
                                 "Forma_Pago": "Efectivo",
-                                "ID_Turno": turno_actual['ID_Turno']
+                                "ID_Turno": turno_actual['ID_Turno'],
+                                "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
                             }).execute()
                             st.success("Turno cerrado correctamente.")
                             st.rerun()
@@ -2833,7 +2834,8 @@ else:
                             "Tipo": tipo,
                             "Concepto": concepto,
                             "Monto": float(importe),
-                            "Forma_Pago": forma_pago
+                            "Forma_Pago": forma_pago,
+                            "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
                         }).execute()
                         
                         if tipo == "Ingreso" and forma_pago != "Efectivo":
@@ -2843,7 +2845,8 @@ else:
                                 "Tipo": "Egreso",
                                 "Concepto": f"RETIRO PAGO {forma_pago.upper()}",
                                 "Monto": float(importe),
-                                "Forma_Pago": forma_pago
+                                "Forma_Pago": forma_pago,
+                                "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
                             }).execute()
                         st.success("✅ Registro realizado.")
                         st.rerun()
