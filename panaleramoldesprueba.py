@@ -1838,27 +1838,31 @@ else:
                 id_fardo_sel = st.selectbox("Seleccionar Fardo a dividir:", [""] + opciones_prod, key="div_fardo")
                 
                 if id_fardo_sel:
+                    # Guardamos el ID en sesión
                     id_fardo = id_fardo_sel.split(" - ")[0]
-                    # Guardamos en sesión para que el formulario pueda acceder
+                    st.session_state.id_fardo_temp = id_fardo 
+                    
+                    # Guardamos la fila completa en sesión
                     st.session_state.fila_fardo_temp = df_filtrado_div[df_filtrado_div['ID_Producto'].astype(str) == id_fardo].iloc[0]
-            
-            st.info(f"Fardo: {st.session_state.fila_fardo_temp['Nombre']} | Stock: {st.session_state.fila_fardo_temp['Stock_Actual']}")
-            
-            with st.form("form_divisor"):
-                c1, c2 = st.columns(2)
-                unidades = c1.number_input("¿Cuántas unidades trae el fardo?", min_value=1, value=24)
-                id_cajita = c2.text_input("Código de la Cajita Individual:")
-                
-                # --- AQUÍ USAMOS LA VARIABLE DE SESSION_STATE ---
-                fila_fardo = st.session_state.fila_fardo_temp
-                costo_fardo = float(fila_fardo['Precio_Costo'])
-                
-                costo_unitario = costo_fardo / unidades
-                precio_sugerido = ( (int((costo_unitario * 1.40) // 100) + 1) * 100 )
-                
-                st.write(f"Costo unitario: ${costo_unitario:,.2f} | Precio Sugerido: ${precio_sugerido:,.0f}")
-                
-                if st.form_submit_button("🚀 Confirmar División"):
+                    
+                    st.info(f"Fardo: {st.session_state.fila_fardo_temp['Nombre']} | Stock: {st.session_state.fila_fardo_temp['Stock_Actual']}")
+                    
+                    with st.form("form_divisor"):
+                        c1, c2 = st.columns(2)
+                        unidades = c1.number_input("¿Cuántas unidades trae el fardo?", min_value=1, value=24)
+                        id_cajita = c2.text_input("Código de la Cajita Individual:")
+                        
+                        # Usamos los datos de la sesión
+                        fila_fardo = st.session_state.fila_fardo_temp
+                        id_fardo = st.session_state.id_fardo_temp # <--- RECUPERAMOS EL ID AQUÍ
+                        
+                        costo_fardo = float(fila_fardo['Precio_Costo'])
+                        costo_unitario = costo_fardo / unidades
+                        precio_sugerido = ( (int((costo_unitario * 1.40) // 100) + 1) * 100 )
+                        
+                        st.write(f"Costo unitario: ${costo_unitario:,.2f} | Precio Sugerido: ${precio_sugerido:,.0f}")
+                        
+                        if st.form_submit_button("🚀 Confirmar División"):
                         # --- VALIDACIÓN DE STOCK ---
                         if int(fila_fardo['Stock_Actual']) <= 0:
                             st.error(f"⚠️ ¡Error! El fardo '{fila_fardo['Nombre']}' no cuenta con existencias para dividir (Stock actual: 0).")
@@ -1880,7 +1884,6 @@ else:
                             db.table("PRODUCTOS").update({"Stock_Actual": stock_cajita_old + unidades}).eq("ID_Producto", id_cajita).execute()
                             
                             # --- REGISTRO EN CAMBIOS ---
-                            # (Aquí va el mismo código de inserción que vimos antes)
                             db.table("CAMBIOS").insert({
                                 "Fecha": datetime.now().isoformat(),
                                 "Código": id_fardo,
