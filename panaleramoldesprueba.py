@@ -2764,7 +2764,7 @@ else:
                                 "Forma_Pago": "Efectivo",
                                 "ID_Turno": turno_actual['ID_Turno'],
                                 "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
-                            }).execute()
+                            }st.write("Depuración - Enviando a Supabase:", datos_a_enviar) # <--- AGREGA ESTO).execute()
                             st.success("Turno cerrado correctamente.")
                             st.rerun()
 
@@ -2836,7 +2836,9 @@ else:
                             "Monto": float(importe),
                             "Forma_Pago": forma_pago,
                             "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
-                        }).execute()
+                        }st.write("Depuración - Enviando a Supabase:", datos_a_enviar) # <--- AGREGA ESTO).execute()
+
+                            
                         
                         if tipo == "Ingreso" and forma_pago != "Efectivo":
                             db.table("CAJA").insert({
@@ -2847,7 +2849,7 @@ else:
                                 "Monto": float(importe),
                                 "Forma_Pago": forma_pago,
                                 "Usuario": st.session_state.get('usuario_actual', 'Desconocido') # <--- AGREGAR
-                            }).execute()
+                            }st.write("Depuración - Enviando a Supabase:", datos_a_enviar) # <--- AGREGA ESTO).execute()
                         st.success("✅ Registro realizado.")
                         st.rerun()
 
