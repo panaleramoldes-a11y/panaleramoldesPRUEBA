@@ -2516,9 +2516,9 @@ else:
                     # 1. Obtenemos el código desde p_info (la serie del producto en BD)
                     # Ajusta 'Codigo' al nombre exacto de la columna en tu tabla de PRODUCTOS
                     # Usamos directamente el ID que ya tenías en el carrito
-                    codigo_prod = item['id'] 
-                    
-                    c_head.write(f"**{item['nombre']}**  `{codigo_prod}` | Rubro: {rubro}")
+                    # .strip() elimina espacios al principio y al final automáticamente
+                    nombre_limpio = item['nombre'].strip()
+                    c_head.write(f"**{nombre_limpio}**  `{item['id']}` | Rubro: {rubro}")
                     
                     if c_btn.button("🗑️ Eliminar", key=f"del_final_{i}"):
                         st.session_state.carrito_compra.pop(i)
