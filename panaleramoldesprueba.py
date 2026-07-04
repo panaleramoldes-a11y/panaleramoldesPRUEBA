@@ -2415,19 +2415,26 @@ else:
                     })
             st.session_state.txt_barcode = ""
 
-        # --- 3. SECCIÓN: DATOS DE FACTURA (MODIFICADA PARA VALIDACIÓN) ---
+        # --- 3. SECCIÓN: DATOS DE FACTURA (RESTAURADA CON FECHA Y BOTÓN) ---
         with st.expander("📄 Datos de la Factura Actual", expanded=True):
             # Verificación de duplicados
             df_hist_check = pd.DataFrame(db.table("COMPRAS_CABECERA").select("Nro_Factura").execute().data)
             facturas_existentes = df_hist_check['Nro_Factura'].tolist() if not df_hist_check.empty else []
-
+        
             c1, c1_btn, c2, c3 = st.columns([1, 0.2, 1.5, 1])
             
             with c1:
-                prov_sel = st.selectbox("Proveedor", lista_proveedores, key="prov_main")
+                # Recuperamos tu lógica de índice original
+                prov_sel = st.selectbox("Proveedor", lista_proveedores, 
+                                        index=lista_proveedores.index(st.session_state.get("temp_prov", lista_proveedores[0])) 
+                                        if st.session_state.get("temp_prov") in lista_proveedores else 0,
+                                        key="prov_main")
+                
+                # REINCORPORAMOS LA FECHA AQUÍ
+                fecha_factura = st.date_input("Fecha de Factura")
             
             with c1_btn:
-                st.write("") # Espaciador
+                st.write("") # Espaciador para alinear
                 st.write("") # Espaciador
                 if st.button("➕", help="Agregar nuevo proveedor"):
                     abrir_alta_proveedor_rapida()
@@ -2437,17 +2444,15 @@ else:
                 f_punto = f1.text_input("00000", value=st.session_state.get("temp_punto", ""), max_chars=5)
                 f_nro = f2.text_input("00000000", value=st.session_state.get("temp_nro", ""), max_chars=8)
                 
-                # LÓGICA FLEXIBLE: 
-                # Si está vacío, asignamos el código de pre-carga
                 if not f_punto and not f_nro:
                     nro_fact_completo = "00000-00000000"
                 else:
                     nro_fact_completo = f"{f_punto.zfill(5)}-{f_nro.zfill(8)}"
                     
-                    # Solo validamos duplicados si NO es el código de pre-carga
                     if nro_fact_completo != "00000-00000000" and nro_fact_completo in facturas_existentes:
                         st.error(f"⚠️ La factura {nro_fact_completo} ya existe.")
                         nro_fact_completo = "DUPLICADA"
+                        
             with c3:
                 pago_compra = st.selectbox("Método de Pago", ["Contado", "Transferencia", "Cuenta Corriente"], key="pago_main")
 
