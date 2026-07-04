@@ -655,7 +655,7 @@ else:
                 except Exception as e:
                     st.error(f"Error al guardar en la base de datos: {e}")
 
-    @st.dialog("➕ Nuevo Proveedor Rápido")
+@st.dialog("➕ Nuevo Proveedor Rápido")
 def abrir_alta_proveedor_rapida():
     # Consultamos la base de datos dentro del diálogo para tener datos frescos
     try:
