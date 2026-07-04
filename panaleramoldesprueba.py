@@ -1062,7 +1062,7 @@ else:
             if prod_buscado['Stock_Actual'] <= 0 and prod_buscado['Es_Stockeable'] == True:
                 st.warning(f"⚠️ El producto '{prod_buscado['Nombre']}' no se puede agregar porque no cuenta con stock.")
 
-        # 4. CARRITO (Versión Actualizada con Código de Producto)
+        # 4. CARRITO (Versión Actualizada con Código debajo del nombre)
         if st.session_state.carrito_vta:
             st.write("### 🛒 Detalle de la Venta")
             
@@ -1073,13 +1073,15 @@ else:
                 if res_p.empty: continue
                 p_data = res_p.iloc[0]
                 
-                # Ajustamos columnas: agregué una columna más (c0) y ajusté los anchos
-                c0, c1, c2, c3, c4, c5, c6 = st.columns([0.6, 2, 1.2, 0.8, 1.2, 1, 0.5])
+                # Volvemos a las columnas originales (sin la c0 extra)
+                c1, c2, c3, c4, c5, c6 = st.columns([2, 1.2, 0.8, 1.2, 1, 0.5])
                 
-                # NUEVO: Mostrar el ID del producto
-                c0.write(f"#{p_data['ID_Producto']}")
-                
-                c1.write(f"**{p_data['Nombre']}**")
+                # MOSTRAR NOMBRE Y CODIGO
+                # Usamos un contenedor para que el nombre y código queden juntos en la misma celda
+                with c1:
+                    st.write(f"**{p_data['Nombre']}**")
+                    # Usamos markdown para reducir el tamaño de fuente del código
+                    st.markdown(f"<small style='color:gray;'>#{p_data['ID_Producto']}</small>", unsafe_allow_html=True)
                 
                 # 1. Selector de Lista
                 lista_actual_producto = item.get('lista_local', global_val)
