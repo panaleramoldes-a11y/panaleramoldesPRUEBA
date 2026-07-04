@@ -10,6 +10,10 @@ import pydeck as pdk
 import uuid
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
+# Cargamos los datos de forma segura desde secrets.toml
+@st.cache_resource
+def init_connection():
+    # Lee específicamente la sección [desarrollo]
     url = st.secrets["desarrollo"]["SUPABASE_URL"]
     key = st.secrets["desarrollo"]["SUPABASE_KEY"]
     return create_client(url, key)
@@ -653,17 +657,11 @@ else:
 
     @st.dialog("➕ Nuevo Proveedor Rápido")
     def abrir_alta_proveedor_rapida():
-        # 1. Obtenemos los proveedores actuales directo de la BD para validar
-        try:
-            data_prov = db.table("PROVEEDORES").select("*").execute().data
-            df_prov = pd.DataFrame(data_prov)
-        except:
-            df_prov = pd.DataFrame()
-    
+        # Accedemos al estado global para obtener los datos necesarios
+        df_prov = st.session_state.df_prov # Asegúrate de que esto esté cargado
+        
         with st.form("form_nuevo_proveedor_rapido", clear_on_submit=True):
-            # 2. Mostramos ID sugerido
-            siguiente_id = str(len(df_prov) + 1).zfill(4) if not df_prov.empty else "0001"
-            st.info(f"ID Sugerido: {siguiente_id}")
+            st.info(f"ID Sugerido: {str(len(df_prov) + 1).zfill(4)}")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -679,7 +677,7 @@ else:
             submitted = st.form_submit_button("Guardar Proveedor")
             
             if submitted:
-                # Validaciones
+                # Validaciones exactas
                 if not razon_social or not cuit:
                     st.error("Error: Razón Social y CUIT son obligatorios.")
                 elif not re.match(r'^\d{2}-\d{8}-\d{1}$', cuit):
@@ -688,8 +686,9 @@ else:
                     st.error("Error: Ya existe un proveedor con ese CUIT.")
                 else:
                     try:
+                        nuevo_id = str(len(df_prov) + 1).zfill(4)
                         db.table("PROVEEDORES").insert({
-                            "ID_Proveedor": siguiente_id,
+                            "ID_Proveedor": nuevo_id,
                             "Razon_Social": razon_social,
                             "Rubros_Asociados": ", ".join(rubros_seleccionados),
                             "CUIT": cuit,
@@ -698,7 +697,6 @@ else:
                             "Telefono": telefono
                         }).execute()
                         st.success("✅ ¡Proveedor guardado!")
-                        # Recargamos la lista del selectbox principal en Compras
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
