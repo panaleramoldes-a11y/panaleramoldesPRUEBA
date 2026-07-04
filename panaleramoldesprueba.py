@@ -654,6 +654,52 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al guardar en la base de datos: {e}")
+
+    @st.dialog("➕ Nuevo Proveedor Rápido")
+    def abrir_alta_proveedor_rapida():
+        # Accedemos al estado global para obtener los datos necesarios
+        df_prov = st.session_state.df_prov # Asegúrate de que esto esté cargado
+        
+        with st.form("form_nuevo_proveedor_rapido", clear_on_submit=True):
+            st.info(f"ID Sugerido: {str(len(df_prov) + 1).zfill(4)}")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                razon_social = st.text_input("Razón Social*")
+                cuit = st.text_input("CUIT (Formato: XX-XXXXXXXX-X)*")
+                direccion = st.text_input("Dirección")
+            with col2:
+                telefono = st.text_input("Teléfono")
+                condicion = st.selectbox("Condición Fiscal", ["Responsable Inscripto", "Monotributo", "Exento"])
+            
+            rubros_seleccionados = st.multiselect("Asociar Rubros", LISTA_RUBROS)
+            
+            submitted = st.form_submit_button("Guardar Proveedor")
+            
+            if submitted:
+                # Validaciones exactas
+                if not razon_social or not cuit:
+                    st.error("Error: Razón Social y CUIT son obligatorios.")
+                elif not re.match(r'^\d{2}-\d{8}-\d{1}$', cuit):
+                    st.error("Error: El CUIT debe tener formato XX-XXXXXXXX-X")
+                elif not df_prov.empty and cuit in df_prov['CUIT'].astype(str).values:
+                    st.error("Error: Ya existe un proveedor con ese CUIT.")
+                else:
+                    try:
+                        nuevo_id = str(len(df_prov) + 1).zfill(4)
+                        db.table("PROVEEDORES").insert({
+                            "ID_Proveedor": nuevo_id,
+                            "Razon_Social": razon_social,
+                            "Rubros_Asociados": ", ".join(rubros_seleccionados),
+                            "CUIT": cuit,
+                            "Condicion_Fiscal": condicion,
+                            "Dirección": direccion,
+                            "Telefono": telefono
+                        }).execute()
+                        st.success("✅ ¡Proveedor guardado!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al guardar: {e}")
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
@@ -2373,12 +2419,16 @@ else:
             df_hist_check = pd.DataFrame(db.table("COMPRAS_CABECERA").select("Nro_Factura").execute().data)
             facturas_existentes = df_hist_check['Nro_Factura'].tolist() if not df_hist_check.empty else []
 
-            c1, c2, c3 = st.columns([1, 1.5, 1])
+            c1, c1_btn, c2, c3 = st.columns([1, 0.2, 1.5, 1])
+            
             with c1:
-                prov_sel = st.selectbox("Proveedor", lista_proveedores, 
-                                        index=lista_proveedores.index(st.session_state.get("temp_prov", lista_proveedores[0])),
-                                        key="prov_main")
-                fecha_factura = st.date_input("Fecha de Factura")
+                prov_sel = st.selectbox("Proveedor", lista_proveedores, key="prov_main")
+            
+            with c1_btn:
+                st.write("") # Alineación vertical
+                st.write("") 
+                if st.button("➕", help="Agregar nuevo proveedor"):
+                    abrir_alta_proveedor_rapida()
             
             with c2:
                 f1, _, f2 = st.columns([1, 0.2, 2])
