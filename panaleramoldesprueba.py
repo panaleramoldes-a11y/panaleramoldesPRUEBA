@@ -2512,7 +2512,13 @@ else:
 
                 with st.container(border=True):
                     c_head, c_btn = st.columns([6, 1])
-                    c_head.write(f"**{item['nombre']}** | Rubro: {rubro}")
+                    
+                    # --- AQUÍ LA MEJORA DE FORMATO ---
+                    # Mostramos el código entre paréntesis con un formato ligeramente atenuado
+                    # y el nombre en negrita, seguido del rubro.
+                    codigo_prod = item.get('codigo', 'S/C') # Asegúrate de que tu carrito tenga la key 'codigo'
+                    c_head.write(f"**{item['nombre']}**  `{codigo_prod}` | Rubro: {rubro}")
+                    
                     if c_btn.button("🗑️ Eliminar", key=f"del_final_{i}"):
                         st.session_state.carrito_compra.pop(i)
                         st.rerun()
