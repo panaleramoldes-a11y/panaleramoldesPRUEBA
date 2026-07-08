@@ -2069,11 +2069,24 @@ else:
                         except:
                             return 0.0
 
-                    if prod_sel:
-                        id_sel = prod_sel.split(" - ")[0]
-                        fila = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == id_sel].iloc[0]
-                        
-                        with st.form("form_mod_completo"):
+                    # --- BLINDAJE DE DATOS (NUEVO) ---
+                    # Definimos una función local que siempre devuelve un número sano
+                    def cast_safe(valor, default=0):
+                        try:
+                            # Si es nulo o NaN, devolvemos default
+                            if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+                                return default
+                            return int(float(valor))
+                        except:
+                            return default
+        
+                    # Limpiamos los valores ANTES de pasarlos a los inputs
+                    val_stk = cast_safe(fila.get('Stock_Actual'))
+                    val_min = cast_safe(fila.get('Stock_Min'))
+                    val_max = cast_safe(fila.get('Stock_Max'))
+                    val_cos = float(fila.get('Precio_Costo', 0) or 0)
+                    
+                    with st.form("form_mod_completo"):
                             c1, c2, c3 = st.columns(3)
                             with c1:
                                 n_nom = st.text_input("Nombre", value=str(fila.get('Nombre', '')))
@@ -2084,9 +2097,9 @@ else:
                                 idx_prov = lista_proveedores.index(prov_actual) if prov_actual in lista_proveedores else 0
                                 n_prov = st.selectbox("Proveedor", options=lista_proveedores, index=idx_prov)
                             with c2:
-                                n_stk = st.number_input("Stock Actual", value=int(asegurar_float(fila.get('Stock_Actual', 0))))
-                                n_min = st.number_input("Stock Min", value=int(asegurar_float(fila.get('Stock_Min', 0))))
-                                n_max = st.number_input("Stock Max", value=int(asegurar_float(fila.get('Stock_Max', 0))))
+                                n_stk = st.number_input("Stock Actual", value=val_stk)
+                                n_min = st.number_input("Stock Min", value=val_min)
+                                n_max = st.number_input("Stock Max", value=val_max)
                                 n_img = st.text_input("URL Imagen", value=str(fila.get('Imagen', '')))
                             with c3:
                                 n_cos = st.number_input("Costo", value=asegurar_float(fila.get('Precio_Costo', 0)), format="%.2f")
