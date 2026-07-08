@@ -2063,30 +2063,35 @@ else:
                     opciones = (st.session_state.df_prod['ID_Producto'].astype(str) + " - " + st.session_state.df_prod['Nombre']).tolist()
                     prod_sel = st.selectbox("Seleccionar producto:", [""] + opciones)
                     
+                    # Definición de funciones (pueden estar aquí arriba)
                     def asegurar_float(valor):
                         try:
                             return float(valor) if valor not in [None, ''] else 0.0
                         except:
                             return 0.0
-
-                    # --- BLINDAJE DE DATOS (NUEVO) ---
-                    # Definimos una función local que siempre devuelve un número sano
+            
                     def cast_safe(valor, default=0):
                         try:
-                            # Si es nulo o NaN, devolvemos default
                             if valor is None or (isinstance(valor, float) and pd.isna(valor)):
                                 return default
                             return int(float(valor))
                         except:
                             return default
-        
-                    # Limpiamos los valores ANTES de pasarlos a los inputs
-                    val_stk = cast_safe(fila.get('Stock_Actual'))
-                    val_min = cast_safe(fila.get('Stock_Min'))
-                    val_max = cast_safe(fila.get('Stock_Max'))
-                    val_cos = float(fila.get('Precio_Costo', 0) or 0)
                     
-                    with st.form("form_mod_completo"):
+                    # --- AQUÍ ESTÁ EL CAMBIO CRÍTICO ---
+                    if prod_sel:
+                        id_sel = prod_sel.split(" - ")[0]
+                        # PRIMERO definimos fila
+                        fila = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == id_sel].iloc[0]
+                        
+                        # LUEGO usamos fila para el blindaje
+                        val_stk = cast_safe(fila.get('Stock_Actual'))
+                        val_min = cast_safe(fila.get('Stock_Min'))
+                        val_max = cast_safe(fila.get('Stock_Max'))
+                        val_cos = float(fila.get('Precio_Costo', 0) or 0)
+                        
+                        # FINALMENTE abrimos el formulario
+                        with st.form("form_mod_completo"):
                             c1, c2, c3 = st.columns(3)
                             with c1:
                                 n_nom = st.text_input("Nombre", value=str(fila.get('Nombre', '')))
