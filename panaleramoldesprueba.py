@@ -2072,10 +2072,12 @@ else:
             
                     def cast_safe(valor, default=0):
                         try:
-                            if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+                            # Si es None, NaN o un string vacío, devolvemos el valor por defecto
+                            if valor is None or pd.isna(valor) or str(valor).strip() == "":
                                 return default
+                            # Intentamos convertir a float primero para manejar strings numéricos
                             return int(float(valor))
-                        except:
+                        except (ValueError, TypeError):
                             return default
                     
                     # --- AQUÍ ESTÁ EL CAMBIO CRÍTICO ---
