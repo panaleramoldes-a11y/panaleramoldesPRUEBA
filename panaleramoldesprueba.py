@@ -1696,6 +1696,10 @@ else:
         try:
             data = db.table("PRODUCTOS").select("*").execute().data
             df_prod = pd.DataFrame(data)
+
+            st.write("Columnas recibidas:", df_prod.columns.tolist()) 
+            st.write("Primeras filas:", df_prod.head(2))
+            st.write("Datos brutos obtenidos:", data[:2])
             
             # Carga de proveedores (ahora es global para el módulo)
             df_prov = pd.DataFrame(db.table("PROVEEDORES").select("Razon_Social").execute().data)
