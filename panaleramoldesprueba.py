@@ -1038,26 +1038,28 @@ else:
                     valor_inicial = candidatos.iloc[0]['Display']
 
             # --- 3. SELECTOR DE CLIENTE ---
-            # Definimos las opciones
             opciones_clientes = df_clie['Display'].tolist()
             
-            # Usamos multiselect con max_selections=1
             cliente_seleccionado = c1.multiselect(
                 "👤 Buscar Cliente", 
                 options=opciones_clientes,
                 default=[valor_inicial] if valor_inicial and valor_inicial in opciones_clientes else [],
                 max_selections=1,
-                placeholder="Escriba para buscar cliente..."
+                placeholder="Escriba para buscar cliente...",
+                key="cliente_multi_key"
             )
             
+            # --- INICIALIZACIÓN SEGURA ---
+            # Definimos la variable ANTES de usarla, aunque sea como None
+            cliente_display = None
+            st.session_state.cliente_actual_id = None
+            
             # --- EXTRACCIÓN SEGURA ---
-            # Como cliente_seleccionado es una lista, verificamos si no está vacía
-            if cliente_seleccionado:
-                cliente_display = cliente_seleccionado[0] # Tomamos el primer (y único) elemento
+            if cliente_seleccionado and len(cliente_seleccionado) > 0:
+                cliente_display = cliente_seleccionado[0]
                 
                 if " - ID: " in cliente_display:
                     try:
-                        # Extraemos el ID después de " - ID: "
                         id_str = cliente_display.split(" - ID: ")[1]
                         st.session_state.cliente_actual_id = int(id_str)
                     except Exception as e:
