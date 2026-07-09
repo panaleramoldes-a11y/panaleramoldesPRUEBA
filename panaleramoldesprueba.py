@@ -1037,26 +1037,27 @@ else:
                 if not candidatos.empty:
                     valor_inicial = candidatos.iloc[0]['Display']
 
-            # --- 3. SELECTOR DE CLIENTE ---
+            # --- 3. SELECTOR DE CLIENTE (VERSION INTELIGENTE) ---
             opciones_clientes = df_clie['Display'].tolist()
             
+            # El truco es usar multiselect pero limitarlo a 1 y usar un key único
             cliente_seleccionado = c1.multiselect(
                 "👤 Buscar Cliente", 
                 options=opciones_clientes,
                 default=[valor_inicial] if valor_inicial and valor_inicial in opciones_clientes else [],
-                max_selections=1,
+                max_selections=1, # ESTO ES LA CLAVE: no permite más de uno
                 placeholder="Escriba para buscar cliente...",
-                key="cliente_multi_key"
+                key="cliente_multi_key" # Clave única para evitar conflictos
             )
             
-            # --- INICIALIZACIÓN SEGURA ---
-            # Definimos la variable ANTES de usarla, aunque sea como None
+            # --- EXTRACCIÓN SEGURA ---
+            # Definimos la variable por defecto
             cliente_display = None
             st.session_state.cliente_actual_id = None
             
-            # --- EXTRACCIÓN SEGURA ---
-            if cliente_seleccionado and len(cliente_seleccionado) > 0:
-                cliente_display = cliente_seleccionado[0]
+            # Si el usuario seleccionó algo (es una lista de máx 1 elemento)
+            if cliente_seleccionado:
+                cliente_display = cliente_seleccionado[0] 
                 
                 if " - ID: " in cliente_display:
                     try:
@@ -1064,9 +1065,6 @@ else:
                         st.session_state.cliente_actual_id = int(id_str)
                     except Exception as e:
                         st.error(f"Error al procesar ID: {e}")
-                        st.session_state.cliente_actual_id = None
-                else:
-                    st.session_state.cliente_actual_id = None
             else:
                 # Si la lista está vacía, no hay cliente seleccionado
                 st.session_state.cliente_actual_id = None
