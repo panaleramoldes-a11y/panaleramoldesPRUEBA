@@ -1038,23 +1038,35 @@ else:
                     valor_inicial = candidatos.iloc[0]['Display']
 
             # --- 3. SELECTOR DE CLIENTE ---
-            cliente_display = c1.selectbox(
+            # Definimos las opciones
+            opciones_clientes = df_clie['Display'].tolist()
+            
+            # Usamos multiselect con max_selections=1
+            cliente_seleccionado = c1.multiselect(
                 "👤 Buscar Cliente", 
-                options=df_clie['Display'].tolist(),
-                index=df_clie['Display'].tolist().index(valor_inicial) if valor_inicial and valor_inicial in df_clie['Display'].tolist() else None, 
-                placeholder="Seleccione o busque un cliente..."
+                options=opciones_clientes,
+                default=[valor_inicial] if valor_inicial and valor_inicial in opciones_clientes else [],
+                max_selections=1,
+                placeholder="Escriba para buscar cliente..."
             )
-
-            # --- EXTRACCIÓN SEGURA Y ÚNICA ---
-            if cliente_display and " - ID: " in cliente_display:
-                try:
-                    # Extraemos el ID después de " - ID: "
-                    id_str = cliente_display.split(" - ID: ")[1]
-                    st.session_state.cliente_actual_id = int(id_str)
-                except Exception as e:
-                    st.error(f"Error al procesar ID: {e}")
+            
+            # --- EXTRACCIÓN SEGURA ---
+            # Como cliente_seleccionado es una lista, verificamos si no está vacía
+            if cliente_seleccionado:
+                cliente_display = cliente_seleccionado[0] # Tomamos el primer (y único) elemento
+                
+                if " - ID: " in cliente_display:
+                    try:
+                        # Extraemos el ID después de " - ID: "
+                        id_str = cliente_display.split(" - ID: ")[1]
+                        st.session_state.cliente_actual_id = int(id_str)
+                    except Exception as e:
+                        st.error(f"Error al procesar ID: {e}")
+                        st.session_state.cliente_actual_id = None
+                else:
                     st.session_state.cliente_actual_id = None
             else:
+                # Si la lista está vacía, no hay cliente seleccionado
                 st.session_state.cliente_actual_id = None
             
             # --- BOTÓN DE ACCESO DIRECTO ---
