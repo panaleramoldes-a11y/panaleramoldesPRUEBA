@@ -1037,36 +1037,24 @@ else:
                 if not candidatos.empty:
                     valor_inicial = candidatos.iloc[0]['Display']
 
-            # --- 3. SELECTOR DE CLIENTE (VERSION INTELIGENTE) ---
-            opciones_clientes = df_clie['Display'].tolist()
-            
-            # El truco es usar multiselect pero limitarlo a 1 y usar un key único
-            cliente_seleccionado = c1.multiselect(
+            # --- 3. SELECTOR DE CLIENTE ---
+            cliente_display = c1.selectbox(
                 "👤 Buscar Cliente", 
-                options=opciones_clientes,
-                default=[valor_inicial] if valor_inicial and valor_inicial in opciones_clientes else [],
-                max_selections=1, # ESTO ES LA CLAVE: no permite más de uno
-                placeholder="Escriba para buscar cliente...",
-                key="cliente_multi_key" # Clave única para evitar conflictos
+                options=df_clie['Display'].tolist(),
+                index=df_clie['Display'].tolist().index(valor_inicial) if valor_inicial and valor_inicial in df_clie['Display'].tolist() else None, 
+                placeholder="Seleccione o busque un cliente..."
             )
-            
-            # --- EXTRACCIÓN SEGURA ---
-            # Definimos la variable por defecto
-            cliente_display = None
-            st.session_state.cliente_actual_id = None
-            
-            # Si el usuario seleccionó algo (es una lista de máx 1 elemento)
-            if cliente_seleccionado:
-                cliente_display = cliente_seleccionado[0] 
-                
-                if " - ID: " in cliente_display:
-                    try:
-                        id_str = cliente_display.split(" - ID: ")[1]
-                        st.session_state.cliente_actual_id = int(id_str)
-                    except Exception as e:
-                        st.error(f"Error al procesar ID: {e}")
+
+            # --- EXTRACCIÓN SEGURA Y ÚNICA ---
+            if cliente_display and " - ID: " in cliente_display:
+                try:
+                    # Extraemos el ID después de " - ID: "
+                    id_str = cliente_display.split(" - ID: ")[1]
+                    st.session_state.cliente_actual_id = int(id_str)
+                except Exception as e:
+                    st.error(f"Error al procesar ID: {e}")
+                    st.session_state.cliente_actual_id = None
             else:
-                # Si la lista está vacía, no hay cliente seleccionado
                 st.session_state.cliente_actual_id = None
             
             # --- BOTÓN DE ACCESO DIRECTO ---
@@ -1118,11 +1106,10 @@ else:
 
         col_bus1, col_bus2 = st.columns([2, 1])
         
-        # Cambiamos selectbox por multiselect
-        seleccion = col_bus1.multiselect(
+        col_bus1.selectbox(
             "Buscar por nombre o código", 
             options=opciones_productos, 
-            max_selections=1, # Esto fuerza a que se comporte como un selectbox simple
+            index=None, 
             placeholder="Escriba para buscar producto...",
             key="prod_manual_key",
             on_change=procesar_seleccion_manual 
