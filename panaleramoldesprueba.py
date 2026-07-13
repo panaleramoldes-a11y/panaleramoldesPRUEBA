@@ -83,8 +83,8 @@ else:
         id_turno = datetime.now().strftime("%Y%m%d%H%M%S")
         
         try:
-            # 1. Insertar turno
-            db.table("CONTROL_TURNOS").insert({
+            # Intentamos el insert y guardamos la respuesta
+            response = db.table("CONTROL_TURNOS").insert({
                 "ID_Turno": id_turno,
                 "Usuario": usuario,
                 "Fecha_Hora_Apertura": datetime.now().isoformat(),
@@ -92,22 +92,12 @@ else:
                 "Estado": "Abierto"
             }).execute()
             
-            # --- AQUÍ ESTÁ EL CAMBIO: Verificamos si realmente se creó ---
-            # Si no falla aquí, procedemos con CAJA
-            
-            # 2. Registramos el movimiento en CAJA
-            db.table("CAJA").insert({
-                "ID_Turno": id_turno,
-                "Fecha": datetime.now().isoformat(),
-                "Tipo": "Ingreso",
-                "Concepto": "APERTURA DE CAJA",
-                "Monto": float(monto_inicial),
-                "Forma_Pago": "Efectivo"
-            }).execute()
+            st.write("Inserción en CONTROL_TURNOS exitosa") # Debug
             
         except Exception as e:
-            st.error(f"Error detallado: {e}")
-            # Si falla, no intentamos registrar en caja
+            # Esto te mostrará el error REAL de PostgREST (ej: 'duplicate key', 'not null', etc)
+            st.error(f"ERROR EN CONTROL_TURNOS: {e}")
+            return # Salimos para no romper nada más
 
     def modulo_ventas():
         st.header("📋 Historial de Ventas")
