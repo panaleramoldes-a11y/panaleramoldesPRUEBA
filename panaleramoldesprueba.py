@@ -80,24 +80,26 @@ else:
         return None # Si no hay ninguno, retorna None
 
     def iniciar_turno(monto_inicial, usuario):
+        # Generamos un ID único simple para el turno (ej: fecha y hora)
         id_turno = datetime.now().strftime("%Y%m%d%H%M%S")
         
-        try:
-            # Intentamos el insert y guardamos la respuesta
-            response = db.table("CONTROL_TURNOS").insert({
-                "ID_Turno": id_turno,
-                "Usuario": usuario,
-                "Fecha_Hora_Apertura": datetime.now().isoformat(),
-                "Monto_Apertura": float(monto_inicial),
-                "Estado": "Abierto"
-            }).execute()
-            
-            st.write("Inserción en CONTROL_TURNOS exitosa") # Debug
-            
-        except Exception as e:
-            # Esto te mostrará el error REAL de PostgREST (ej: 'duplicate key', 'not null', etc)
-            st.error(f"ERROR EN CONTROL_TURNOS: {e}")
-            return # Salimos para no romper nada más
+        db.table("CONTROL_TURNOS").insert({
+            "ID_Turno": id_turno,
+            "Usuario": usuario,
+            "Fecha_Hora_Apertura": datetime.now().isoformat(),
+            "Monto_Apertura": float(monto_inicial),
+            "Estado": "Abierto"
+        }).execute()
+        
+        # Registramos también el movimiento inicial en la tabla CAJA
+        db.table("CAJA").insert({
+            "ID_Turno": id_turno,
+            "Fecha": datetime.now().isoformat(),
+            "Tipo": "Ingreso",
+            "Concepto": "APERTURA DE CAJA",
+            "Monto": float(monto_inicial),
+            "Forma_Pago": "Efectivo"
+        }).execute()
 
     def modulo_ventas():
         st.header("📋 Historial de Ventas")
