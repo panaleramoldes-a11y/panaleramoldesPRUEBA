@@ -80,26 +80,34 @@ else:
         return None # Si no hay ninguno, retorna None
 
     def iniciar_turno(monto_inicial, usuario):
-        # Generamos un ID único simple para el turno (ej: fecha y hora)
         id_turno = datetime.now().strftime("%Y%m%d%H%M%S")
         
-        db.table("CONTROL_TURNOS").insert({
-            "ID_Turno": id_turno,
-            "Usuario": usuario,
-            "Fecha_Hora_Apertura": datetime.now().isoformat(),
-            "Monto_Apertura": float(monto_inicial),
-            "Estado": "Abierto"
-        }).execute()
-        
-        # Registramos también el movimiento inicial en la tabla CAJA
-        db.table("CAJA").insert({
-            "ID_Turno": id_turno,
-            "Fecha": datetime.now().isoformat(),
-            "Tipo": "Ingreso",
-            "Concepto": "APERTURA DE CAJA",
-            "Monto": float(monto_inicial),
-            "Forma_Pago": "Efectivo"
-        }).execute()
+        try:
+            # 1. Insertar turno
+            db.table("CONTROL_TURNOS").insert({
+                "ID_Turno": id_turno,
+                "Usuario": usuario,
+                "Fecha_Hora_Apertura": datetime.now().isoformat(),
+                "Monto_Apertura": float(monto_inicial),
+                "Estado": "Abierto"
+            }).execute()
+            
+            # --- AQUÍ ESTÁ EL CAMBIO: Verificamos si realmente se creó ---
+            # Si no falla aquí, procedemos con CAJA
+            
+            # 2. Registramos el movimiento en CAJA
+            db.table("CAJA").insert({
+                "ID_Turno": id_turno,
+                "Fecha": datetime.now().isoformat(),
+                "Tipo": "Ingreso",
+                "Concepto": "APERTURA DE CAJA",
+                "Monto": float(monto_inicial),
+                "Forma_Pago": "Efectivo"
+            }).execute()
+            
+        except Exception as e:
+            st.error(f"Error detallado: {e}")
+            # Si falla, no intentamos registrar en caja
 
     def modulo_ventas():
         st.header("📋 Historial de Ventas")
