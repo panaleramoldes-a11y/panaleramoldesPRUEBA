@@ -729,7 +729,7 @@ else:
                 "Tabla_Afectada": tabla,
                 "Accion": accion,
                 "ID_Entidad": str(id_entidad),
-                "Detalles": detalles, -- Si pasás un dict de Python, Supabase lo guarda como JSONB nativo
+                "Detalles": detalles, # Si pasás un dict de Python, Supabase lo guarda como JSONB nativo
                 "Usuario": usuario
             }).execute()
         except Exception as e:
