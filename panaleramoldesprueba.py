@@ -2998,8 +2998,12 @@ else:
         with c3: user_f = st.text_input("Usuario")
         with c4: id_f = st.text_input("ID Entidad")
         
-        # Query dinámica
-        query = db.table("AUDITORIA").select("*").eq("Tabla_Afectada", tabla_f)
+        # Asegúrate de que el selectbox no devuelva None
+        tabla_f = st.selectbox("Tabla", ["PRODUCTOS", "CAJA", "VENDEDORES"], index=0)
+        
+        # Validación de seguridad antes de consultar
+        if tabla_f:
+            query = db.table("AUDITORIA").select("*").eq("Tabla_Afectada", tabla_f)
         if accion_f != "Todas": query = query.eq("Accion", accion_f)
         if user_f: query = query.ilike("Usuario", f"%{user_f}%")
         if id_f: query = query.eq("ID_Entidad", id_f)
