@@ -718,6 +718,23 @@ else:
         st.session_state.carrito_compra = []
         st.session_state.txt_barcode = ""
         st.rerun()
+
+    def log_auditoria(tabla, accion, id_entidad, detalles, usuario="Martin"):
+        """
+        Registra automáticamente el movimiento en la tabla de Auditoría.
+        """
+        try:
+            db.table("AUDITORIA").insert({
+                "Tabla_Afectada": tabla,
+                "Accion": accion,
+                "ID_Entidad": str(id_entidad),
+                "Detalles": detalles,
+                "Usuario": usuario
+            }).execute()
+        except Exception as e:
+            # Usamos st.error solo si queremos que el usuario vea el fallo,
+            # si no, mejor un log interno.
+            print(f"Error crítico en auditoría: {e}")
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
@@ -728,7 +745,7 @@ else:
         "COLONIA", "CREMA", "CUCHARAS", "DESCONGESTIONADORES NASALES", 
         "ESPONJA", "HIGIENE BUCAL", "HISOPOS", "JABON", 
         "LECHE", "LIMPIEZA ROPA", "MAMADERA", "MOCHILA MATERNAL", "MORDILLOS", 
-        "OLEO CALCAREO", "PAÑALES", "PLATOS", "PROTECTOR MAMARIO", 
+        "OLEO CALCAREO", "PAÑALES", "PAÑALES ADULTOS", "PLATOS", "PROTECTOR MAMARIO", 
         "SACALECHES", "SEGURIDAD", "SHAMPOO", "TALCO", 
         "TETINAS", "TIJERAS", "TOALLITAS FEMENINAS", 
         "TOALLITAS HUMEDAS", "VASOS"
@@ -749,7 +766,7 @@ else:
                 "🛒 Punto de Venta", "👥 Clientes", "📋 Historial de Ventas", 
                 "⚙️ Configuración Pagos", "🚚 Gestión de Repartos", "📦 Productos",
                 "📦 Stock", "🚚 Proveedores", "📦 Compras", "👥 Vendedores", 
-                "📈 Estadísticas", "📈 Reporte de Utilidades" # <--- AQUÍ LO AGREGAMOS
+                "⚙️ Auditoría", "📈 Reporte de Utilidades" # <--- AQUÍ LO AGREGAMOS
             ])
         elif st.session_state.rol == "Vendedor":
             opciones_disponibles.extend(["🛒 Punto de Venta", "📦 Productos", "👥 Clientes"])
@@ -2967,3 +2984,29 @@ else:
     # =====================================================================
     elif menu == "📈 Reporte de Utilidades":
         mostrar_reporte_utilidad()
+
+    # =====================================================================
+    # MODULO: ⚙️ AUDITORÍA
+    # =====================================================================
+    elif menu == "⚙️ Auditoría":
+        st.title("🛡️ Auditoría del Sistema")
+        
+        # Filtros
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: tabla_f = st.selectbox("Tabla", ["PRODUCTOS", "CAJA", "VENDEDORES"])
+        with c2: accion_f = st.selectbox("Acción", ["Todas", "INSERT", "UPDATE", "DELETE"])
+        with c3: user_f = st.text_input("Usuario")
+        with c4: id_f = st.text_input("ID Entidad")
+        
+        # Query dinámica
+        query = db.table("AUDITORIA").select("*").eq("Tabla_Afectada", tabla_f)
+        if accion_f != "Todas": query = query.eq("Accion", accion_f)
+        if user_f: query = query.ilike("Usuario", f"%{user_f}%")
+        if id_f: query = query.eq("ID_Entidad", id_f)
+        
+        # Ejecutar y mostrar
+        res = query.order("Fecha_Hora", desc=True).limit(50).execute()
+        if res.data:
+            st.dataframe(pd.DataFrame(res.data), hide_index=True, use_container_width=True)
+        else:
+            st.info("Sin registros bajo estos criterios.")
