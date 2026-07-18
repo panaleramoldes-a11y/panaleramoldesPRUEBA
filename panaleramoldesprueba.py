@@ -722,18 +722,18 @@ else:
     def log_auditoria(tabla, accion, id_entidad, detalles, usuario="Martin"):
         """
         Registra automáticamente el movimiento en la tabla de Auditoría.
-        Soporta diccionarios en 'detalles' para transformarlos a JSON en Supabase.
         """
         try:
             db.table("AUDITORIA").insert({
                 "Tabla_Afectada": tabla,
                 "Accion": accion,
                 "ID_Entidad": str(id_entidad),
-                "Detalles": detalles, # Si pasás un dict de Python, Supabase lo guarda como JSONB nativo
+                "Detalles": detalles,
                 "Usuario": usuario
             }).execute()
         except Exception as e:
-            print(f"Error crítico en auditoría: {e}")
+            # Forzamos a que Streamlit nos muestre el error real en pantalla si llega a fallar
+            st.error(f"🚨 Error crítico al guardar en auditoría: {e}")
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
