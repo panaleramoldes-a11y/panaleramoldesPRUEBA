@@ -856,10 +856,45 @@ else:
                             "Link_Direccion_1": link1, "Link_Direccion_2": link2,
                             "Link_Direccion_3": link3, "Zona": zona, "Tipo_Cliente": tipo
                         }
-                        db.table("CLIENTES").insert(nuevo_cliente).execute()
-                        st.success("✅ Cliente cargado!")
-                        st.rerun()
-
+                        
+                        try:
+                            # 1. Insertamos el cliente y capturamos la respuesta de Supabase
+                            resultado = db.table("CLIENTES").insert(nuevo_cliente).execute()
+                            
+                            # Obtener el ID generado (asumiendo que tu columna clave primaria se llama 'ID_Cliente' o 'id')
+                            id_cliente_generado = "N/A"
+                            if resultado.data:
+                                # Buscamos la columna ID que use tu tabla (cambiala por 'id' si está en minúsculas)
+                                id_cliente_generado = resultado.data[0].get('ID_Cliente', resultado.data[0].get('id', 'N/A'))
+                            
+                            # 2. Recuperamos el usuario logueado
+                            usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
+                            
+                            # 3. 🔥 LOG DE AUDITORÍA (Alta de Cliente)
+                            log_auditoria(
+                                tabla="CLIENTES",
+                                accion="INSERT",
+                                id_entidad=id_cliente_generado,
+                                detalles={
+                                    "operacion": "Alta de Cliente",
+                                    "datos_cliente": {
+                                        "nombre_completo": f"{apellido.upper()}, {nombre.upper()}",
+                                        "telefono": telefono,
+                                        "dni_cuit": cuit if cuit else dni,
+                                        "zona": zona,
+                                        "tipo_cliente": tipo,
+                                        "direccion_principal": dir1.upper()
+                                    }
+                                },
+                                usuario=usuario_logueado
+                            )
+                            
+                            st.success("✅ Cliente cargado!")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Error al guardar el cliente o registrar auditoría: {e}")
+                            
         if tab_modificar is not None:
             with tab_modificar:
                 st.subheader("Modificar Cliente Existente")
