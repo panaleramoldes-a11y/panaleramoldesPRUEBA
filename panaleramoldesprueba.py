@@ -2991,26 +2991,36 @@ else:
     elif menu == "⚙️ Auditoría":
         st.title("🛡️ Auditoría del Sistema")
         
-        # Filtros
+        # Filtros (Definimos los elementos una sola vez)
         c1, c2, c3, c4 = st.columns(4)
-        with c1: tabla_f = st.selectbox("Tabla", ["PRODUCTOS", "CAJA", "VENDEDORES"])
-        with c2: accion_f = st.selectbox("Acción", ["Todas", "INSERT", "UPDATE", "DELETE"])
-        with c3: user_f = st.text_input("Usuario")
-        with c4: id_f = st.text_input("ID Entidad")
+        with c1: 
+            tabla_f = st.selectbox("Tabla", ["PRODUCTOS", "CAJA", "VENDEDORES"], key="sel_tabla")
+        with c2: 
+            accion_f = st.selectbox("Acción", ["Todas", "INSERT", "UPDATE", "DELETE"], key="sel_accion")
+        with c3: 
+            user_f = st.text_input("Usuario", key="input_user")
+        with c4: 
+            id_f = st.text_input("ID Entidad", key="input_id")
         
-        # Asegúrate de que el selectbox no devuelva None
-        tabla_f = st.selectbox("Tabla", ["PRODUCTOS", "CAJA", "VENDEDORES"], index=0)
+        # Construcción dinámica de la query
+        # Empezamos con la base
+        query = db.table("AUDITORIA").select("*").eq("Tabla_Afectada", tabla_f)
         
-        # Validación de seguridad antes de consultar
-        if tabla_f:
-            query = db.table("AUDITORIA").select("*").eq("Tabla_Afectada", tabla_f)
-        if accion_f != "Todas": query = query.eq("Accion", accion_f)
-        if user_f: query = query.ilike("Usuario", f"%{user_f}%")
-        if id_f: query = query.eq("ID_Entidad", id_f)
+        # Agregamos condiciones solo si se cumplen
+        if accion_f != "Todas":
+            query = query.eq("Accion", accion_f)
+        if user_f:
+            query = query.ilike("Usuario", f"%{user_f}%")
+        if id_f:
+            query = query.eq("ID_Entidad", id_f)
         
         # Ejecutar y mostrar
-        res = query.order("Fecha_Hora", desc=True).limit(50).execute()
-        if res.data:
-            st.dataframe(pd.DataFrame(res.data), hide_index=True, use_container_width=True)
-        else:
-            st.info("Sin registros bajo estos criterios.")
+        try:
+            res = query.order("Fecha_Hora", desc=True).limit(50).execute()
+            
+            if res.data:
+                st.dataframe(pd.DataFrame(res.data), hide_index=True, use_container_width=True)
+            else:
+                st.info("Sin registros bajo estos criterios.")
+        except Exception as e:
+            st.error(f"Error al consultar la auditoría: {e}")
