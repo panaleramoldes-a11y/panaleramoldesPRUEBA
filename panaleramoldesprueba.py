@@ -1960,34 +1960,33 @@ else:
                         
                         if st.form_submit_button("🚀 Confirmar División"):
                             # --- VALIDACIÓN DE STOCK ---
-                            # Todo esto DEBE estar indentado bajo el if de arriba
                             if int(fila_fardo['Stock_Actual']) <= 0:
                                 st.error(f"⚠️ ¡Error! El fardo '{fila_fardo['Nombre']}' no cuenta con existencias para dividir (Stock actual: 0).")
                                 st.stop() 
                             
                             # --- LÓGICA DE ACTUALIZACIÓN ---
-                            # Todo esto TAMBIÉN debe estar indentado bajo el if
                             try:
                                 # Descontar 1 al fardo
                                 nuevo_stock_fardo = int(fila_fardo['Stock_Actual']) - 1
                                 db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock_fardo}).eq("ID_Producto", id_fardo).execute()
                                 
                                 # Sumar unidades a la cajita
-                                prod_cajita = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_cajita).execute().data
+                                prod_cajita = db.table("PRODUCTOS").select("Stock_Actual", "Nombre").eq("ID_Producto", id_cajita).execute().data
                                 if not prod_cajita:
                                     st.error("¡Error! El código de la cajita no existe en la base de datos.")
                                     st.stop()
                                     
                                 stock_cajita_old = int(prod_cajita[0]['Stock_Actual'])
-                                db.table("PRODUCTOS").update({"Stock_Actual": stock_cajita_old + unidades}).eq("ID_Producto", id_cajita).execute()
+                                nombre_cajita = prod_cajita[0].get('Nombre', 'Cajita Individual')
+                                nuevo_stock_cajita = stock_cajita_old + unidades
+                                db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock_cajita}).eq("ID_Producto", id_cajita).execute()
                                 
                                 # --- REGISTRO EN CAMBIOS ---
-                                # Usamos st.session_state.usuario_actual
                                 usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
                                 
                                 db.table("CAMBIOS").insert({
                                     "Fecha": datetime.now().isoformat(),
-                                    "Usuario": usuario_logueado, # <--- Aquí queda registrado tu nombre
+                                    "Usuario": usuario_logueado,
                                     "Código": id_fardo,
                                     "Nombre": fila_fardo['Nombre'],
                                     "Descripción": f"División de fardo: Se transformó en {unidades} unidades de {id_cajita}",
@@ -1998,16 +1997,44 @@ else:
                                 
                                 db.table("CAMBIOS").insert({
                                     "Fecha": datetime.now().isoformat(),
-                                    "Usuario": usuario_logueado, # <--- Aquí también
+                                    "Usuario": usuario_logueado,
                                     "Código": id_cajita,
                                     "Nombre": "Cajitas (División)",
                                     "Descripción": f"Ingreso por división de fardo {id_fardo}",
                                     "Entra": int(unidades), "Sale": 0,
                                     "existencia_ant": stock_cajita_old,
-                                    "existencia_actual": stock_cajita_old + unidades
+                                    "existencia_actual": nuevo_stock_cajita
                                 }).execute()
                                 
+                                # =====================================================================
+                                # 🔥 LOG DE AUDITORÍA (Módulo Divisor de Fardos)
+                                # =====================================================================
+                                log_auditoria(
+                                    tabla="PRODUCTOS",
+                                    accion="UPDATE",
+                                    id_entidad=id_fardo,
+                                    detalles={
+                                        "operacion": "Divisor de Fardos",
+                                        "fardo": {
+                                            "id": id_fardo,
+                                            "nombre": fila_fardo['Nombre'],
+                                            "stock_anterior": int(fila_fardo['Stock_Actual']),
+                                            "stock_nuevo": nuevo_stock_fardo
+                                        },
+                                        "cajita": {
+                                            "id": id_cajita,
+                                            "nombre": nombre_cajita,
+                                            "unidades_ingresadas": int(unidades),
+                                            "stock_anterior": stock_cajita_old,
+                                            "stock_nuevo": nuevo_stock_cajita
+                                        }
+                                    },
+                                    usuario=usuario_logueado
+                                )
+                                # =====================================================================
+                                
                                 st.success(f"✅ ¡División realizada por {usuario_logueado}!")
+                                if 'df_prod' in st.session_state: del st.session_state['df_prod']
                                 st.rerun()
                                 
                             except Exception as e:
