@@ -722,18 +722,17 @@ else:
     def log_auditoria(tabla, accion, id_entidad, detalles, usuario="Martin"):
         """
         Registra automáticamente el movimiento en la tabla de Auditoría.
+        Soporta diccionarios en 'detalles' para transformarlos a JSON en Supabase.
         """
         try:
             db.table("AUDITORIA").insert({
                 "Tabla_Afectada": tabla,
                 "Accion": accion,
                 "ID_Entidad": str(id_entidad),
-                "Detalles": detalles,
+                "Detalles": detalles, -- Si pasás un dict de Python, Supabase lo guarda como JSONB nativo
                 "Usuario": usuario
             }).execute()
         except Exception as e:
-            # Usamos st.error solo si queremos que el usuario vea el fallo,
-            # si no, mejor un log interno.
             print(f"Error crítico en auditoría: {e}")
     
     # --- CONFIGURACIÓN ESTÉTICA ---
@@ -2990,23 +2989,25 @@ else:
     # =====================================================================
     elif menu == "⚙️ Auditoría":
         st.title("🛡️ Auditoría del Sistema")
+        st.subheader("Historial de Modificaciones y Eventos")
         
-        # Filtros (Definimos los elementos una sola vez)
+        # --- FILTROS DE BÚSQUEDA ---
         c1, c2, c3, c4 = st.columns(4)
         with c1: 
-            tabla_f = st.selectbox("Tabla", ["PRODUCTOS", "CAJA", "VENDEDORES"], key="sel_tabla")
+            # Agregamos "Todas" para no obligar al usuario a filtrar por una sola tabla
+            tabla_f = st.selectbox("Tabla Afectada", ["Todas", "PRODUCTOS", "CAJA", "VENDEDORES", "COMPRAS_CABECERA"], key="sel_tabla")
         with c2: 
             accion_f = st.selectbox("Acción", ["Todas", "INSERT", "UPDATE", "DELETE"], key="sel_accion")
         with c3: 
-            user_f = st.text_input("Usuario", key="input_user")
+            user_f = st.text_input("Usuario (Filtro parcial)", key="input_user")
         with c4: 
-            id_f = st.text_input("ID Entidad", key="input_id")
+            id_f = st.text_input("ID Entidad Exacto", key="input_id")
         
-        # Construcción dinámica de la query
-        # Empezamos con la base
-        query = db.table("AUDITORIA").select("*").eq("Tabla_Afectada", tabla_f)
+        # --- CONSTRUCCIÓN DINÁMICA DE QUERY ---
+        query = db.table("AUDITORIA").select("*")
         
-        # Agregamos condiciones solo si se cumplen
+        if tabla_f != "Todas":
+            query = query.eq("Tabla_Afectada", tabla_f)
         if accion_f != "Todas":
             query = query.eq("Accion", accion_f)
         if user_f:
@@ -3014,13 +3015,32 @@ else:
         if id_f:
             query = query.eq("ID_Entidad", id_f)
         
-        # Ejecutar y mostrar
+        # --- EJECUCIÓN Y RENDERIZADO ---
         try:
-            res = query.order("Fecha_Hora", desc=True).limit(50).execute()
+            # Ordenamos siempre por el evento más reciente y limitamos para proteger la memoria de la app
+            res = query.order("Fecha_Hora", desc=True).limit(100).execute()
             
             if res.data:
-                st.dataframe(pd.DataFrame(res.data), hide_index=True, use_container_width=True)
+                df_auditoria = pd.DataFrame(res.data)
+                
+                # Formateamos la fecha para que sea más legible en pantalla
+                df_auditoria['Fecha_Hora'] = pd.to_datetime(df_auditoria['Fecha_Hora']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Reordenamos columnas para una vista limpia
+                columnas_ordenadas = ['Fecha_Hora', 'Usuario', 'Tabla_Afectada', 'Accion', 'ID_Entidad', 'Detalles']
+                df_render = df_auditoria[columnas_ordenadas]
+                
+                # Renderizado usando la configuración de columnas de Streamlit para el campo JSON
+                st.dataframe(
+                    df_render,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "Detalles": st.column_config.JsonColumn("Datos/Cambios 🔍", help="Historial de campos modificados")
+                    }
+                )
             else:
-                st.info("Sin registros bajo estos criterios.")
+                st.info("No se encontraron registros que coincidan con los criterios de búsqueda.")
+                
         except Exception as e:
-            st.error(f"Error al consultar la auditoría: {e}")
+            st.error(f"Error al consultar la tabla de auditoría: {e}")
