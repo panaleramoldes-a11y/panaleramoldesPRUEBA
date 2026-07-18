@@ -2163,6 +2163,22 @@ else:
                                 try:
                                     # Ejecutamos el update
                                     db.table("PRODUCTOS").update(datos_update).eq("ID_Producto", id_sel).execute()
+                                    
+                                    # =====================================================================
+                                    # 🔥 LOG DE AUDITORÍA (Módulo Modificaciones Manuales)
+                                    # =====================================================================
+                                    log_auditoria(
+                                        tabla="PRODUCTOS",
+                                        accion="UPDATE",
+                                        id_entidad=id_sel,
+                                        detalles={
+                                            "motivo": "Modificación manual desde formulario de edición",
+                                            "valores_finales": datos_update
+                                        },
+                                        usuario="Martin"
+                                    )
+                                    # =====================================================================
+
                                     st.success("¡Producto actualizado exitosamente!")
                                     if 'df_prod' in st.session_state: del st.session_state['df_prod']
                                     st.rerun()
@@ -2171,7 +2187,6 @@ else:
                                     st.write("Datos enviados:", datos_update) # Esto te ayudará a ver qué campo falla exactamente
                 else:
                     st.info("No hay productos para modificar.")
-
             # --- PESTAÑA IMPORTAR (Versión Optimizada) ---
             with tab_importar:
                 st.subheader("📥 Importación Masiva de Productos")
