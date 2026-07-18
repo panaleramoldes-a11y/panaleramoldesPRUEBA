@@ -961,25 +961,56 @@ else:
             
                     # ACCIÓN DE GUARDAR (FUERA DEL FORM)
                     if guardar_btn:
-                        db.table("CLIENTES").update({
-                            "Nombre": str(nuevo_nombre or "").upper(),
-                            "Apellido": (nuevo_apellido or "").upper(),
-                            "DNI": nuevo_dni,
-                            "Razón Social": (nueva_razon or "").upper(),
-                            "CUIT": nuevo_cuit,
-                            "Telefono": nuevo_telefono,
-                            "Direccion_1": (nuevo_dir1 or "").upper(),
-                            "Link_Direccion_1": nuevo_link1,
-                            "Direccion_2": (nuevo_dir2 or "").upper(),
-                            "Link_Direccion_2": nuevo_link2,
-                            "Direccion_3": (nuevo_dir3 or "").upper(),
-                            "Link_Direccion_3": nuevo_link3,
-                            "Observaciones": nueva_obs,
-                            "Zona": input_zona,
-                            "Tipo_Cliente": input_tipo
-                        }).eq("ID_Cliente", int(id_modificar)).execute()
-                        st.success("Guardado")
-                        st.rerun()
+                        usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
+                        
+                        try:
+                            # 1. Ejecutamos la actualización
+                            db.table("CLIENTES").update({
+                                "Nombre": str(nuevo_nombre or "").upper(),
+                                "Apellido": (nuevo_apellido or "").upper(),
+                                "DNI": nuevo_dni,
+                                "Razón Social": (nueva_razon or "").upper(),
+                                "CUIT": nuevo_cuit,
+                                "Telefono": nuevo_telefono,
+                                "Direccion_1": (nuevo_dir1 or "").upper(),
+                                "Link_Direccion_1": nuevo_link1,
+                                "Direccion_2": (nuevo_dir2 or "").upper(),
+                                "Link_Direccion_2": nuevo_link2,
+                                "Direccion_3": (nuevo_dir3 or "").upper(),
+                                "Link_Direccion_3": nuevo_link3,
+                                "Observaciones": nueva_obs,
+                                "Zona": input_zona,
+                                "Tipo_Cliente": input_tipo
+                            }).eq("ID_Cliente", int(id_modificar)).execute()
+                            
+                            # 2. 🔥 LOG DE AUDITORÍA (Modificación de Cliente)
+                            log_auditoria(
+                                tabla="CLIENTES",
+                                accion="UPDATE",
+                                id_entidad=id_modificar,
+                                detalles={
+                                    "operacion": "Modificar Cliente",
+                                    "antes": {
+                                        "nombre_completo": f"{fila.get('Apellido')}, {fila.get('Nombre')}",
+                                        "telefono": fila.get('Telefono'),
+                                        "zona": fila.get('Zona'),
+                                        "direccion_1": fila.get('Direccion_1')
+                                    },
+                                    "despues": {
+                                        "nombre_completo": f"{nuevo_apellido.upper()}, {nuevo_nombre.upper()}",
+                                        "telefono": nuevo_telefono,
+                                        "zona": input_zona,
+                                        "direccion_1": nuevo_dir1.upper()
+                                    }
+                                },
+                                usuario=usuario_logueado
+                            )
+                            
+                            st.success("Guardado")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Error al modificar el cliente: {e}")
 
                     # ACCIÓN DE ELIMINAR (FUERA DEL FORM Y CON KEY ÚNICA)
                     st.divider()
@@ -987,9 +1018,31 @@ else:
                         confirmar_del = st.checkbox("Confirmar eliminación", key="check_del_final")
                         if st.button("🗑️ Eliminar Cliente", key="btn_del_final"):
                             if confirmar_del:
-                                db.table("CLIENTES").delete().eq("ID_Cliente", int(id_modificar)).execute()
-                                st.success("🗑️ Cliente eliminado.")
-                                st.rerun()
+                                usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
+                                
+                                try:
+                                    # 1. Ejecutamos la eliminación
+                                    db.table("CLIENTES").delete().eq("ID_Cliente", int(id_modificar)).execute()
+                                    
+                                    # 2. 🔥 LOG DE AUDITORÍA (Eliminación de Cliente)
+                                    log_auditoria(
+                                        tabla="CLIENTES",
+                                        accion="DELETE",
+                                        id_entidad=id_modificar,
+                                        detalles={
+                                            "operacion": "Eliminar Cliente",
+                                            "cliente_eliminado": f"{fila.get('Apellido')}, {fila.get('Nombre')}",
+                                            "dni_cuit": fila.get('CUIT') if fila.get('CUIT') else fila.get('DNI'),
+                                            "telefono": fila.get('Telefono')
+                                        },
+                                        usuario=usuario_logueado
+                                    )
+                                    
+                                    st.success("🗑️ Cliente eliminado.")
+                                    st.rerun()
+                                    
+                                except Exception as e:
+                                    st.error(f"Error al eliminar el cliente: {e}")
                             else:
                                 st.warning("⚠️ Debes marcar la casilla de confirmación.")
 
