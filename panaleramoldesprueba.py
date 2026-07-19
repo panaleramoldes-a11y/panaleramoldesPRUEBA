@@ -1161,12 +1161,12 @@ else:
                             st.caption(f"👤 {v['Cliente']} | 👔 {v['Vendedor']}")
                             
                             if st.button("📥 Cargar", key=f"recup_{v['ID_Pendiente']}"):
-                                # ... (tu lógica de carga se mantiene igual)
                                 st.session_state.id_pendiente_cargado = v['ID_Pendiente']
                                 st.session_state.carrito_vta = json.loads(v['Detalle_JSON'])
                                 st.session_state.pagos_split = json.loads(v.get('Pagos_JSON', '[{"metodo": "Efectivo", "monto": 0.0}]'))
                                 st.session_state.cliente_recuperado = v['Cliente']
                                 st.session_state.id_cliente_recuperado = v.get('ID_Cliente_Pendiente', "0")
+                                st.session_state.vendedor_recuperado = str(v.get('Vendedor', '1'))
                                 st.session_state.tipo_entrega = v.get('Forma_Entrega', 'Mostrador')
                                 st.session_state.direccion_entrega = v.get('Direccion_Entrega', 'N/A')
                                 st.session_state.link_maps_entrega = v.get('Link_Maps_Entrega', 'N/A')
