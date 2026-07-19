@@ -1259,7 +1259,7 @@ else:
                 if 'id_cliente_recuperado' in st.session_state:
                     del st.session_state.id_cliente_recuperado
 
-            # --- 🔥 MAPEO DINÁMICO DE VENDEDOR EN C4 ---
+            # --- 🔥 MAPEO DINÁMICO DE VENDEDOR EN C4 (CON RECUPERACIÓN) ---
             vendedor_id_final = "1" # Fallback por defecto si no hay datos
             if 'df_vend' in locals() and not df_vend.empty:
                 # Creamos un diccionario {ID_Vendedor: "Nombre Apellido"}
@@ -1268,11 +1268,23 @@ else:
                     for _, row in df_vend.iterrows()
                 }
                 
+                lista_opciones = list(dict_vendedores.keys())
+                
+                # 🔥 Lógica para pre-seleccionar el vendedor recuperado
+                idx_vendedor = 0
+                if 'vendedor_recuperado' in st.session_state:
+                    id_recup = st.session_state.vendedor_recuperado
+                    if id_recup in lista_opciones:
+                        idx_vendedor = lista_opciones.index(id_recup)
+                    # Lo eliminamos para que afecte solo a esta carga y no quede fijo en las próximas ventas
+                    del st.session_state.vendedor_recuperado
+
                 # El selectbox opera sobre los IDs (claves) pero muestra los nombres legibles
                 vendedor_id_sel = c4.selectbox(
                     "👔 Vendedor", 
-                    options=list(dict_vendedores.keys()), 
+                    options=lista_opciones, 
                     format_func=lambda x: dict_vendedores[x],
+                    index=idx_vendedor, # <-- Forzamos el índice recuperado
                     key="pos_vendedor_selector_dinamico"
                 )
                 if vendedor_id_sel:
