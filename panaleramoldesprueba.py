@@ -884,17 +884,23 @@ else:
                 submitted = st.form_submit_button("Guardar Cliente")
                 
                 if submitted:
-                    if not all([nombre, apellido, telefono, dir1]):
-                        st.error("Faltan completar campos obligatorios")
+                    # 🔥 NUEVA VALIDACIÓN CONDICIONAL: (Nombre y Apellido) O (Razón Social)
+                    tiene_datos_persona = bool(nombre and apellido)
+                    tiene_razon_social = bool(razon_social)
+                    
+                    if not (tiene_datos_persona or tiene_razon_social):
+                        st.error("⚠️ Debes completar obligatoriamente el 'Nombre y Apellido' o la 'Razón Social'.")
+                    elif not all([telefono, dir1]):
+                        st.error("⚠️ El 'Teléfono' y la 'Dirección 1' son campos obligatorios para cualquier cliente.")
                     elif telefono in df_clientes['Telefono'].astype(str).values:
                         st.error("⚠️ Ya existe un cliente con este teléfono!")
                     else:
+                        # Proceder al guardado en Supabase...
                         nuevo_cliente = {
-                            "Nombre": nombre.upper(), 
-                            "Apellido": apellido.upper(), 
+                            "Nombre": nombre.upper() if nombre else "N/A", # Si es empresa, guardamos N/A de forma limpia
+                            "Apellido": apellido.upper() if apellido else "N/A",
                             "DNI": dni,
                             "CUIT": cuit, 
-                            # 🔥 SE INCLUYE EN EL DICCIONARIO (Se guarda en Mayúsculas)
                             "Razón Social": razon_social.upper() if razon_social else "",
                             "Telefono": telefono, 
                             "Direccion_1": dir1.upper(),
