@@ -611,55 +611,58 @@ else:
             if submitted:
                 if not all([nombre, apellido, telefono, dir1]):
                     st.error("Faltan completar campos obligatorios")
-                # 🔥 VALIDACIÓN: Evita teléfonos duplicados (asumiendo que df_clientes está accesible globalmente en el scope)
-                elif telefono in df_clientes['Telefono'].astype(str).values:
-                    st.error("⚠️ Ya existe un cliente con este teléfono!")
                 else:
-                    nuevo_cliente = {
-                        "Nombre": nombre.upper(), 
-                        "Apellido": apellido.upper(),
-                        "Telefono": telefono, 
-                        "Direccion_1": dir1.upper(),
-                        "Link_Direccion_1": link1,
-                        "Zona": zona, 
-                        "Tipo_Cliente": "CONSUMIDOR FINAL"
-                    }
-                    
                     try:
-                        # 1. Insertamos el cliente y capturamos la respuesta
-                        resultado = db.table("CLIENTES").insert(nuevo_cliente).execute()
+                        # 🔥 NUEVA VALIDACIÓN: Consulta directa a Supabase en tiempo real
+                        existe_telefono = db.table("CLIENTES").select("ID_Cliente").eq("Telefono", str(telefono)).execute().data
                         
-                        # 2. Obtenemos el ID generado
-                        id_cliente_generado = "N/A"
-                        if resultado.data:
-                            id_cliente_generado = resultado.data[0].get('ID_Cliente', resultado.data[0].get('id', 'N/A'))
-                        
-                        # 3. Recuperamos el usuario logueado
-                        usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
-                        
-                        # 4. 🔥 LOG DE AUDITORÍA (Alta Rápida de Cliente)
-                        log_auditoria(
-                            tabla="CLIENTES",
-                            accion="INSERT",
-                            id_entidad=id_cliente_generado,
-                            detalles={
-                                "operacion": "Alta de Cliente Rápida",
-                                "datos_cliente": {
-                                    "nombre_completo": f"{apellido.upper()}, {nombre.upper()}",
-                                    "telefono": telefono,
-                                    "zona": zona,
-                                    "tipo_cliente": "CONSUMIDOR FINAL",
-                                    "direccion_principal": dir1.upper()
-                                }
-                            },
-                            usuario=usuario_logueado
-                        )
-                        
-                        st.success("✅ Cliente guardado!")
-                        st.rerun()
-                        
+                        if existe_telefono:
+                            st.error("⚠️ Ya existe un cliente con este teléfono!")
+                        else:
+                            nuevo_cliente = {
+                                "Nombre": nombre.upper(), 
+                                "Apellido": apellido.upper(),
+                                "Telefono": telefono, 
+                                "Direccion_1": dir1.upper(),
+                                "Link_Direccion_1": link1,
+                                "Zona": zona, 
+                                "Tipo_Cliente": "CONSUMIDOR FINAL"
+                            }
+                            
+                            # 1. Insertamos el cliente y capturamos la respuesta
+                            resultado = db.table("CLIENTES").insert(nuevo_cliente).execute()
+                            
+                            # 2. Obtenemos el ID generado
+                            id_cliente_generado = "N/A"
+                            if resultado.data:
+                                id_cliente_generado = resultado.data[0].get('ID_Cliente', resultado.data[0].get('id', 'N/A'))
+                            
+                            # 3. Recuperamos el usuario logueado
+                            usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
+                            
+                            # 4. 🔥 LOG DE AUDITORÍA (Alta Rápida de Cliente)
+                            log_auditoria(
+                                tabla="CLIENTES",
+                                accion="INSERT",
+                                id_entidad=id_cliente_generado,
+                                detalles={
+                                    "operacion": "Alta de Cliente Rápida",
+                                    "datos_cliente": {
+                                        "nombre_completo": f"{apellido.upper()}, {nombre.upper()}",
+                                        "telefono": telefono,
+                                        "zona": zona,
+                                        "tipo_cliente": "CONSUMIDOR FINAL",
+                                        "direccion_principal": dir1.upper()
+                                    }
+                                },
+                                usuario=usuario_logueado
+                            )
+                            
+                            st.success("✅ Cliente guardado!")
+                            st.rerun()
+                            
                     except Exception as e:
-                        st.error(f"Error al guardar el cliente o registrar auditoría: {e}")
+                        st.error(f"Error al procesar la solicitud: {e}")
                         
     @st.dialog("➕ Asignar Nueva Gift Card")
     def abrir_asignacion_gift_card(id_cliente, nombre_cliente):
