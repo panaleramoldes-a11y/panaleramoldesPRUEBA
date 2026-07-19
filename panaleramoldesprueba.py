@@ -1685,7 +1685,8 @@ else:
                             "Hora": datetime.now().strftime('%H:%M:%S'),
                             "Cliente": cliente_nombre_final,
                             "ID_Cliente_Pendiente": id_cliente_final,
-                            "Vendedor": vendedor_sel,
+                            # 🔥 CORRECCIÓN AQUÍ: Cambiamos 'vendedor_sel' por 'vendedor_id_final'
+                            "Vendedor": vendedor_id_final,
                             "Metodo_Pago": desglose_pagos,
                             "Pagos_JSON": json.dumps(st.session_state.pagos_split),
                             "Detalle_JSON": json.dumps(st.session_state.carrito_vta),
@@ -1698,7 +1699,7 @@ else:
                             "Longitud": lng
                         }
 
-                        # --- LA LOGICA DE DETECCIÓN ---
+                        # --- LA LÓGICA DE DETECCIÓN ---
                         if 'id_pendiente_cargado' in st.session_state and st.session_state.id_pendiente_cargado:
                             # Si existe el ID, actualizamos el registro existente
                             db.table("VENTAS_PENDIENTES") \
