@@ -2994,7 +2994,7 @@ else:
         # 1. Obtenemos estado
         turno_actual = obtener_turno_activo() 
         
-        tab_turno, tab_explorar, tab_config = st.tabs(["🕒 Turno Actual", "🔍 Explorador", "⚙️ Configuración"])
+        tab_turno, tab_explorar, tab_config = st.tabs(["🕒 Turno Actual", "🔍 Explorador"])
         
         with tab_turno:
             if turno_actual is None:
