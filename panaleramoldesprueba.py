@@ -1129,7 +1129,7 @@ else:
         col_t1.header("🚀 Venta Rápida - Pañalera Moldes")
         if col_t2.button("🧹 Limpiar Todo", type="secondary", width='stretch'):
             resetear_punto_venta()
-        # 1.5. BOTÓN PARA VER PENDIENTES (Adaptado a Supabase)
+        # 1.5. BOTÓN PARA VER PENDIENTES (Visual Compacta y Optimizada)
         @st.dialog("Ventas Pendientes")
         def abrir_pendientes():
             import json
@@ -1137,7 +1137,6 @@ else:
             
             def limpiar_monto(texto):
                 """Extrae números de un string como 'Transferencia: $59,600'"""
-                # Elimina símbolos de moneda, comas y espacios, dejando solo números y puntos
                 solo_numeros = re.sub(r'[^\d.]', '', texto.replace(',', ''))
                 try:
                     return float(solo_numeros)
@@ -1145,37 +1144,59 @@ else:
                     return 0.0
         
             try:
+                # Traemos los vendedores para mapear el ID al Nombre en la visual
+                vendedores_dict = {}
+                if 'df_vend' in locals() and not df_vend.empty:
+                    vendedores_dict = dict(zip(df_vend['ID_Vendedor'].astype(str), df_vend['Nombre']))
+
                 pendientes = db.table("VENTAS_PENDIENTES").select("*").execute().data
                 
                 if not pendientes:
                     st.info("📭 No hay ventas pendientes registradas.")
                 else:
+                    st.markdown("### Listado de Espera")
+                    
                     for v in pendientes:
+                        # Creamos un contenedor ultra compacto para cada pendiente
                         with st.container(border=True):
-                            st.markdown(f"**ID:** {v['ID_Pendiente']} | 📅 {v['Fecha']}")
+                            col_info, col_acciones = st.columns([3, 1], vertical_alignment="center")
                             
-                            # Extraemos el monto desde la columna Metodo_Pago
-                            monto_numerico = limpiar_monto(v.get('Metodo_Pago', '0'))
-                            st.markdown(f"💰 **Total Venta: ${monto_numerico:,.2f}**")
+                            with col_info:
+                                # Fila 1: ID y Fecha en un formato limpio
+                                id_corto = v['ID_Pendiente'].replace("PEND-", "")
+                                st.markdown(f"🆔 **#{id_corto}**  •  📅 {v['Fecha']}")
+                                
+                                # Fila 2: Cliente y Vendedor (Mapeado)
+                                id_vendedor_str = str(v.get('Vendedor', '1'))
+                                nombre_vendedor = vendedores_dict.get(id_vendedor_str, f"Vendedor {id_vendedor_str}")
+                                st.markdown(f"👤 {v['Cliente']}  •  👔 {nombre_vendedor}")
+                                
+                                # Fila 3: Monto Destacado
+                                monto_numerico = limpiar_monto(v.get('Metodo_Pago', '0'))
+                                st.markdown(f"💰 **Total: ${monto_numerico:,.2f}**")
                             
-                            st.caption(f"👤 {v['Cliente']} | 👔 {v['Vendedor']}")
-                            
-                            if st.button("📥 Cargar", key=f"recup_{v['ID_Pendiente']}"):
-                                st.session_state.id_pendiente_cargado = v['ID_Pendiente']
-                                st.session_state.carrito_vta = json.loads(v['Detalle_JSON'])
-                                st.session_state.pagos_split = json.loads(v.get('Pagos_JSON', '[{"metodo": "Efectivo", "monto": 0.0}]'))
-                                st.session_state.cliente_recuperado = v['Cliente']
-                                st.session_state.id_cliente_recuperado = v.get('ID_Cliente_Pendiente', "0")
-                                st.session_state.vendedor_recuperado = str(v.get('Vendedor', '1'))
-                                st.session_state.tipo_entrega = v.get('Forma_Entrega', 'Mostrador')
-                                st.session_state.direccion_entrega = v.get('Direccion_Entrega', 'N/A')
-                                st.session_state.link_maps_entrega = v.get('Link_Maps_Entrega', 'N/A')
-                                st.session_state.fecha_reparto = v.get('Fecha_Entrega', str(datetime.today().date()))
-                                st.rerun() 
-                            
-                            if st.button("🗑️ Eliminar", key=f"del_{v['ID_Pendiente']}"):
-                                db.table("VENTAS_PENDIENTES").delete().eq("ID_Pendiente", v['ID_Pendiente']).execute()
-                                st.rerun()
+                            with col_acciones:
+                                # Botones compactos y alineados horizontalmente/verticalmente
+                                if st.button("📥 Cargar", key=f"recup_{v['ID_Pendiente']}", use_container_width=True, type="primary"):
+                                    st.session_state.id_pendiente_cargado = v['ID_Pendiente']
+                                    st.session_state.carrito_vta = json.loads(v['Detalle_JSON'])
+                                    st.session_state.pagos_split = json.loads(v.get('Pagos_JSON', '[{"metodo": "Efectivo", "monto": 0.0}]'))
+                                    st.session_state.cliente_recuperado = v['Cliente']
+                                    st.session_state.id_cliente_recuperado = v.get('ID_Cliente_Pendiente', "0")
+                                    
+                                    # Recuperamos el ID del vendedor que guardó el pendiente
+                                    st.session_state.vendedor_recuperado = id_vendedor_str
+                                    
+                                    st.session_state.tipo_entrega = v.get('Forma_Entrega', 'Mostrador')
+                                    st.session_state.direccion_entrega = v.get('Direccion_Entrega', 'N/A')
+                                    st.session_state.link_maps_entrega = v.get('Link_Maps_Entrega', 'N/A')
+                                    st.session_state.fecha_reparto = v.get('Fecha_Entrega', str(datetime.today().date()))
+                                    st.rerun() 
+                                
+                                if st.button("🗑️", key=f"del_{v['ID_Pendiente']}", use_container_width=True, help="Eliminar de pendientes"):
+                                    db.table("VENTAS_PENDIENTES").delete().eq("ID_Pendiente", v['ID_Pendiente']).execute()
+                                    st.rerun()
+                                    
             except Exception as e:
                 st.error(f"Error al leer pendientes: {e}")
 
