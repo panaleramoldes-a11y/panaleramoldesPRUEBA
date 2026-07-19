@@ -600,8 +600,10 @@ else:
     @st.dialog("➕ Nuevo Cliente Rápido")
     def abrir_alta_cliente_rapida():
         with st.form("form_nuevo_cliente_rapido"):
-            nombre = st.text_input("Nombre*")
-            apellido = st.text_input("Apellido*")
+            nombre = st.text_input("Nombre")
+            apellido = st.text_input("Apellido")
+            # 🔥 NUEVO CAMPO: Agregado para empresas en el diálogo rápido
+            razon_social = st.text_input("Razón Social")
             telefono = st.text_input("Teléfono* (10 dígitos)", max_chars=10)
             dir1 = st.text_input("Dirección 1*")
             link1 = st.text_input("Link Dirección 1 (Google Maps)")
@@ -609,24 +611,34 @@ else:
             
             submitted = st.form_submit_button("Guardar Cliente")
             if submitted:
-                if not all([nombre, apellido, telefono, dir1]):
-                    st.error("Faltan completar campos obligatorios")
+                # 🔥 VALIDACIÓN CONDICIONAL HOMOLOGADA: (Nombre y Apellido) O (Razón Social)
+                tiene_datos_persona = bool(nombre and apellido)
+                tiene_razon_social = bool(razon_social)
+                
+                if not (tiene_datos_persona or tiene_razon_social):
+                    st.error("⚠️ Debes completar obligatoriamente el 'Nombre y Apellido' o la 'Razón Social'.")
+                elif not all([telefono, dir1]):
+                    st.error("⚠️ El 'Teléfono' y la 'Dirección 1' son campos obligatorios.")
                 else:
                     try:
-                        # 🔥 NUEVA VALIDACIÓN: Consulta directa a Supabase en tiempo real
+                        # VALIDACIÓN: Consulta directa a Supabase en tiempo real
                         existe_telefono = db.table("CLIENTES").select("ID_Cliente").eq("Telefono", str(telefono)).execute().data
                         
                         if existe_telefono:
                             st.error("⚠️ Ya existe un cliente con este teléfono!")
                         else:
+                            # Asignamos dinámicamente el tipo comercial según los datos ingresados
+                            tipo_detectado = "EMPRESA/ORGANISMO" if tiene_razon_social else "CONSUMIDOR FINAL"
+                            
                             nuevo_cliente = {
-                                "Nombre": nombre.upper(), 
-                                "Apellido": apellido.upper(),
+                                "Nombre": nombre.upper() if nombre else "N/A", 
+                                "Apellido": apellido.upper() if apellido else "N/A",
+                                "Razón Social": razon_social.upper() if razon_social else "",
                                 "Telefono": telefono, 
                                 "Direccion_1": dir1.upper(),
                                 "Link_Direccion_1": link1,
                                 "Zona": zona, 
-                                "Tipo_Cliente": "CONSUMIDOR FINAL"
+                                "Tipo_Cliente": tipo_detectado
                             }
                             
                             # 1. Insertamos el cliente y capturamos la respuesta
@@ -640,7 +652,7 @@ else:
                             # 3. Recuperamos el usuario logueado
                             usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
                             
-                            # 4. 🔥 LOG DE AUDITORÍA (Alta Rápida de Cliente)
+                            # 4. 🔥 LOG DE AUDITORÍA ACTUALIZADO
                             log_auditoria(
                                 tabla="CLIENTES",
                                 accion="INSERT",
@@ -648,10 +660,11 @@ else:
                                 detalles={
                                     "operacion": "Alta de Cliente Rápida",
                                     "datos_cliente": {
-                                        "nombre_completo": f"{apellido.upper()}, {nombre.upper()}",
+                                        "nombre_completo": f"{apellido.upper()}, {nombre.upper()}" if tiene_datos_persona else "N/A",
+                                        "razon_social": razon_social.upper() if razon_social else "N/A",
                                         "telefono": telefono,
                                         "zona": zona,
-                                        "tipo_cliente": "CONSUMIDOR FINAL",
+                                        "tipo_cliente": tipo_detectado,
                                         "direccion_principal": dir1.upper()
                                     }
                                 },
