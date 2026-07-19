@@ -1780,9 +1780,6 @@ else:
                     # Si la bandera es True, mostramos el mapa interactivo
                     if st.session_state.get(f"mostrar_diagrama_{fecha}", False):
                         generar_diagrama_optimizada(grupo, punto_partida, fecha)
-                else:
-                    # Mensaje sutil opcional para el vendedor (podés remover esta línea si preferís que no vea nada)
-                    st.caption("🔒 El diagrama optimizado y mapa de ruta está reservado para la administración.")
                 
                 # 3. Iteramos sobre los repartos de ESE día (Visible para TODOS los roles)
                 for _, v in grupo.iterrows():
