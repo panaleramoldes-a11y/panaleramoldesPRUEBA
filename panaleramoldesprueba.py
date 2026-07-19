@@ -1259,8 +1259,27 @@ else:
                 if 'id_cliente_recuperado' in st.session_state:
                     del st.session_state.id_cliente_recuperado
 
-            # Vendedor ahora en c4 (columna nueva)
-            vendedor_sel = c4.selectbox("👔 Vendedor", df_vend['Nombre'].tolist())
+            # --- 🔥 MAPEO DINÁMICO DE VENDEDOR EN C4 ---
+            vendedor_id_final = "1" # Fallback por defecto si no hay datos
+            if 'df_vend' in locals() and not df_vend.empty:
+                # Creamos un diccionario {ID_Vendedor: "Nombre Apellido"}
+                dict_vendedores = {
+                    str(row['ID_Vendedor']): f"{row['Nombre']} {row['Apellido']}" 
+                    for _, row in df_vend.iterrows()
+                }
+                
+                # El selectbox opera sobre los IDs (claves) pero muestra los nombres legibles
+                vendedor_id_sel = c4.selectbox(
+                    "👔 Vendedor", 
+                    options=list(dict_vendedores.keys()), 
+                    format_func=lambda x: dict_vendedores[x],
+                    key="pos_vendedor_selector_dinamico"
+                )
+                if vendedor_id_sel:
+                    vendedor_id_final = str(vendedor_id_sel)
+            else:
+                # Fallback visual clásico si df_vend viniera vacío
+                c4.selectbox("👔 Vendedor", options=["1"], format_func=lambda x: "Vendedor Genérico")
             
             # Lista ahora en c3
             def cambiar_lista_global():
@@ -1549,13 +1568,14 @@ else:
                         turno_res = db.table("CONTROL_TURNOS").select("ID_Turno").eq("Estado", "Abierto").maybe_single().execute()
                         id_turno_val = turno_res.data['ID_Turno'] if (turno_res and turno_res.data) else "SIN_TURNO"
 
-                        # 2. Registrar Cabecera (AÑADIDO ID_Vendedor)
+                        # 2. Registrar Cabecera (AÑADIDO ID_Vendedor DINÁMICO)
                         desglose_pagos = " | ".join([f"{p['metodo']}: ${p['monto']:,.0f}" for p in st.session_state.pagos_split])
                         db.table("VENTAS_CABECERA").insert({
                             "ID_Venta": id_v,
                             "Fecha": f,
                             "ID_Cliente": id_cliente_final,
-                            "ID_Vendedor": st.session_state.get("id_vendedor", "1"), # <--- CORRECCIÓN AQUÍ
+                            # 🔥 CORRECCIÓN AQUÍ: Guardamos el ID del vendedor que se seleccionó arriba en la interfaz
+                            "ID_Vendedor": vendedor_id_final, 
                             "Forma_Pago": desglose_pagos,
                             "Total": total_final_vta,
                             "Forma_Entrega": st.session_state.tipo_entrega,
