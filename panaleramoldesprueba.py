@@ -763,12 +763,12 @@ else:
             # Agregamos "📈 Reporte de Utilidades" a la lista
             opciones_disponibles.extend([
                 "🛒 Punto de Venta", "👥 Clientes", "📋 Historial de Ventas", 
-                "⚙️ Configuración Pagos", "🚚 Gestión de Repartos", "📦 Productos",
+                "⚙️ Configuración Pagos", "📦 Productos",
                 "📦 Stock", "🚚 Proveedores", "📦 Compras", "👥 Vendedores", 
                 "⚙️ Auditoría", "📈 Reporte de Utilidades" # <--- AQUÍ LO AGREGAMOS
             ])
         elif st.session_state.rol == "Vendedor":
-            opciones_disponibles.extend(["🛒 Punto de Venta", "📦 Productos", "👥 Clientes"])
+            opciones_disponibles.extend(["🛒 Punto de Venta", "🚚 Gestión de Repartos", "📦 Productos", "👥 Clientes"])
         
         menu = st.selectbox("Menú Principal", opciones_disponibles)
         
