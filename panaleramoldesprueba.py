@@ -1129,8 +1129,8 @@ else:
         col_t1.header("🚀 Venta Rápida - Pañalera Moldes")
         if col_t2.button("🧹 Limpiar Todo", type="secondary", width='stretch'):
             resetear_punto_venta()
-        # 1.5. BOTÓN PARA VER PENDIENTES (Visual Compacta y Optimizada)
-        @st.dialog("Ventas Pendientes")
+        # 1.5. BOTÓN PARA VER PENDIENTES (Visual Horizontal Expandida)
+        @st.dialog("Ventas Pendientes", width="large") # 🔥 Forzamos el ancho grande aquí
         def abrir_pendientes():
             import json
             import re
@@ -1157,45 +1157,49 @@ else:
                     st.markdown("### Listado de Espera")
                     
                     for v in pendientes:
-                        # Creamos un contenedor ultra compacto para cada pendiente
+                        # Contenedor que ahora aprovecha el ancho completo del diálogo grande
                         with st.container(border=True):
-                            col_info, col_acciones = st.columns([3, 1], vertical_alignment="center")
+                            # Dividimos en 4 columnas horizontales (proporciones: ID/Fecha, Cliente/Vendedor, Monto, Acciones)
+                            c_id, c_cliente, c_monto, c_acciones = st.columns([1.2, 2.0, 1.2, 1.2], vertical_alignment="center")
                             
-                            with col_info:
-                                # Fila 1: ID y Fecha en un formato limpio
+                            with c_id:
                                 id_corto = v['ID_Pendiente'].replace("PEND-", "")
-                                st.markdown(f"🆔 **#{id_corto}**  •  📅 {v['Fecha']}")
+                                st.markdown(f"🆔 **#{id_corto}**\n\n📅 {v['Fecha']}")
                                 
-                                # Fila 2: Cliente y Vendedor (Mapeado)
+                            with c_cliente:
                                 id_vendedor_str = str(v.get('Vendedor', '1'))
                                 nombre_vendedor = vendedores_dict.get(id_vendedor_str, f"Vendedor {id_vendedor_str}")
-                                st.markdown(f"👤 {v['Cliente']}  •  👔 {nombre_vendedor}")
+                                st.markdown(f"👤 **{v['Cliente']}**\n\n👔 {nombre_vendedor}")
                                 
-                                # Fila 3: Monto Destacado
+                            with c_monto:
                                 monto_numerico = limpiar_monto(v.get('Metodo_Pago', '0'))
-                                st.markdown(f"💰 **Total: ${monto_numerico:,.2f}**")
+                                st.markdown(f"💰 **Total:**\n\n### ${monto_numerico:,.0f}")
                             
-                            with col_acciones:
-                                # Botones compactos y alineados horizontalmente/verticalmente
-                                if st.button("📥 Cargar", key=f"recup_{v['ID_Pendiente']}", use_container_width=True, type="primary"):
-                                    st.session_state.id_pendiente_cargado = v['ID_Pendiente']
-                                    st.session_state.carrito_vta = json.loads(v['Detalle_JSON'])
-                                    st.session_state.pagos_split = json.loads(v.get('Pagos_JSON', '[{"metodo": "Efectivo", "monto": 0.0}]'))
-                                    st.session_state.cliente_recuperado = v['Cliente']
-                                    st.session_state.id_cliente_recuperado = v.get('ID_Cliente_Pendiente', "0")
-                                    
-                                    # Recuperamos el ID del vendedor que guardó el pendiente
-                                    st.session_state.vendedor_recuperado = id_vendedor_str
-                                    
-                                    st.session_state.tipo_entrega = v.get('Forma_Entrega', 'Mostrador')
-                                    st.session_state.direccion_entrega = v.get('Direccion_Entrega', 'N/A')
-                                    st.session_state.link_maps_entrega = v.get('Link_Maps_Entrega', 'N/A')
-                                    st.session_state.fecha_reparto = v.get('Fecha_Entrega', str(datetime.today().date()))
-                                    st.rerun() 
+                            with c_acciones:
+                                # Dos columnas internas mini para poner los botones uno al lado del otro
+                                btn_col1, btn_col2 = st.columns(2, gap="small")
                                 
-                                if st.button("🗑️", key=f"del_{v['ID_Pendiente']}", use_container_width=True, help="Eliminar de pendientes"):
-                                    db.table("VENTAS_PENDIENTES").delete().eq("ID_Pendiente", v['ID_Pendiente']).execute()
-                                    st.rerun()
+                                with btn_col1:
+                                    if st.button("📥 Cargar", key=f"recup_{v['ID_Pendiente']}", use_container_width=True, type="primary"):
+                                        st.session_state.id_pendiente_cargado = v['ID_Pendiente']
+                                        st.session_state.carrito_vta = json.loads(v['Detalle_JSON'])
+                                        st.session_state.pagos_split = json.loads(v.get('Pagos_JSON', '[{"metodo": "Efectivo", "monto": 0.0}]'))
+                                        st.session_state.cliente_recuperado = v['Cliente']
+                                        st.session_state.id_cliente_recuperado = v.get('ID_Cliente_Pendiente', "0")
+                                        
+                                        # Recuperamos el ID del vendedor que guardó el pendiente
+                                        st.session_state.vendedor_recuperado = id_vendedor_str
+                                        
+                                        st.session_state.tipo_entrega = v.get('Forma_Entrega', 'Mostrador')
+                                        st.session_state.direccion_entrega = v.get('Direccion_Entrega', 'N/A')
+                                        st.session_state.link_maps_entrega = v.get('Link_Maps_Entrega', 'N/A')
+                                        st.session_state.fecha_reparto = v.get('Fecha_Entrega', str(datetime.today().date()))
+                                        st.rerun() 
+                                
+                                with btn_col2:
+                                    if st.button("🗑️", key=f"del_{v['ID_Pendiente']}", use_container_width=True, help="Eliminar de pendientes"):
+                                        db.table("VENTAS_PENDIENTES").delete().eq("ID_Pendiente", v['ID_Pendiente']).execute()
+                                        st.rerun()
                                     
             except Exception as e:
                 st.error(f"Error al leer pendientes: {e}")
