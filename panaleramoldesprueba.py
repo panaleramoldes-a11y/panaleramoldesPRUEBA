@@ -1129,8 +1129,8 @@ else:
         col_t1.header("🚀 Venta Rápida - Pañalera Moldes")
         if col_t2.button("🧹 Limpiar Todo", type="secondary", width='stretch'):
             resetear_punto_venta()
-        # 1.5. BOTÓN PARA VER PENDIENTES (Visual Horizontal Expandida)
-        @st.dialog("Ventas Pendientes", width="large") # 🔥 Forzamos el ancho grande aquí
+        # 1.5. BOTÓN PARA VER PENDIENTES (Visual Horizontal Expandida y Ordenada Alfabéticamente)
+        @st.dialog("Ventas Pendientes", width="large")
         def abrir_pendientes():
             import json
             import re
@@ -1149,15 +1149,19 @@ else:
                 if 'df_vend' in locals() and not df_vend.empty:
                     vendedores_dict = dict(zip(df_vend['ID_Vendedor'].astype(str), df_vend['Nombre']))
 
-                pendientes = db.table("VENTAS_PENDIENTES").select("*").execute().data
+                # 1. Consultamos los datos crudos de Supabase
+                datos_raw = db.table("VENTAS_PENDIENTES").select("*").execute().data
                 
-                if not pendientes:
+                if not datos_raw:
                     st.info("📭 No hay ventas pendientes registradas.")
                 else:
-                    st.markdown("### Listado de Espera")
+                    # 🔥 NUEVO: Ordenamos la lista alfabéticamente por el nombre del Cliente (ignorando mayúsculas/minúsculas)
+                    pendientes = sorted(datos_raw, key=lambda x: str(x.get('Cliente', '')).strip().lower())
+                    
+                    st.markdown("### Listado de Espera (Ordenado por Cliente)")
                     
                     for v in pendientes:
-                        # Contenedor que ahora aprovecha el ancho completo del diálogo grande
+                        # Contenedor que aprovecha el ancho completo del diálogo grande
                         with st.container(border=True):
                             # Dividimos en 4 columnas horizontales (proporciones: ID/Fecha, Cliente/Vendedor, Monto, Acciones)
                             c_id, c_cliente, c_monto, c_acciones = st.columns([1.2, 2.0, 1.2, 1.2], vertical_alignment="center")
