@@ -1457,12 +1457,12 @@ else:
                             "ID_Venta": id_v,
                             "Fecha": f,
                             "ID_Cliente": id_cliente_final,
-                            # 🔥 CORRECCIÓN AQUÍ: Guardamos el ID del vendedor que se seleccionó arriba en la interfaz
                             "ID_Vendedor": vendedor_id_final, 
                             "Forma_Pago": desglose_pagos,
                             "Total": total_final_vta,
                             "Forma_Entrega": st.session_state.tipo_entrega,
-                            "Direccion_Entrega": st.session_state.direccion_entrega if st.session_state.tipo_entrega == "Reparto" else "N/A"
+                            "Direccion_Entrega": st.session_state.direccion_entrega if st.session_state.tipo_entrega == "Reparto" else "N/A",
+                            "Observaciones": st.session_state.get('observaciones_entrega', '') # 👈 AGREGAR AQUÍ
                         }).execute()
                         
                         for art in st.session_state.carrito_vta:
@@ -1541,6 +1541,7 @@ else:
                         st.success("✅ Venta registrada correctamente!")
                         st.session_state.carrito_vta = []
                         st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
+                        st.session_state.observaciones_entrega = ""
                         st.rerun()
 
                     except Exception as e:
@@ -1568,7 +1569,6 @@ else:
                             "Hora": datetime.now().strftime('%H:%M:%S'),
                             "Cliente": cliente_nombre_final,
                             "ID_Cliente_Pendiente": id_cliente_final,
-                            # 🔥 CORRECCIÓN AQUÍ: Cambiamos 'vendedor_sel' por 'vendedor_id_final'
                             "Vendedor": vendedor_id_final,
                             "Metodo_Pago": desglose_pagos,
                             "Pagos_JSON": json.dumps(st.session_state.pagos_split),
@@ -1577,7 +1577,7 @@ else:
                             "Direccion_Entrega": st.session_state.direccion_entrega,
                             "Link_Maps_Entrega": link,
                             "Fecha_Entrega": st.session_state.fecha_reparto,
-                            # --- AGREGAMOS LAS NUEVAS COLUMNAS ---
+                            "Observaciones": st.session_state.get('observaciones_entrega', ''), # 👈 AGREGAR AQUÍ
                             "Latitud": lat,
                             "Longitud": lng
                         }
@@ -1599,6 +1599,7 @@ else:
                         # Limpieza post-guardado
                         st.session_state.carrito_vta = []
                         st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
+                        st.session_state.observaciones_entrega = ""
                         if 'id_pendiente_cargado' in st.session_state:
                             del st.session_state.id_pendiente_cargado
                         if 'id_cliente_recuperado' in st.session_state:
