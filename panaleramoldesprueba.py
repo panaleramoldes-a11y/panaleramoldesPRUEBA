@@ -1030,6 +1030,7 @@ else:
                                         st.session_state.direccion_entrega = v.get('Direccion_Entrega', 'N/A')
                                         st.session_state.link_maps_entrega = v.get('Link_Maps_Entrega', 'N/A')
                                         st.session_state.fecha_reparto = v.get('Fecha_Entrega', str(datetime.today().date()))
+                                        st.session_state.observaciones_entrega = v.get('Observaciones', '')
                                         st.rerun() 
                                 
                                 with btn_col2:
@@ -1353,56 +1354,65 @@ else:
                 st.rerun()
 
         # --- 5. FORMA DE ENTREGA ---
-            st.divider()
-            st.subheader("🚚 Forma de Entrega")
-
-            # Ajustamos las columnas para incluir la tercera (col_e3)
-            col_e1, col_e2, col_e3 = st.columns([1, 2, 1]) 
-
-            # 1. Determinamos el índice inicial del radio
-            estado_tipo = st.session_state.get("tipo_entrega", "Mostrador")
-            idx_radio = 0 if estado_tipo == "Mostrador" else 1
-                
-            tipo_entrega = col_e1.radio("¿Cómo se entrega?", ["Mostrador", "Reparto"], index=idx_radio)
-
-            from datetime import datetime
-
-            # Convertir el string guardado a objeto date para el input
-            fecha_val = datetime.strptime(st.session_state.get("fecha_reparto", str(datetime.today().date())), "%Y-%m-%d")
-
-            fecha_reparto = col_e3.date_input("Fecha de entrega", value=fecha_val)
-
-            # Inicializamos valores con lo que traemos de la venta recuperada
-            direccion_elegida = st.session_state.get("direccion_entrega", "N/A")
-            link_elegido = st.session_state.get("link_maps_entrega", "N/A")
-
-            if tipo_entrega == "Reparto":
-                opciones_map = {}
-                
-                # --- CORRECCIÓN: Verificar si tenemos el cliente seleccionado ---
-                if cliente_sel_row is not None:
-                    for i in [1, 2, 3]:
-                        dir_val = cliente_sel_row.get(f'Direccion_{i}')
-                        link_val = cliente_sel_row.get(f'Link_Direccion_{i}')
-                        if dir_val and str(dir_val).strip() != "":
-                            opciones_map[dir_val] = link_val if link_val else "N/A"
-                
-                if opciones_map:
-                    # Determinamos el índice si la dirección recuperada está en las opciones
-                    lista_dirs = list(opciones_map.keys())
-                    idx_sel = lista_dirs.index(direccion_elegida) if direccion_elegida in lista_dirs else 0
-                    
-                    seleccion = col_e2.selectbox("Seleccionar dirección", lista_dirs, index=idx_sel)
-                    direccion_elegida = seleccion
-                    link_elegido = opciones_map[seleccion]
-                else:
-                    direccion_elegida = col_e2.text_input("Dirección de entrega", value=direccion_elegida)
-            
-            # Actualizamos el estado
-            st.session_state.tipo_entrega = tipo_entrega
-            st.session_state.fecha_reparto = str(fecha_reparto)
-            st.session_state.direccion_entrega = direccion_elegida
-            st.session_state.link_maps_entrega = link_elegido
+                    st.divider()
+                    st.subheader("🚚 Forma de Entrega")
+        
+                    # Ajustamos las columnas para incluir la tercera (col_e3)
+                    col_e1, col_e2, col_e3 = st.columns([1, 2, 1]) 
+        
+                    # 1. Determinamos el índice inicial del radio
+                    estado_tipo = st.session_state.get("tipo_entrega", "Mostrador")
+                    idx_radio = 0 if estado_tipo == "Mostrador" else 1
+                        
+                    tipo_entrega = col_e1.radio("¿Cómo se entrega?", ["Mostrador", "Reparto"], index=idx_radio)
+        
+                    from datetime import datetime
+        
+                    # Convertir el string guardado a objeto date para el input
+                    fecha_val = datetime.strptime(st.session_state.get("fecha_reparto", str(datetime.today().date())), "%Y-%m-%d")
+        
+                    fecha_reparto = col_e3.date_input("Fecha de entrega", value=fecha_val)
+        
+                    # Inicializamos valores con lo que traemos de la venta recuperada
+                    direccion_elegida = st.session_state.get("direccion_entrega", "N/A")
+                    link_elegido = st.session_state.get("link_maps_entrega", "N/A")
+                    obs_recuperada = st.session_state.get("observaciones_entrega", "") # 👈 1. RECUPERAMOS NOTA DE SESSION_STATE
+        
+                    if tipo_entrega == "Reparto":
+                        opciones_map = {}
+                        
+                        # --- CORRECCIÓN: Verificar si tenemos el cliente seleccionado ---
+                        if cliente_sel_row is not None:
+                            for i in [1, 2, 3]:
+                                dir_val = cliente_sel_row.get(f'Direccion_{i}')
+                                link_val = cliente_sel_row.get(f'Link_Direccion_{i}')
+                                if dir_val and str(dir_val).strip() != "":
+                                    opciones_map[dir_val] = link_val if link_val else "N/A"
+                        
+                        if opciones_map:
+                            # Determinamos el índice si la dirección recuperada está en las opciones
+                            lista_dirs = list(opciones_map.keys())
+                            idx_sel = lista_dirs.index(direccion_elegida) if direccion_elegida in lista_dirs else 0
+                            
+                            seleccion = col_e2.selectbox("Seleccionar dirección", lista_dirs, index=idx_sel)
+                            direccion_elegida = seleccion
+                            link_elegido = opciones_map[seleccion]
+                        else:
+                            direccion_elegida = col_e2.text_input("Dirección de entrega", value=direccion_elegida)
+        
+                    # 👈 2. NUEVO CAMPO VISUAL DE OBSERVACIONES
+                    observaciones_vta = st.text_input(
+                        "📝 Observaciones / Notas para el Repartidor", 
+                        value=obs_recuperada,
+                        placeholder="Ej: Pasar antes de las 16hs, llamar al timbre 2B, cobro exacto..."
+                    )
+        
+                    # Actualizamos el estado
+                    st.session_state.tipo_entrega = tipo_entrega
+                    st.session_state.fecha_reparto = str(fecha_reparto)
+                    st.session_state.direccion_entrega = direccion_elegida
+                    st.session_state.link_maps_entrega = link_elegido
+                    st.session_state.observaciones_entrega = observaciones_vta # 👈 3. GUARDAMOS EN SESSION_STATE
 
         # --- 6. BOTONES DE CIERRE (CORREGIDO) ---
             st.divider()
@@ -3335,5 +3345,10 @@ else:
                         
                         if v.get('Link_Maps_Entrega'):
                             c3.link_button("📍 Maps", v['Link_Maps_Entrega'])
+                        
+                        # 👈 NUEVO: MOSTRAR OBSERVACIÓN SI EXISTE
+                        obs_entrega = v.get('Observaciones', '')
+                        if obs_entrega and str(obs_entrega).strip() != "":
+                            st.info(f"📝 **Nota para el repartidor:** {obs_entrega}", icon="📌")
                         
                         st.caption(f"💰 {v['Metodo_Pago']}")    
