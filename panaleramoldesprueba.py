@@ -3347,9 +3347,9 @@ else:
                         if v.get('Link_Maps_Entrega'):
                             c3.link_button("📍 Maps", v['Link_Maps_Entrega'])
                         
-                        # 👈 NUEVO: MOSTRAR OBSERVACIÓN SI EXISTE
+                        # 👈 MOSTRAR OBSERVACIÓN SOLO SI TIENE UN TEXTO VÁLIDO
                         obs_entrega = v.get('Observaciones', '')
-                        if obs_entrega and str(obs_entrega).strip() != "":
+                        if pd.notna(obs_entrega) and str(obs_entrega).strip() and str(obs_entrega).strip().lower() not in ["nan", "none"]:
                             st.info(f"📝 **Nota para el repartidor:** {obs_entrega}", icon="📌")
                         
                         st.caption(f"💰 {v['Metodo_Pago']}")    
