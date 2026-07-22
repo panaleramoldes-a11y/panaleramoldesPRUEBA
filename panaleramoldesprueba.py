@@ -2425,7 +2425,7 @@ else:
                     
                     # Obtener el stock actual del producto seleccionado
                     prod_row = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == str(id_kardex)]
-                    stock_actual = int(prod_row['Stock'].values[0]) if not prod_row.empty else 0
+                    stock_actual = int(prod_row['Stock_Actual'].values[0]) if not prod_row.empty else 0
                     
                     with st.spinner("Consultando historial unificado..."):
                         movimientos = []
