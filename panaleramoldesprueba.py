@@ -2423,7 +2423,7 @@ else:
                     str_f_desde = datetime.combine(fecha_desde, datetime.min.time()).isoformat()
                     str_f_hasta = datetime.combine(fecha_hasta, datetime.max.time()).isoformat()
                     
-                    # Obtener el stock actual del producto seleccionado
+                    # Obtener el stock actual del producto seleccionado (Usando Stock_Actual)
                     prod_row = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == str(id_kardex)]
                     stock_actual = int(prod_row['Stock_Actual'].values[0]) if not prod_row.empty else 0
                     
@@ -2509,8 +2509,16 @@ else:
                         if movimientos:
                             df_kardex = pd.DataFrame(movimientos)
                             
-                            # Ordenar de más RECIENTE a más ANTIGUO
-                            df_kardex["Fecha_datetime"] = pd.to_datetime(df_kardex["Fecha_raw"])
+                            # Conversión segura de fechas heterogéneas
+                            df_kardex["Fecha_datetime"] = pd.to_datetime(
+                                df_kardex["Fecha_raw"], 
+                                format='mixed', 
+                                utc=True, 
+                                errors='coerce'
+                            )
+                            
+                            # Eliminar registros con fechas inválidas si los hubiera y ordenar desc
+                            df_kardex = df_kardex.dropna(subset=["Fecha_datetime"])
                             df_kardex = df_kardex.sort_values(by="Fecha_datetime", ascending=False).reset_index(drop=True)
                             
                             # Reconstrucción trazable de Stock Anterior y Nuevo Stock hacia atrás
@@ -2526,14 +2534,13 @@ else:
                                 nuevo_stock_list.append(nuevo_stk)
                                 stock_anterior_list.append(stk_ant)
                                 
-                                # Actualizamos el cursor para el siguiente movimiento más antiguo
                                 stock_cursor = stk_ant
                             
                             df_kardex["Stock Anterior"] = stock_anterior_list
                             df_kardex["Nuevo Stock"] = nuevo_stock_list
                             df_kardex["Fecha"] = df_kardex["Fecha_datetime"].dt.strftime("%d/%m/%Y %H:%M")
                             
-                            # Reordenar columnas para visualización clara
+                            # Reordenar columnas para la vista final
                             columnas_ordenadas = [
                                 "Fecha", "Concepto", "ID Referencia", 
                                 "Stock Anterior", "Variación", "Nuevo Stock", 
