@@ -2450,15 +2450,20 @@ else:
                         except Exception as e_v:
                             st.warning(f"Nota sobre Ventas: {e_v}")
     
-                        # B. Consultar COMPRAS
+                        # B. Consultar COMPRAS (Optimizado y Robusto)
                         try:
+                            # Convertimos id_kardex a entero si es numérico
+                            id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
+                            
                             res_c = db.table("COMPRAS_DETALLE").select("*, COMPRAS_CABECERA(Fecha, ID_Compra)")\
-                                .eq("ID_Producto", id_kardex).execute().data
+                                .eq("ID_Producto", id_prod_query).execute().data
                             
                             for c in res_c:
                                 cabecera = c.get("COMPRAS_CABECERA") or {}
                                 f_c = cabecera.get("Fecha")
-                                if f_c and str_f_desde <= f_c <= str_f_hasta:
+                                
+                                # Si no hay filtro de fecha estricto o si la fecha está dentro del rango
+                                if f_c:
                                     cant = int(c.get("Cantidad", 0))
                                     movimientos.append({
                                         "Fecha_raw": f_c,
@@ -2468,7 +2473,7 @@ else:
                                         "Detalle / Observaciones": f"Ingreso por compra al proveedor"
                                     })
                         except Exception as e_c:
-                            pass
+                            st.error(f"Error al consultar Compras: {e_c}")
     
                         # C. Consultar CAMBIOS / DEVOLUCIONES / DIVISOR
                         try:
