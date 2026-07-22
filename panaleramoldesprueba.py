@@ -2450,30 +2450,40 @@ else:
                         except Exception as e_v:
                             st.warning(f"Nota sobre Ventas: {e_v}")
     
-                        # B. Consultar COMPRAS (Con nombre de tabla correcto: DETALLE_COMPRAS)
+                        # B. Consultar COMPRAS (Nombres exactos: DETALLE_COMPRAS y COMPRAS_CABECERA)
                         try:
                             id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
                             
-                            # Nota: Si tu cabecera se llama CABECERA_COMPRAS, dejalo así. 
-                            # Si se llama COMPRAS_CABECERA, solo cambia esa parte en la relación.
-                            res_c = db.table("DETALLE_COMPRAS").select("*, CABECERA_COMPRAS(Fecha, ID_Compra)")\
-                                .eq("ID_Producto", id_prod_query).execute().data
+                            # 1. Obtener detalles del producto
+                            res_c = db.table("DETALLE_COMPRAS").select("*").eq("ID_Producto", id_prod_query).execute().data
                             
-                            for c in res_c:
-                                cabecera = c.get("CABECERA_COMPRAS") or c.get("COMPRAS_CABECERA") or {}
-                                f_c = cabecera.get("Fecha")
-                                f_c_date = str(f_c)[:10] if f_c else ""
+                            if res_c:
+                                # Obtener IDs de compras únicos
+                                ids_compras = list(set([c.get("ID_Compra") for c in res_c if c.get("ID_Compra") is not None]))
                                 
-                                # Filtramos por rango de fechas
-                                if f_c and str_f_desde <= f_c_date <= str_f_hasta:
-                                    cant = int(c.get("Cantidad", 0))
-                                    movimientos.append({
-                                        "Fecha_raw": f_c,
-                                        "Concepto": "🚚 COMPRA",
-                                        "ID Referencia": f"ID_Compra: {cabecera.get('ID_Compra', 'S/I')}",
-                                        "Variación": +cant,
-                                        "Detalle / Observaciones": f"Ingreso por compra al proveedor"
-                                    })
+                                # 2. Obtener fechas de COMPRAS_CABECERA
+                                cabeceras_dict = {}
+                                if ids_compras:
+                                    res_cab = db.table("COMPRAS_CABECERA").select("ID_Compra, Fecha").in_("ID_Compra", ids_compras).execute().data
+                                    cabeceras_dict = {cab["ID_Compra"]: cab for cab in res_cab if "ID_Compra" in cab}
+                    
+                                # 3. Unir movimientos
+                                for c in res_c:
+                                    id_compra = c.get("ID_Compra")
+                                    cabecera = cabeceras_dict.get(id_compra, {})
+                                    f_c = cabecera.get("Fecha") or c.get("Fecha")
+                                    f_c_date = str(f_c)[:10] if f_c else ""
+                                    
+                                    # Filtrar por rango de fechas seleccionado
+                                    if f_c and str_f_desde <= f_c_date <= str_f_hasta:
+                                        cant = int(c.get("Cantidad", 0))
+                                        movimientos.append({
+                                            "Fecha_raw": f_c,
+                                            "Concepto": "🚚 COMPRA",
+                                            "ID Referencia": f"ID_Compra: {id_compra if id_compra else 'S/I'}",
+                                            "Variación": +cant,
+                                            "Detalle / Observaciones": f"Ingreso por compra al proveedor"
+                                        })
                         except Exception as e_c:
                             st.error(f"Error al consultar Compras: {e_c}")
     
