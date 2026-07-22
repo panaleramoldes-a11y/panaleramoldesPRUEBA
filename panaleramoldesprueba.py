@@ -2404,7 +2404,7 @@ else:
                         st.error(f"Error al procesar el archivo: {e}")
     
             # =====================================================================
-            # --- PESTAÑA HISTÓRICO DE MOVIMIENTOS (KARDEX) ---
+            # --- PESTAÑA HISTÓRICO DE MOVIMIENTOS (KARDEX) (Solo Administrador) ---
             # =====================================================================
             with tab_historico:
                 st.subheader("📜 Histórico de Movimientos por Producto (Kardex)")
@@ -2423,6 +2423,10 @@ else:
                     str_f_desde = datetime.combine(fecha_desde, datetime.min.time()).isoformat()
                     str_f_hasta = datetime.combine(fecha_hasta, datetime.max.time()).isoformat()
                     
+                    # Obtener el stock actual del producto seleccionado
+                    prod_row = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == str(id_kardex)]
+                    stock_actual = int(prod_row['Stock'].values[0]) if not prod_row.empty else 0
+                    
                     with st.spinner("Consultando historial unificado..."):
                         movimientos = []
                         
@@ -2437,7 +2441,7 @@ else:
                                 if f_v and str_f_desde <= f_v <= str_f_hasta and cabecera.get("Estado") != "CANCELADO":
                                     cant = int(v.get("Cantidad", 0))
                                     movimientos.append({
-                                        "Fecha": f_v,
+                                        "Fecha_raw": f_v,
                                         "Concepto": "🛒 VENTA",
                                         "ID Referencia": f"ID_Venta: {cabecera.get('ID_Venta', 'S/I')}",
                                         "Variación": -cant,
@@ -2445,7 +2449,7 @@ else:
                                     })
                         except Exception as e_v:
                             st.warning(f"Nota sobre Ventas: {e_v}")
-        
+    
                         # B. Consultar COMPRAS
                         try:
                             res_c = db.table("COMPRAS_DETALLE").select("*, COMPRAS_CABECERA(Fecha, ID_Compra)")\
@@ -2457,15 +2461,15 @@ else:
                                 if f_c and str_f_desde <= f_c <= str_f_hasta:
                                     cant = int(c.get("Cantidad", 0))
                                     movimientos.append({
-                                        "Fecha": f_c,
+                                        "Fecha_raw": f_c,
                                         "Concepto": "🚚 COMPRA",
                                         "ID Referencia": f"ID_Compra: {cabecera.get('ID_Compra', 'S/I')}",
                                         "Variación": +cant,
                                         "Detalle / Observaciones": f"Ingreso por compra al proveedor"
                                     })
                         except Exception as e_c:
-                            pass # Silencioso si no existe la tabla aún
-        
+                            pass
+    
                         # C. Consultar CAMBIOS / DEVOLUCIONES / DIVISOR
                         try:
                             res_cam = db.table("CAMBIOS").select("*").eq("Código", id_kardex)\
@@ -2476,7 +2480,7 @@ else:
                                 sale = int(cam.get("Sale", 0))
                                 var = entra - sale
                                 movimientos.append({
-                                    "Fecha": cam.get("Fecha"),
+                                    "Fecha_raw": cam.get("Fecha"),
                                     "Concepto": "🔄 CAMBIO / AJUSTE",
                                     "ID Referencia": f"ID_Cambio: {cam.get('id', 'S/I')}",
                                     "Variación": var,
@@ -2484,7 +2488,7 @@ else:
                                 })
                         except Exception as e_cam:
                             pass
-        
+    
                         # D. Consultar LOGS DE AUDITORÍA
                         try:
                             res_aud = db.table("LOGS_AUDITORIA").select("*").eq("id_entidad", str(id_kardex))\
@@ -2492,7 +2496,7 @@ else:
                             
                             for aud in res_aud:
                                 movimientos.append({
-                                    "Fecha": aud.get("fecha_hora"),
+                                    "Fecha_raw": aud.get("fecha_hora"),
                                     "Concepto": "🛠️ AUDITORÍA MANUAL",
                                     "ID Referencia": f"ID_Log: {aud.get('id', 'S/I')}",
                                     "Variación": 0,
@@ -2500,14 +2504,42 @@ else:
                                 })
                         except Exception as e_aud:
                             pass
-        
-                        # Renderizar resultados
+    
+                        # Renderizar resultados con trazabilidad de stock
                         if movimientos:
                             df_kardex = pd.DataFrame(movimientos)
-                            # Convertir y ordenar por fecha descendente
-                            df_kardex["Fecha"] = pd.to_datetime(df_kardex["Fecha"])
-                            df_kardex = df_kardex.sort_values(by="Fecha", ascending=False)
-                            df_kardex["Fecha"] = df_kardex["Fecha"].dt.strftime("%d/%m/%Y %H:%M")
+                            
+                            # Ordenar de más RECIENTE a más ANTIGUO
+                            df_kardex["Fecha_datetime"] = pd.to_datetime(df_kardex["Fecha_raw"])
+                            df_kardex = df_kardex.sort_values(by="Fecha_datetime", ascending=False).reset_index(drop=True)
+                            
+                            # Reconstrucción trazable de Stock Anterior y Nuevo Stock hacia atrás
+                            stock_cursor = stock_actual
+                            stock_anterior_list = []
+                            nuevo_stock_list = []
+                            
+                            for _, row in df_kardex.iterrows():
+                                var = row["Variación"]
+                                nuevo_stk = stock_cursor
+                                stk_ant = nuevo_stk - var
+                                
+                                nuevo_stock_list.append(nuevo_stk)
+                                stock_anterior_list.append(stk_ant)
+                                
+                                # Actualizamos el cursor para el siguiente movimiento más antiguo
+                                stock_cursor = stk_ant
+                            
+                            df_kardex["Stock Anterior"] = stock_anterior_list
+                            df_kardex["Nuevo Stock"] = nuevo_stock_list
+                            df_kardex["Fecha"] = df_kardex["Fecha_datetime"].dt.strftime("%d/%m/%Y %H:%M")
+                            
+                            # Reordenar columnas para visualización clara
+                            columnas_ordenadas = [
+                                "Fecha", "Concepto", "ID Referencia", 
+                                "Stock Anterior", "Variación", "Nuevo Stock", 
+                                "Detalle / Observaciones"
+                            ]
+                            df_kardex = df_kardex[columnas_ordenadas]
                             
                             # Métricas resumidas
                             col_m1, col_m2 = st.columns(2)
