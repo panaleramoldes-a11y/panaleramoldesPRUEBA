@@ -2450,20 +2450,22 @@ else:
                         except Exception as e_v:
                             st.warning(f"Nota sobre Ventas: {e_v}")
     
-                        # B. Consultar COMPRAS (Optimizado y Robusto)
+                        # B. Consultar COMPRAS (Con nombre de tabla correcto: DETALLE_COMPRAS)
                         try:
-                            # Convertimos id_kardex a entero si es numérico
                             id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
                             
-                            res_c = db.table("COMPRAS_DETALLE").select("*, COMPRAS_CABECERA(Fecha, ID_Compra)")\
+                            # Nota: Si tu cabecera se llama CABECERA_COMPRAS, dejalo así. 
+                            # Si se llama COMPRAS_CABECERA, solo cambia esa parte en la relación.
+                            res_c = db.table("DETALLE_COMPRAS").select("*, CABECERA_COMPRAS(Fecha, ID_Compra)")\
                                 .eq("ID_Producto", id_prod_query).execute().data
                             
                             for c in res_c:
-                                cabecera = c.get("COMPRAS_CABECERA") or {}
+                                cabecera = c.get("CABECERA_COMPRAS") or c.get("COMPRAS_CABECERA") or {}
                                 f_c = cabecera.get("Fecha")
+                                f_c_date = str(f_c)[:10] if f_c else ""
                                 
-                                # Si no hay filtro de fecha estricto o si la fecha está dentro del rango
-                                if f_c:
+                                # Filtramos por rango de fechas
+                                if f_c and str_f_desde <= f_c_date <= str_f_hasta:
                                     cant = int(c.get("Cantidad", 0))
                                     movimientos.append({
                                         "Fecha_raw": f_c,
