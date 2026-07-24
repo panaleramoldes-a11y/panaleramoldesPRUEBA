@@ -2489,8 +2489,10 @@ else:
                         st.info("No existen recuentos pendientes de revisión.")
                     else:
                         df_cabeceras = pd.DataFrame(cabeceras_data)
+                        
+                        # Formato de opción agregando el impacto financiero guardado en BD
                         opciones_inv = [
-                            f"ID #{r['id']} - {r['vendedor']} ({r['parametro']}) - {str(r['created_at'])[:10]}" 
+                            f"ID #{r['id']} - {r['vendedor']} ({r['parametro']}) - Impacto Est.: ${float(r.get('impactofinanciero') or 0):,.2f} - {str(r['created_at'])[:10]}" 
                             for _, r in df_cabeceras.iterrows()
                         ]
                         inv_seleccionado = st.selectbox("Seleccione recuento para auditar:", opciones_inv, key="rev_inv_sel")
@@ -2562,7 +2564,6 @@ else:
                                                         dif_float = float(item['diferencia'])
                                                         
                                                         # 3. CASTEO ESTRICTO A INT4 (int nativo de Python)
-                                                        # Esto soluciona el APIError de PostgREST
                                                         nuevo_stock_int = int(round(stock_vivo + dif_float))
                                                         
                                                         # 4. Actualizar tabla PRODUCTOS
@@ -2570,13 +2571,13 @@ else:
                                                             "Stock_Actual": nuevo_stock_int
                                                         }).eq("ID_Producto", id_prod_str).execute()
                                                         
-                                                        # 5. Actualizar estado en INVENTARIOS_DETALLE (asegurando entero nativo en la ID del detalle)
+                                                        # 5. Actualizar estado en INVENTARIOS_DETALLE
                                                         id_detalle_int = int(item['id'])
                                                         db.table("INVENTARIOS_DETALLE").update({
                                                             "estado_item": "AJUSTADO"
                                                         }).eq("id", id_detalle_int).execute()
                                                         
-                                                        # 6. Opcional: Auditoría
+                                                        # 6. Auditoría
                                                         if 'log_auditoria' in globals():
                                                             log_auditoria(
                                                                 tabla="PRODUCTOS",
@@ -2600,12 +2601,37 @@ else:
                                                 st.caption("✅ Ajustado")
                                             else:
                                                 st.caption("Sin diferencia")
-
+            
                                 st.markdown("---")
-                                if st.button("🏁 Finalizar y Archivar Auditoría", type="primary", key="btn_cerrar_inv"):
-                                    db.table("INVENTARIOS_CABECERA").update({"estado": "REVISADO"}).eq("id", id_cabecera).execute()
-                                    st.success("Inventario cerrado correctamente.")
-                                    st.rerun()
+                                
+                                # -------------------------------------------------------------
+                                # BOTONES INFERIORES: ARCHIVAR O ELIMINAR
+                                # -------------------------------------------------------------
+                                col_accion1, col_accion2 = st.columns(2)
+            
+                                with col_accion1:
+                                    if st.button("🏁 Finalizar y Archivar Auditoría", type="primary", use_container_width=True, key="btn_cerrar_inv"):
+                                        db.table("INVENTARIOS_CABECERA").update({"estado": "REVISADO"}).eq("id", id_cabecera).execute()
+                                        st.success("✅ Inventario cerrado correctamente.")
+                                        st.rerun()
+            
+                                with col_accion2:
+                                    with st.popover("🗑️ Eliminar Auditoría", use_container_width=True):
+                                        st.warning("⚠️ **¿Está seguro de eliminar este recuento?**")
+                                        st.caption("Esta acción borrará permanentemente la cabecera y sus detalles.")
+                                        
+                                        if st.button("💥 Confirmar y Borrar", type="primary", use_container_width=True, key="btn_del_inv_confirm"):
+                                            try:
+                                                # 1. Borrar detalle
+                                                db.table("INVENTARIOS_DETALLE").delete().eq("inventario_id", id_cabecera).execute()
+                                                
+                                                # 2. Borrar cabecera
+                                                db.table("INVENTARIOS_CABECERA").delete().eq("id", id_cabecera).execute()
+                                                
+                                                st.success("🗑️ Recuento eliminado exitosamente.")
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"Error al eliminar la auditoría: {e}")
     
         # --- PESTAÑAS DE ADMINISTRADOR ---
         if st.session_state.rol == "Administrador":
