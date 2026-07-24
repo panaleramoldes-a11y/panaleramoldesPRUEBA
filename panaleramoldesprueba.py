@@ -2482,28 +2482,56 @@ else:
                                         with c5:
                                             if item['estado_item'] == 'PENDIENTE' and dif != 0:
                                                 if st.button("✔️ Aplicar Ajuste", key=f"btn_aj_{item['id']}"):
-                                                    # Lógica Incremental en tiempo real
-                                                    p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", item['id_producto']).execute().data
-                                                    stock_vivo = float(p_actual[0]['Stock_Actual'] or 0) if p_actual else 0
-                                                    
-                                                    nuevo_stock = stock_vivo + dif
-                                                    
-                                                    # Actualizar Stock
-                                                    db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock}).eq("ID_Producto", item['id_producto']).execute()
-                                                    db.table("INVENTARIOS_DETALLE").update({"estado_item": "AJUSTADO"}).eq("id", item['id']).execute()
-                                                    
-                                                    # Opcional: Registrar en auditoría
-                                                    if 'log_auditoria' in globals():
-                                                        log_auditoria(
-                                                            tabla="PRODUCTOS",
-                                                            accion="UPDATE",
-                                                            id_entidad=item['id_producto'],
-                                                            detalles={"operacion": "Ajuste de Inventario", "diferencia_aplicada": dif, "stock_anterior": stock_vivo, "nuevo_stock": nuevo_stock},
-                                                            usuario=st.session_state.get('usuario_actual', 'Admin')
-                                                        )
-                                                    
-                                                    st.success(f"Ajustado: {stock_vivo} ➔ {nuevo_stock}")
-                                                    st.rerun()
+                                                    try:
+                                                        # 1. Asegurar tipo text estricto para la clave
+                                                        id_prod_str = str(item['id_producto']).strip()
+                                                        
+                                                        # 2. Consultar el stock actual en tiempo real en la BD
+                                                        p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod_str).execute().data
+                                                        
+                                                        if not p_actual:
+                                                            st.error(f"No se encontró el producto con ID '{id_prod_str}' en la base de datos.")
+                                                            st.stop()
+                                                        
+                                                        # Convertir a float primero por si viene None o vacio, luego operar
+                                                        stock_vivo = float(p_actual[0]['Stock_Actual'] or 0)
+                                                        dif_float = float(item['diferencia'])
+                                                        
+                                                        # 3. CASTEO ESTRICTO A INT4 (int nativo de Python)
+                                                        # Esto soluciona el APIError de PostgREST
+                                                        nuevo_stock_int = int(round(stock_vivo + dif_float))
+                                                        
+                                                        # 4. Actualizar tabla PRODUCTOS
+                                                        db.table("PRODUCTOS").update({
+                                                            "Stock_Actual": nuevo_stock_int
+                                                        }).eq("ID_Producto", id_prod_str).execute()
+                                                        
+                                                        # 5. Actualizar estado en INVENTARIOS_DETALLE (asegurando entero nativo en la ID del detalle)
+                                                        id_detalle_int = int(item['id'])
+                                                        db.table("INVENTARIOS_DETALLE").update({
+                                                            "estado_item": "AJUSTADO"
+                                                        }).eq("id", id_detalle_int).execute()
+                                                        
+                                                        # 6. Opcional: Auditoría
+                                                        if 'log_auditoria' in globals():
+                                                            log_auditoria(
+                                                                tabla="PRODUCTOS",
+                                                                accion="UPDATE",
+                                                                id_entidad=id_prod_str,
+                                                                detalles={
+                                                                    "operacion": "Ajuste de Inventario",
+                                                                    "diferencia_aplicada": dif_float,
+                                                                    "stock_anterior": stock_vivo,
+                                                                    "nuevo_stock": nuevo_stock_int
+                                                                },
+                                                                usuario=st.session_state.get('usuario_actual', 'Admin')
+                                                            )
+                                                        
+                                                        st.success(f"✅ ¡Ajustado! {int(stock_vivo)} ➔ {nuevo_stock_int}")
+                                                        st.rerun()
+                                                        
+                                                    except Exception as e:
+                                                        st.error(f"Error al aplicar ajuste: {e}")
                                             elif item['estado_item'] == 'AJUSTADO':
                                                 st.caption("✅ Ajustado")
                                             else:
