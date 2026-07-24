@@ -2016,13 +2016,13 @@ else:
         
         st.session_state.df_prod = df_prod.copy()
     
-        # 2. DEFINICIÓN DINÁMICA DE PESTAÑAS SEGÚN ROL
+        # 2. DEFINICIÓN DINÁMICA DE PESTAÑAS SEGÚN ROL (Se agrega "📋 Inventario")
         if st.session_state.rol == "Administrador":
-            tabs = st.tabs(["🔍 Buscar", "➕ Alta", "✏️ Modificar", "🔄 Cambios", "📥 Importar", "✂️ Divisor", "📜 Histórico"])
-            tab_buscar, tab_alta, tab_modificar, tab_cambios, tab_importar, tab_divisor, tab_historico = tabs
+            tabs = st.tabs(["🔍 Buscar", "➕ Alta", "✏️ Modificar", "🔄 Cambios", "✂️ Divisor", "📋 Inventario", "📥 Importar", "📜 Histórico"])
+            tab_buscar, tab_alta, tab_modificar, tab_cambios, tab_divisor, tab_inventario, tab_importar, tab_historico = tabs
         else:
-            tabs = st.tabs(["🔍 Buscar", "🔄 Cambios", "✂️ Divisor"])
-            tab_buscar, tab_cambios, tab_divisor = tabs
+            tabs = st.tabs(["🔍 Buscar", "🔄 Cambios", "✂️ Divisor", "📋 Inventario"])
+            tab_buscar, tab_cambios, tab_divisor, tab_inventario = tabs
             tab_alta, tab_modificar, tab_importar, tab_historico = None, None, None, None
     
         # --- PESTAÑA BUSCAR ---
