@@ -2406,11 +2406,24 @@ else:
                                         
                                     db.table("INVENTARIOS_DETALLE").insert(detalles_insertar).execute()
                                     
+                                    # -------------------------------------------------------------
+                                    # 🧹 LIMPIEZA DE ESTADOS / FORMULARIO
+                                    # -------------------------------------------------------------
+                                    # 1. Borrar de session_state las claves de los inputs de conteo
+                                    for prod_id in conteos_usuario.keys():
+                                        key_input = f"inv_in_{prod_id}"
+                                        if key_input in st.session_state:
+                                            del st.session_state[key_input]
+
+                                    # 2. Si venía de una muestra al azar, la eliminamos
                                     if "muestra_azar" in st.session_state:
-                                        del st.session_state.muestra_azar
-                                        
+                                        del st.session_state["muestra_azar"]
+
                                     st.success("✅ Recuento enviado con éxito al panel de auditoría.")
+                                    
+                                    # 3. Rerun para reiniciar el formulario limpio
                                     st.rerun()
+
                                 except Exception as e:
                                     st.error(f"Error al enviar recuento: {e}")
 
