@@ -2321,24 +2321,51 @@ else:
             with subtab_vendedor if st.session_state.rol == "Administrador" else st.container():
                 st.caption("Efectúe el recuento físico de la mercadería.")
                 
-                # Excluir productos inactivos del conteo
+                # Excluir productos inactivos
                 df_activos = st.session_state.df_prod.copy()
                 if 'Estado' in df_activos.columns:
                     df_activos = df_activos[df_activos['Estado'] != 'INACTIVO']
                 
-                modo_conteo = st.radio("Seleccionar método de recuento:", ["Por Marca", "Muestreo al Azar"], horizontal=True, key="inv_modo")
+                modo_conteo = st.radio(
+                    "Seleccionar método de recuento:", 
+                    ["Por Marca", "Muestreo al Azar"], 
+                    horizontal=True, 
+                    key="inv_modo"
+                )
                 
                 productos_a_contar = pd.DataFrame()
                 parametro_conteo = ""
                 
+                # -------------------------------------------------------------
+                # 1. OPCIÓN POR MARCA (CON OPCIÓN NEUTRA O PLACEHOLDER)
+                # -------------------------------------------------------------
                 if modo_conteo == "Por Marca":
                     marcas_disp = sorted(df_activos['Marca'].dropna().unique().tolist()) if 'Marca' in df_activos.columns else []
-                    marca_sel = st.selectbox("Seleccionar Marca a auditar:", marcas_disp, key="inv_marca_sel")
+                    
+                    # Usamos index=None y placeholder para que arranque deseleccionado
+                    marca_sel = st.selectbox(
+                        "Seleccionar Marca a auditar:", 
+                        options=marcas_disp, 
+                        index=None, 
+                        placeholder="--- Seleccione una Marca ---",
+                        key="inv_marca_sel"
+                    )
+                    
                     if marca_sel:
                         parametro_conteo = marca_sel
                         productos_a_contar = df_activos[df_activos['Marca'] == marca_sel].copy()
+
+                # -------------------------------------------------------------
+                # 2. OPCIÓN MUESTREO AL AZAR
+                # -------------------------------------------------------------
                 else:
-                    cant_items = st.number_input("Cantidad de artículos al azar:", min_value=1, max_value=max(1, len(df_activos)), value=min(10, max(1, len(df_activos))), step=5)
+                    cant_items = st.number_input(
+                        "Cantidad de artículos al azar:", 
+                        min_value=1, 
+                        max_value=max(1, len(df_activos)), 
+                        value=min(10, max(1, len(df_activos))), 
+                        step=5
+                    )
                     parametro_conteo = f"{cant_items} Artículos al azar"
                     
                     if st.button("🎲 Generar Muestra Aleatoria", key="btn_generar_azar"):
@@ -2347,12 +2374,17 @@ else:
                     if "muestra_azar" in st.session_state:
                         productos_a_contar = st.session_state.muestra_azar
 
-                # Formulario de conteo a ciegas
+                # -------------------------------------------------------------
+                # 3. FORMULARIO DE RECUENTO
+                # -------------------------------------------------------------
                 if not productos_a_contar.empty:
                     st.info(f"Mostrando **{len(productos_a_contar)}** productos para la recolección física.")
                     
                     with st.form("form_recuento_inv"):
-                        vendedor_nombre = st.text_input("Nombre del Vendedor / Auditor:", value=st.session_state.get("usuario_actual", ""))
+                        vendedor_nombre = st.text_input(
+                            "Nombre del Vendedor / Auditor:", 
+                            value=st.session_state.get("usuario_actual", "")
+                        )
                         conteos_usuario = {}
                         
                         st.markdown("---")
@@ -2407,21 +2439,25 @@ else:
                                     db.table("INVENTARIOS_DETALLE").insert(detalles_insertar).execute()
                                     
                                     # -------------------------------------------------------------
-                                    # 🧹 LIMPIEZA DE ESTADOS / FORMULARIO
+                                    # 🧹 REINICIO TOTAL DE ESTADOS
                                     # -------------------------------------------------------------
-                                    # 1. Borrar de session_state las claves de los inputs de conteo
+                                    # 1. Limpiar inputs del formulario
                                     for prod_id in conteos_usuario.keys():
                                         key_input = f"inv_in_{prod_id}"
                                         if key_input in st.session_state:
                                             del st.session_state[key_input]
 
-                                    # 2. Si venía de una muestra al azar, la eliminamos
+                                    # 2. Resetear el selector de marcas
+                                    if "inv_marca_sel" in st.session_state:
+                                        st.session_state["inv_marca_sel"] = None
+
+                                    # 3. Limpiar muestra aleatoria (si aplica)
                                     if "muestra_azar" in st.session_state:
                                         del st.session_state["muestra_azar"]
 
                                     st.success("✅ Recuento enviado con éxito al panel de auditoría.")
                                     
-                                    # 3. Rerun para reiniciar el formulario limpio
+                                    # 4. Rerun limpio
                                     st.rerun()
 
                                 except Exception as e:
