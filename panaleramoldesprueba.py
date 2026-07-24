@@ -2669,33 +2669,38 @@ else:
         df_prod = pd.DataFrame(db.table("PRODUCTOS").select("*").execute().data)
         df_prov = pd.DataFrame(db.table("PROVEEDORES").select("*").execute().data)
         
-        # --- BUSCADOR FLEXIBLE ---
+        # --- BUSCADOR Y CONTROLES FLEXIBLES ---
         st.subheader("🔍 Buscar Artículos")
+        
+        # Checkbox opcional para incluir inactivos (por defecto ocultos)
+        mostrar_inactivos = st.checkbox("👁️ Mostrar productos INACTIVOS", value=False, key="chk_inactivos_stock")
         
         # Usamos text_input para escritura libre
         busqueda_texto = st.text_input(
             "Escriba para filtrar por nombre o código:", 
-            placeholder="Ej: babydry, pampers, 779..."
+            placeholder="Ej: babydry, pampers, 779...",
+            key="busqueda_stock"
         )
         
         # --- FILTROS ---
         c1, c2, c3 = st.columns(3)
-        rubros = ["Todos"] + df_prod['Rubro'].unique().tolist()
-        marcas = ["Todos"] + df_prod['Marca'].unique().tolist()
+        rubros = ["Todos"] + [r for r in df_prod['Rubro'].dropna().unique().tolist() if r]
+        marcas = ["Todos"] + [m for m in df_prod['Marca'].dropna().unique().tolist() if m]
+        provs = ["Todos"] + [p for p in df_prov['Razon_Social'].dropna().unique().tolist() if p]
         
-        # Creamos un diccionario {ID_Proveedor: Razon_Social} para cruzar datos si tu tabla PRODUCTOS guarda el ID
-        # Nota: Ajusta si tu tabla PRODUCTOS guarda directamente el nombre o el ID.
-        provs = ["Todos"] + df_prov['Razon_Social'].tolist()
-        
-        filtro_rubro = c1.selectbox("Filtrar por Rubro", rubros)
-        filtro_marca = c2.selectbox("Filtrar por Marca", marcas)
-        filtro_prov = c3.selectbox("Filtrar por Proveedor", provs)
+        filtro_rubro = c1.selectbox("Filtrar por Rubro", rubros, key="filtro_rubro_stock")
+        filtro_marca = c2.selectbox("Filtrar por Marca", marcas, key="filtro_marca_stock")
+        filtro_prov = c3.selectbox("Filtrar por Proveedor", provs, key="filtro_prov_stock")
         
         # Inicializamos la copia para aplicar filtros consecutivos
         df_f = df_prod.copy()
         
         # --- FILTRADO ACUMULATIVO (CONSECUTIVO) ---
         
+        # Filtro 0: Productos Inactivos
+        if 'Estado' in df_f.columns and not mostrar_inactivos:
+            df_f = df_f[df_f['Estado'] != 'INACTIVO']
+
         # Filtro 1: Búsqueda por texto (si hay algo escrito)
         if busqueda_texto:
             busqueda_texto = busqueda_texto.lower()
@@ -2711,24 +2716,28 @@ else:
         if filtro_marca != "Todos":
             df_f = df_f[df_f['Marca'] == filtro_marca]
             
-        # Filtro 4: Proveedor (Mapeando la Razón Social seleccionada al ID o columna correspondiente)
+        # Filtro 4: Proveedor
         if filtro_prov != "Todos":
-            # Si tu tabla PRODUCTOS usa directamente el nombre del proveedor en una columna 'Proveedor' o 'Razon_Social':
             if 'Proveedor' in df_f.columns:
                 df_f = df_f[df_f['Proveedor'] == filtro_prov]
             elif 'ID_Proveedor' in df_f.columns:
-                # Buscamos el ID que corresponde a esa Razón Social
                 prov_sel = df_prov[df_prov['Razon_Social'] == filtro_prov]
                 if not prov_sel.empty:
                     id_prov_buscado = prov_sel.iloc[0]['ID_Proveedor']
                     df_f = df_f[df_f['ID_Proveedor'] == id_prov_buscado]
         
         # 2. Cálculos en tiempo real
+        # Aseguramos tipos numéricos por seguridad
+        df_f['Stock_Actual'] = pd.to_numeric(df_f['Stock_Actual'], errors='coerce').fillna(0)
+        df_f['Stock_Min'] = pd.to_numeric(df_f['Stock_Min'], errors='coerce').fillna(0)
+        df_f['Stock_Max'] = pd.to_numeric(df_f['Stock_Max'], errors='coerce').fillna(0)
+
         df_f['Faltante_Min'] = (df_f['Stock_Min'] - df_f['Stock_Actual']).clip(lower=0)
         df_f['Faltante_Max'] = (df_f['Stock_Max'] - df_f['Stock_Actual']).clip(lower=0)
         
         # Mostrar tabla
-        st.dataframe(df_f[['Nombre', 'Stock_Actual', 'Stock_Min', 'Stock_Max', 'Faltante_Min', 'Faltante_Max']], width='stretch')
+        cols_mostrar = ['Nombre', 'Stock_Actual', 'Stock_Min', 'Stock_Max', 'Faltante_Min', 'Faltante_Max']
+        st.dataframe(df_f[[c for c in cols_mostrar if c in df_f.columns]], use_container_width=True, hide_index=True)
         
         # 3. Acciones (Exportación)
         col_exp1, col_exp2 = st.columns(2)
@@ -2750,12 +2759,16 @@ else:
         if col_exp2.button("💬 Generar Resumen para WhatsApp"):
             mensaje = "🛒 *Pedido Sugerido (Faltantes a Mínimo):*\n"
             faltantes = df_f[df_f['Faltante_Min'] > 0]
-            for _, item in faltantes.iterrows():
-                mensaje += f"- {item['Nombre']}: Faltan {item['Faltante_Min']}\n"
+            if faltantes.empty:
+                mensaje += " No hay productos con faltantes según el stock mínimo actual."
+            else:
+                for _, item in faltantes.iterrows():
+                    mensaje += f"- {item['Nombre']}: Faltan {int(item['Faltante_Min'])}\n"
             
-            st.text_area("Copia este mensaje para WhatsApp:", value=mensaje)
+            st.text_area("Copia este mensaje para WhatsApp:", value=mensaje, height=200)
 
         # 4. Botón de Mantenimiento
+        st.divider()
         if st.button("🔄 RECALCULAR STOCK MÍNIMO/MÁXIMO"):
             with st.spinner("Calculando rotación de 60 días..."):
                 if calcular_y_actualizar_stock_automatico():
