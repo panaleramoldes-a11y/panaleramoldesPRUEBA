@@ -2337,12 +2337,18 @@ else:
                 parametro_conteo = ""
                 
                 # -------------------------------------------------------------
-                # 1. OPCIÓN POR MARCA (CON OPCIÓN NEUTRA O PLACEHOLDER)
+                # MANEJO DE RESETEO LIMPIO DE WIDGETS
+                # -------------------------------------------------------------
+                if st.session_state.get("reset_inventario", False):
+                    st.session_state["inv_marca_sel"] = None
+                    st.session_state["reset_inventario"] = False
+
+                # -------------------------------------------------------------
+                # 1. OPCIÓN POR MARCA
                 # -------------------------------------------------------------
                 if modo_conteo == "Por Marca":
                     marcas_disp = sorted(df_activos['Marca'].dropna().unique().tolist()) if 'Marca' in df_activos.columns else []
                     
-                    # Usamos index=None y placeholder para que arranque deseleccionado
                     marca_sel = st.selectbox(
                         "Seleccionar Marca a auditar:", 
                         options=marcas_disp, 
@@ -2439,25 +2445,22 @@ else:
                                     db.table("INVENTARIOS_DETALLE").insert(detalles_insertar).execute()
                                     
                                     # -------------------------------------------------------------
-                                    # 🧹 REINICIO TOTAL DE ESTADOS
+                                    # 🧹 CONFIGURACIÓN DE RESETEO POST-ENVÍO
                                     # -------------------------------------------------------------
-                                    # 1. Limpiar inputs del formulario
+                                    # Limpiar keys de inputs
                                     for prod_id in conteos_usuario.keys():
                                         key_input = f"inv_in_{prod_id}"
                                         if key_input in st.session_state:
                                             del st.session_state[key_input]
 
-                                    # 2. Resetear el selector de marcas
-                                    if "inv_marca_sel" in st.session_state:
-                                        st.session_state["inv_marca_sel"] = None
-
-                                    # 3. Limpiar muestra aleatoria (si aplica)
+                                    # Limpiar muestra aleatoria si existe
                                     if "muestra_azar" in st.session_state:
                                         del st.session_state["muestra_azar"]
 
+                                    # Activar la bandera de reset para el selectbox
+                                    st.session_state["reset_inventario"] = True
+
                                     st.success("✅ Recuento enviado con éxito al panel de auditoría.")
-                                    
-                                    # 4. Rerun limpio
                                     st.rerun()
 
                                 except Exception as e:
