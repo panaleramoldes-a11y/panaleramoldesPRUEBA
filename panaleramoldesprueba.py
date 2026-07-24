@@ -2413,54 +2413,66 @@ else:
                                 st.error("Por favor ingrese el nombre antes de enviar.")
                             else:
                                 try:
-                                    # 1. Cabecera
-                                    res_cabecera = db.table("INVENTARIOS_CABECERA").insert({
-                                        "tipo": "MARCA" if modo_conteo == "Por Marca" else "AZAR",
-                                        "parametro": parametro_conteo,
-                                        "vendedor": vendedor_nombre,
-                                        "estado": "ENVIADO"
-                                    }).execute()
-                                    
-                                    id_inv = res_cabecera.data[0]['id']
-                                    
-                                    # 2. Consultar Stock_Actual en tiempo real
+                                    # 1. Consultar Stock_Actual y Precio_Costo en tiempo real
                                     ids_prod = list(conteos_usuario.keys())
-                                    df_live = pd.DataFrame(db.table("PRODUCTOS").select("ID_Producto, Stock_Actual").in_("ID_Producto", ids_prod).execute().data)
-                                    stock_map = dict(zip(df_live['ID_Producto'].astype(str), df_live['Stock_Actual']))
+                                    res_prods = db.table("PRODUCTOS").select("ID_Producto, Stock_Actual, Precio_Costo").in_("ID_Producto", ids_prod).execute().data
+                                    df_live = pd.DataFrame(res_prods)
                                     
-                                    # 3. Preparar Detalle (Snapshot)
-                                    detalles_insertar = []
+                                    # Mapeos rápidos para cálculo
+                                    stock_map = dict(zip(df_live['ID_Producto'].astype(str), df_live['Stock_Actual']))
+                                    costo_map = dict(zip(df_live['ID_Producto'].astype(str), df_live['Precio_Costo']))
+
+                                    # 2. Calcular Impacto Financiero Total Estimado
+                                    impacto_financiero_total = 0.0
+                                    detalles_insertar_temp = []
+
                                     for prod_id, cont_cant in conteos_usuario.items():
                                         stock_snap = float(stock_map.get(str(prod_id), 0) or 0)
-                                        dif = cont_cant - stock_snap
-                                        detalles_insertar.append({
-                                            "inventario_id": id_inv,
+                                        costo_unitario = float(costo_map.get(str(prod_id), 0) or 0)
+                                        
+                                        dif = float(cont_cant) - stock_snap
+                                        impacto_item = dif * costo_unitario
+                                        impacto_financiero_total += impacto_item
+
+                                        detalles_insertar_temp.append({
                                             "id_producto": str(prod_id),
                                             "stock_sistema_snap": stock_snap,
                                             "stock_contado": float(cont_cant),
                                             "diferencia": dif,
                                             "estado_item": "PENDIENTE"
                                         })
-                                        
-                                    db.table("INVENTARIOS_DETALLE").insert(detalles_insertar).execute()
+
+                                    # 3. Insertar Cabecera (INCLUYENDO impactofinanciero)
+                                    res_cabecera = db.table("INVENTARIOS_CABECERA").insert({
+                                        "tipo": "MARCA" if modo_conteo == "Por Marca" else "AZAR",
+                                        "parametro": parametro_conteo,
+                                        "vendedor": vendedor_nombre,
+                                        "estado": "ENVIADO",
+                                        "impactofinanciero": round(impacto_financiero_total, 2)
+                                    }).execute()
                                     
+                                    id_inv = res_cabecera.data[0]['id']
+
+                                    # 4. Asignar inventario_id a los detalles e Insertar
+                                    for det in detalles_insertar_temp:
+                                        det["inventario_id"] = id_inv
+
+                                    db.table("INVENTARIOS_DETALLE").insert(detalles_insertar_temp).execute()
+
                                     # -------------------------------------------------------------
-                                    # 🧹 CONFIGURACIÓN DE RESETEO POST-ENVÍO
+                                    # 🧹 RESETEO POST-ENVÍO
                                     # -------------------------------------------------------------
-                                    # Limpiar keys de inputs
                                     for prod_id in conteos_usuario.keys():
                                         key_input = f"inv_in_{prod_id}"
                                         if key_input in st.session_state:
                                             del st.session_state[key_input]
 
-                                    # Limpiar muestra aleatoria si existe
                                     if "muestra_azar" in st.session_state:
                                         del st.session_state["muestra_azar"]
 
-                                    # Activar la bandera de reset para el selectbox
                                     st.session_state["reset_inventario"] = True
 
-                                    st.success("✅ Recuento enviado con éxito al panel de auditoría.")
+                                    st.success(f"✅ Recuento enviado. Impacto estimado: ${impacto_financiero_total:,.2f}")
                                     st.rerun()
 
                                 except Exception as e:
