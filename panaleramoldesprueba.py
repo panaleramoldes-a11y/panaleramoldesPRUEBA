@@ -939,6 +939,25 @@ else:
                 
         except Exception as e:
             st.error(f"Error al actualizar estados: {e}")
+
+    @st.cache_data(ttl=600)  # Guarda en caché por 10 minutos para evitar consultas innecesarias
+    def cargar_puntos_reparto():
+        """
+        Recupera los puntos de reparto guardados en Supabase.
+        Retorna un diccionario: {"Nombre del punto": (lat, lng), ...}
+        """
+        try:
+            data = db.table("PUNTOS_REPARTO").select("*").execute().data
+            puntos = {}
+            for p in data:
+                puntos[p['nombre']] = (float(p['latitud']), float(p['longitud']))
+            return puntos
+        except Exception as e:
+            # Fallback en caso de fallo de conexión
+            return {
+                "Pañalera (Local)": (-24.7937349, -65.4276967),
+                "Depósito Norte": (-24.7684086, -65.3858943)
+            }
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
@@ -4011,11 +4030,14 @@ else:
     # =====================================================================
     elif menu == "🚚 Gestión de Repartos":
         
+        # Cargar puntos guardados desde Supabase
+        puntos_db = cargar_puntos_reparto()
+    
         # Obtenemos ventas pendientes de reparto
         ventas_reparto = db.table("VENTAS_PENDIENTES") \
-                        .select("*") \
-                        .eq("Forma_Entrega", "Reparto") \
-                        .execute().data
+                            .select("*") \
+                            .eq("Forma_Entrega", "Reparto") \
+                            .execute().data
         
         if not ventas_reparto:
             st.info("No hay repartos pendientes.")
@@ -4024,23 +4046,15 @@ else:
             df['Fecha_Entrega'] = pd.to_datetime(df['Fecha_Entrega']).dt.date
             df = df.sort_values(by='Fecha_Entrega')
             
-            # 1. Calculamos el total general
             total_general = len(df)
-            
-            # 2. Título con el número integrado entre paréntesis
             st.markdown(f"## 🗺️ Planificación de Repartos ({total_general})")
             st.divider()
             
-            # Recuperamos el rol del usuario actual
             rol_usuario = st.session_state.get('rol', 'Vendedor')
             
-            # 3. Agrupamos por fecha
             for fecha, grupo in df.groupby('Fecha_Entrega'):
-                # Título del día con su propio contador entre paréntesis
                 st.subheader(f"📅 {fecha} ({len(grupo)})")
                 
-                # --- CONTROL DE ACCESO POR ROL ---
-                # Solo el Administrador puede configurar el origen/destino y generar el diagrama
                 if rol_usuario == "Administrador":
                     with st.expander(f"⚙️ Configurar Origen y Destino para {fecha}"):
                         c_origen, c_destino = st.columns(2)
@@ -4048,11 +4062,14 @@ else:
                         # --- CONFIGURACIÓN ORIGEN ---
                         with c_origen:
                             st.markdown("**📍 Punto de Partida**")
-                            opciones_origen = {
-                                "Pañalera (Local)": (-24.793734909695726, -65.42769672376464), 
-                                "Otro (Link de Maps)": "link"
-                            }
-                            sel_origen = st.selectbox("¿Desde dónde sale el reparto?", list(opciones_origen.keys()), key=f"sel_orig_{fecha}")
+                            # Armamos las opciones mezclando los puntos de la BD + la opción de Link
+                            opciones_origen = {**puntos_db, "Otro (Link de Maps)": "link"}
+                            
+                            sel_origen = st.selectbox(
+                                "¿Desde dónde sale el reparto?", 
+                                list(opciones_origen.keys()), 
+                                key=f"sel_orig_{fecha}"
+                            )
                             
                             if sel_origen == "Otro (Link de Maps)":
                                 link_orig = st.text_input("Pega el link de origen:", key=f"link_orig_{fecha}")
@@ -4063,24 +4080,26 @@ else:
                                         punto_partida = coords_orig
                                     else:
                                         st.error("No se pudo leer el link. Se usará el Local por defecto.")
-                                        punto_partida = opciones_origen["Pañalera (Local)"]
+                                        punto_partida = list(puntos_db.values())[0]
                                 else:
-                                    punto_partida = opciones_origen["Pañalera (Local)"]
+                                    punto_partida = list(puntos_db.values())[0]
                             else:
                                 punto_partida = opciones_origen[sel_origen]
-            
+    
                         # --- CONFIGURACIÓN DESTINO FINAL ---
                         with c_destino:
                             st.markdown("**🏁 Punto de Finalización**")
-                            # COORDENADAS DE TU CASA (Asegúrate de reemplazarlas si son distintas):
-                            coords_casa = (-24.8100, -65.4250) 
+                            opciones_destino = {**puntos_db, "Otro (Link de Maps)": "link"}
                             
-                            opciones_destino = {
-                                "Mi Casa": coords_casa,
-                                "Pañalera (Local)": (-24.793734909695726, -65.42769672376464),
-                                "Otro (Link de Maps)": "link"
-                            }
-                            sel_destino = st.selectbox("¿Dónde termina la ruta?", list(opciones_destino.keys()), key=f"sel_dest_{fecha}")
+                            # Buscamos 'Depósito Norte' para preseleccionarlo por defecto
+                            index_def = list(opciones_destino.keys()).index("Depósito Norte") if "Depósito Norte" in opciones_destino else 0
+    
+                            sel_destino = st.selectbox(
+                                "¿Dónde termina la ruta?", 
+                                list(opciones_destino.keys()), 
+                                index=index_def,
+                                key=f"sel_dest_{fecha}"
+                            )
                             
                             if sel_destino == "Otro (Link de Maps)":
                                 link_dest = st.text_input("Pega el link de destino:", key=f"link_dest_{fecha}")
@@ -4090,28 +4109,27 @@ else:
                                         st.success(f"Destino: {coords_dest}")
                                         punto_llegada = coords_dest
                                     else:
-                                        st.error("No se pudo leer el link. Se usará Casa por defecto.")
-                                        punto_llegada = coords_casa
+                                        st.error("No se pudo leer el link. Se usará Depósito Norte por defecto.")
+                                        punto_llegada = puntos_db.get("Depósito Norte", list(puntos_db.values())[0])
                                 else:
-                                    punto_llegada = coords_casa
+                                    punto_llegada = puntos_db.get("Depósito Norte", list(puntos_db.values())[0])
                             else:
                                 punto_llegada = opciones_destino[sel_destino]
-            
+    
                     # Botón de optimización
                     if st.button(f"🚀 Generar Diagrama Optimizado para {fecha}", key=f"btn_{fecha}"):
                         st.session_state[f"mostrar_diagrama_{fecha}"] = True
                         st.session_state[f"p_partida_{fecha}"] = punto_partida
                         st.session_state[f"p_llegada_{fecha}"] = punto_llegada
                     
-                    # Si la bandera es True, mostramos el mapa interactivo pasando ambos puntos
+                    # Si la bandera es True, mostramos el mapa interactivo
                     if st.session_state.get(f"mostrar_diagrama_{fecha}", False):
-                        # Recuperamos los puntos guardados para evitar perderlos en re-runs
                         p_partida = st.session_state.get(f"p_partida_{fecha}", punto_partida)
                         p_llegada = st.session_state.get(f"p_llegada_{fecha}", punto_llegada)
                         
                         generar_diagrama_optimizada(grupo, p_partida, fecha, punto_destino=p_llegada)
                 
-                # 3. Iteramos sobre los repartos de ESE día (Visible para TODOS los roles)
+                # Iteramos sobre los repartos del día
                 for _, v in grupo.iterrows():
                     with st.container(border=True):
                         c1, c2, c3 = st.columns([2, 2, 1])
