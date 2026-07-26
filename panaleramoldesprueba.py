@@ -576,9 +576,15 @@ else:
     
         return ruta_ordenada
     
-    def generar_diagrama_optimizada(grupo_repartos, punto_origen, fecha):
+    def generar_diagrama_optimizada(grupo_repartos, punto_origen, fecha, punto_destino=None):
         repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
-        ruta_optima = optimizar_ruta(punto_origen, repartos_validos.to_dict('records'))
+        
+        # Pasamos el punto_destino a la optimización de OR-Tools
+        ruta_optima = optimizar_ruta(
+            origen=punto_origen, 
+            destinos=repartos_validos.to_dict('records'), 
+            destino_final=punto_destino
+        )
         
         # 2. Inicializamos el estado del orden
         if f"orden_{fecha}" not in st.session_state:
@@ -4016,32 +4022,76 @@ else:
                 st.subheader(f"📅 {fecha} ({len(grupo)})")
                 
                 # --- CONTROL DE ACCESO POR ROL ---
-                # Solo el Administrador puede configurar el origen y generar el diagrama optimizado
+                # Solo el Administrador puede configurar el origen/destino y generar el diagrama
                 if rol_usuario == "Administrador":
-                    with st.expander(f"⚙️ Configurar Origen para {fecha}"):
-                        opciones = {"Pañalera (Local)": (-24.793734909695726, -65.42769672376464), "Otro (Link de Maps)": "link"}
-                        sel_origen = st.selectbox("¿Desde dónde sale el reparto?", list(opciones.keys()), key=f"sel_{fecha}")
+                    with st.expander(f"⚙️ Configurar Origen y Destino para {fecha}"):
+                        c_origen, c_destino = st.columns(2)
                         
-                        if sel_origen == "Otro (Link de Maps)":
-                            link_maps = st.text_input("Pega el link de Google Maps aquí:")
-                            if link_maps:
-                                coords = extraer_coords_desde_link(link_maps)
-                                if coords:
-                                    st.success(f"Coordenadas detectadas: {coords}")
-                                    punto_partida = coords
+                        # --- CONFIGURACIÓN ORIGEN ---
+                        with c_origen:
+                            st.markdown("**📍 Punto de Partida**")
+                            opciones_origen = {
+                                "Pañalera (Local)": (-24.793734909695726, -65.42769672376464), 
+                                "Otro (Link de Maps)": "link"
+                            }
+                            sel_origen = st.selectbox("¿Desde dónde sale el reparto?", list(opciones_origen.keys()), key=f"sel_orig_{fecha}")
+                            
+                            if sel_origen == "Otro (Link de Maps)":
+                                link_orig = st.text_input("Pega el link de origen:", key=f"link_orig_{fecha}")
+                                if link_orig:
+                                    coords_orig = extraer_coords_desde_link(link_orig)
+                                    if coords_orig:
+                                        st.success(f"Origen: {coords_orig}")
+                                        punto_partida = coords_orig
+                                    else:
+                                        st.error("No se pudo leer el link. Se usará el Local por defecto.")
+                                        punto_partida = opciones_origen["Pañalera (Local)"]
                                 else:
-                                    st.error("No pude leer el link. Asegúrate de copiarlo desde el botón 'Compartir' de Google Maps.")
-                                    punto_partida = (-24.7825, -65.4111) # Default
-                        else:
-                            punto_partida = opciones[sel_origen]
-
+                                    punto_partida = opciones_origen["Pañalera (Local)"]
+                            else:
+                                punto_partida = opciones_origen[sel_origen]
+            
+                        # --- CONFIGURACIÓN DESTINO FINAL ---
+                        with c_destino:
+                            st.markdown("**🏁 Punto de Finalización**")
+                            # COORDENADAS DE TU CASA (Asegúrate de reemplazarlas si son distintas):
+                            coords_casa = (-24.8100, -65.4250) 
+                            
+                            opciones_destino = {
+                                "Mi Casa": coords_casa,
+                                "Pañalera (Local)": (-24.793734909695726, -65.42769672376464),
+                                "Otro (Link de Maps)": "link"
+                            }
+                            sel_destino = st.selectbox("¿Dónde termina la ruta?", list(opciones_destino.keys()), key=f"sel_dest_{fecha}")
+                            
+                            if sel_destino == "Otro (Link de Maps)":
+                                link_dest = st.text_input("Pega el link de destino:", key=f"link_dest_{fecha}")
+                                if link_dest:
+                                    coords_dest = extraer_coords_desde_link(link_dest)
+                                    if coords_dest:
+                                        st.success(f"Destino: {coords_dest}")
+                                        punto_llegada = coords_dest
+                                    else:
+                                        st.error("No se pudo leer el link. Se usará Casa por defecto.")
+                                        punto_llegada = coords_casa
+                                else:
+                                    punto_llegada = coords_casa
+                            else:
+                                punto_llegada = opciones_destino[sel_destino]
+            
                     # Botón de optimización
                     if st.button(f"🚀 Generar Diagrama Optimizado para {fecha}", key=f"btn_{fecha}"):
                         st.session_state[f"mostrar_diagrama_{fecha}"] = True
+                        st.session_state[f"p_partida_{fecha}"] = punto_partida
+                        st.session_state[f"p_llegada_{fecha}"] = punto_llegada
                     
-                    # Si la bandera es True, mostramos el mapa interactivo
+                    # Si la bandera es True, mostramos el mapa interactivo pasando ambos puntos
                     if st.session_state.get(f"mostrar_diagrama_{fecha}", False):
-                        generar_diagrama_optimizada(grupo, punto_partida, fecha)
+                        # Recuperamos los puntos guardados para evitar perderlos en re-runs
+                        p_partida = st.session_state.get(f"p_partida_{fecha}", punto_partida)
+                        p_llegada = st.session_state.get(f"p_llegada_{fecha}", punto_llegada)
+                        
+                        generar_diagrama_optimizada(grupo, p_partida, fecha, punto_destino=p_llegada)
                 
                 # 3. Iteramos sobre los repartos de ESE día (Visible para TODOS los roles)
                 for _, v in grupo.iterrows():
@@ -4053,7 +4103,6 @@ else:
                         if v.get('Link_Maps_Entrega'):
                             c3.link_button("📍 Maps", v['Link_Maps_Entrega'])
                         
-                        # 👈 MOSTRAR OBSERVACIÓN SOLO SI TIENE UN TEXTO VÁLIDO
                         obs_entrega = v.get('Observaciones', '')
                         if pd.notna(obs_entrega) and str(obs_entrega).strip() and str(obs_entrega).strip().lower() not in ["nan", "none"]:
                             st.info(f"📝 **Nota para el repartidor:** {obs_entrega}", icon="📌")
