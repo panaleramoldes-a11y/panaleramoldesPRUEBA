@@ -940,24 +940,21 @@ else:
         except Exception as e:
             st.error(f"Error al actualizar estados: {e}")
 
-    @st.cache_data(ttl=600)  # Guarda en caché por 10 minutos para evitar consultas innecesarias
+    @st.cache_data(ttl=600)
     def cargar_puntos_reparto():
         """
         Recupera los puntos de reparto guardados en Supabase.
         Retorna un diccionario: {"Nombre del punto": (lat, lng), ...}
         """
         try:
-            data = db.table("PUNTOS_REPARTO").select("*").execute().data
+            data = db.table("puntos_reparto").select("*").execute().data
             puntos = {}
             for p in data:
                 puntos[p['nombre']] = (float(p['latitud']), float(p['longitud']))
             return puntos
         except Exception as e:
-            # Fallback en caso de fallo de conexión
-            return {
-                "Pañalera (Local)": (-24.7937349, -65.4276967),
-                "Depósito Norte": (-24.7684086, -65.3858943)
-            }
+            st.error(f"Error al cargar puntos de reparto desde la base de datos: {e}")
+            return {}
     
     # --- CONFIGURACIÓN ESTÉTICA ---
     st.set_page_config(page_title="Pañalera Moldes - ERP", layout="wide")
