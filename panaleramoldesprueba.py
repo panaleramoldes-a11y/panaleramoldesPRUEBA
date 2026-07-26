@@ -4088,9 +4088,13 @@ else:
                             st.markdown("**🏁 Punto de Finalización**")
                             opciones_destino = {**puntos_db, "Otro (Link de Maps)": "link"}
                             
-                            # Buscamos 'Depósito Norte' para preseleccionarlo por defecto
-                            index_def = list(opciones_destino.keys()).index("Depósito Norte") if "Depósito Norte" in opciones_destino else 0
-    
+                            # 1. Definimos dinámicamente el nombre y las coordenadas del punto por defecto (primer punto de la BD)
+                            nombre_defecto = list(puntos_db.keys())[0] if puntos_db else "Punto Principal"
+                            coords_defecto = list(puntos_db.values())[0] if puntos_db else None
+                        
+                            # Preseleccionamos por defecto la primera opción de la BD (índice 0)
+                            index_def = 0
+                        
                             sel_destino = st.selectbox(
                                 "¿Dónde termina la ruta?", 
                                 list(opciones_destino.keys()), 
@@ -4106,10 +4110,11 @@ else:
                                         st.success(f"Destino: {coords_dest}")
                                         punto_llegada = coords_dest
                                     else:
-                                        st.error("No se pudo leer el link. Se usará Depósito Norte por defecto.")
-                                        punto_llegada = puntos_db.get("Depósito Norte", list(puntos_db.values())[0])
+                                        # 2. Mensaje y fallback totalmente dinámicos
+                                        st.error(f"No se pudo leer el link. Se usará {nombre_defecto} por defecto.")
+                                        punto_llegada = coords_defecto
                                 else:
-                                    punto_llegada = puntos_db.get("Depósito Norte", list(puntos_db.values())[0])
+                                    punto_llegada = coords_defecto
                             else:
                                 punto_llegada = opciones_destino[sel_destino]
     
