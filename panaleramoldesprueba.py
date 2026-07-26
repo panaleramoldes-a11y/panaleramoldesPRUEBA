@@ -9,6 +9,10 @@ import json
 import pydeck as pdk
 import uuid
 import os
+import numpy as np
+from math import radians, cos, sin, asin, sqrt
+from ortools.constraint_solver import routing_enums_pb2
+from ortools.constraint_solver import pywrapcp
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -482,7 +486,6 @@ else:
             url_final = response.url
             
             # Buscamos patrones de coordenadas en la URL (ej: /@lat,lng)
-            # Esto busca números decimales separados por coma después de un @
             coordenadas = re.findall(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url_final)
             
             if coordenadas:
@@ -490,37 +493,89 @@ else:
         except:
             return None, None
         return None, None
-
-    def calcular_distancia(coord1, coord2):
-        # Fórmula de Haversine para calcular distancia en línea recta entre dos puntos
-        lat1, lon1 = coord1
-        lat2, lon2 = coord2
-        R = 6371  # Radio de la tierra en km
-        dlat = math.radians(lat2 - lat1)
-        dlon = math.radians(lon2 - lon1)
-        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-        return R * c
+    
+    def calcular_distancia_haversine(p1, p2):
+        """Calcula la distancia en km entre dos puntos (lat, lng)"""
+        lat1, lon1 = p1
+        lat2, lon2 = p2
+        R = 6371.0  # Radio terrestre en km
+        
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+        return R * (2 * asin(sqrt(a)))
     
     def optimizar_ruta(origen, destinos):
         """
-        Ordena los destinos usando el algoritmo del 'vecino más cercano'
-        origen: (lat, lng)
-        destinos: lista de diccionarios con {'Cliente': '...', 'Latitud': x, 'Longitud': y}
+        Optimiza la ruta global usando Google OR-Tools.
+        origen: tuple (lat, lng) o dict con 'Latitud' y 'Longitud'
+        destinos: lista de dicts [{'Cliente': '...', 'Latitud': x, 'Longitud': y}, ...]
         """
+        if not destinos:
+            return []
+    
+        # Extraer coordenadas de origen según el tipo de dato recibido
+        if isinstance(origen, (tuple, list)):
+            lat_origen, lng_origen = float(origen[0]), float(origen[1])
+        elif isinstance(origen, dict):
+            lat_origen, lng_origen = float(origen.get('Latitud', 0)), float(origen.get('Longitud', 0))
+        else:
+            return destinos
+    
+        # 1. Unificar todos los puntos (Índice 0 = Depósito/Origen)
+        puntos = [{'Latitud': lat_origen, 'Longitud': lng_origen}] + destinos
+        n_puntos = len(puntos)
+    
+        # 2. Matriz de distancias (en metros)
+        matriz_distancias = np.zeros((n_puntos, n_puntos), dtype=int)
+        for i in range(n_puntos):
+            for j in range(n_puntos):
+                if i != j:
+                    p1 = (puntos[i]['Latitud'], puntos[i]['Longitud'])
+                    p2 = (puntos[j]['Latitud'], puntos[j]['Longitud'])
+                    dist_km = calcular_distancia_haversine(p1, p2)
+                    matriz_distancias[i][j] = int(dist_km * 1000)
+    
+        # 3. Configuración del modelo de OR-Tools
+        manager = pywrapcp.RoutingIndexManager(n_puntos, 1, 0) # 1 vehículo, inicia en nodo 0
+        routing = pywrapcp.RoutingModel(manager)
+    
+        def callback_distancia(from_index, to_index):
+            from_node = manager.IndexToNode(from_index)
+            to_node = manager.IndexToNode(to_index)
+            return matriz_distancias[from_node][to_node]
+    
+        transit_callback_index = routing.RegisterTransitCallback(callback_distancia)
+        routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+    
+        # 4. Búsqueda Meta-heurística
+        search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+        search_parameters.first_solution_strategy = (
+            routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+        )
+        search_parameters.local_search_metaheuristic = (
+            routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+        )
+        search_parameters.time_limit.seconds = 2  # Tiempo límite de cálculo
+    
+        # 5. Resolver y retornar orden
+        solucion = routing.SolveWithParameters(search_parameters)
+    
         ruta_ordenada = []
-        pendientes = destinos.copy()
-        actual = origen
-        
-        while pendientes:
-            # Busca el destino más cercano al punto actual
-            mas_cercano = min(pendientes, key=lambda p: calcular_distancia(actual, (p['Latitud'], p['Longitud'])))
-            ruta_ordenada.append(mas_cercano)
-            actual = (mas_cercano['Latitud'], mas_cercano['Longitud'])
-            pendientes.remove(mas_cercano)
-            
+        if solucion:
+            index = routing.Start(0)
+            while not routing.IsEnd(index):
+                node = manager.IndexToNode(index)
+                if node != 0:  # Omitimos el origen para retornar solo clientes
+                    ruta_ordenada.append(destinos[node - 1])
+                index = solucion.Value(routing.NextVar(index))
+        else:
+            # Fallback de seguridad: retorna el orden original si no halla solución
+            ruta_ordenada = destinos.copy()
+    
         return ruta_ordenada
-
+    
     def generar_diagrama_optimizada(grupo_repartos, punto_origen, fecha):
         repartos_validos = grupo_repartos.dropna(subset=['Latitud', 'Longitud'])
         ruta_optima = optimizar_ruta(punto_origen, repartos_validos.to_dict('records'))
@@ -618,7 +673,7 @@ else:
         
         st.divider()
         st.text_area("Selecciona y copia:", value=texto_whatsapp, height=200)
-
+    
     def extraer_coords_desde_link(link):
         # Busca el patrón @-XX.XXXX,-YY.YYYY en el link
         match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', link)
