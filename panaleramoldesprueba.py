@@ -506,28 +506,40 @@ else:
         a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
         return R * (2 * asin(sqrt(a)))
     
-    def optimizar_ruta(origen, destinos):
+    def optimizar_ruta(origen, destinos, destino_final=None):
         """
-        Optimiza la ruta global usando Google OR-Tools.
-        origen: tuple (lat, lng) o dict con 'Latitud' y 'Longitud'
+        Optimiza la ruta global usando Google OR-Tools entre un origen y un destino final.
+        origen: tuple (lat, lng)
         destinos: lista de dicts [{'Cliente': '...', 'Latitud': x, 'Longitud': y}, ...]
+        destino_final: tuple (lat, lng) opcional para el punto donde finaliza el recorrido.
         """
         if not destinos:
             return []
     
-        # Extraer coordenadas de origen según el tipo de dato recibido
-        if isinstance(origen, (tuple, list)):
-            lat_origen, lng_origen = float(origen[0]), float(origen[1])
-        elif isinstance(origen, dict):
-            lat_origen, lng_origen = float(origen.get('Latitud', 0)), float(origen.get('Longitud', 0))
-        else:
-            return destinos
+        def extraer_coords(p):
+            if isinstance(p, (tuple, list)):
+                return float(p[0]), float(p[1])
+            elif isinstance(p, dict):
+                return float(p.get('Latitud', 0)), float(p.get('Longitud', 0))
+            return 0.0, 0.0
     
-        # 1. Unificar todos los puntos (Índice 0 = Depósito/Origen)
-        puntos = [{'Latitud': lat_origen, 'Longitud': lng_origen}] + destinos
+        lat_origen, lng_origen = extraer_coords(origen)
+    
+        # 1. Construir la lista de puntos
+        # Puntos: [0: Origen] + [1..N: Entregas] (+ [N+1: Destino Final] si existe)
+        tiene_destino_final = destino_final is not None
+        
+        puntos = [{'Latitud': lat_origen, 'Longitud': lng_origen}] + list(destinos)
+        
+        if tiene_destino_final:
+            lat_fin, lng_fin = extraer_coords(destino_final)
+            puntos.append({'Latitud': lat_fin, 'Longitud': lng_fin})
+    
         n_puntos = len(puntos)
+        idx_inicio = 0
+        idx_fin = n_puntos - 1 if tiene_destino_final else None
     
-        # 2. Matriz de distancias (en metros)
+        # 2. Construir la matriz de distancias
         matriz_distancias = np.zeros((n_puntos, n_puntos), dtype=int)
         for i in range(n_puntos):
             for j in range(n_puntos):
@@ -537,8 +549,14 @@ else:
                     dist_km = calcular_distancia_haversine(p1, p2)
                     matriz_distancias[i][j] = int(dist_km * 1000)
     
-        # 3. Configuración del modelo de OR-Tools
-        manager = pywrapcp.RoutingIndexManager(n_puntos, 1, 0) # 1 vehículo, inicia en nodo 0
+        # 3. Configurar OR-Tools
+        if tiene_destino_final:
+            # Asigna inicio en 0 y final en la última posición (destino_final)
+            manager = pywrapcp.RoutingIndexManager(n_puntos, 1, [idx_inicio], [idx_fin])
+        else:
+            # Comienza en 0 y termina en cualquier último cliente
+            manager = pywrapcp.RoutingIndexManager(n_puntos, 1, idx_inicio)
+    
         routing = pywrapcp.RoutingModel(manager)
     
         def callback_distancia(from_index, to_index):
@@ -549,7 +567,7 @@ else:
         transit_callback_index = routing.RegisterTransitCallback(callback_distancia)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
     
-        # 4. Búsqueda Meta-heurística
+        # 4. Parámetros de búsqueda
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
         search_parameters.first_solution_strategy = (
             routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -557,7 +575,7 @@ else:
         search_parameters.local_search_metaheuristic = (
             routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
         )
-        search_parameters.time_limit.seconds = 2  # Tiempo límite de cálculo
+        search_parameters.time_limit.seconds = 2
     
         # 5. Resolver y retornar orden
         solucion = routing.SolveWithParameters(search_parameters)
@@ -567,12 +585,12 @@ else:
             index = routing.Start(0)
             while not routing.IsEnd(index):
                 node = manager.IndexToNode(index)
-                if node != 0:  # Omitimos el origen para retornar solo clientes
+                # Filtramos el punto de origen (0) y el de destino final para retornar solo repartos
+                if node != 0 and (not tiene_destino_final or node != idx_fin):
                     ruta_ordenada.append(destinos[node - 1])
                 index = solucion.Value(routing.NextVar(index))
         else:
-            # Fallback de seguridad: retorna el orden original si no halla solución
-            ruta_ordenada = destinos.copy()
+            ruta_ordenada = list(destinos)
     
         return ruta_ordenada
     
