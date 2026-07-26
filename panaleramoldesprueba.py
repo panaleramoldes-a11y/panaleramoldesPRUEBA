@@ -1137,14 +1137,39 @@ else:
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([2.5, 0.5, 1, 1]) 
             
-            # --- 1. CREAR LA COLUMNA DISPLAY (CON RAZÓN SOCIAL INTEGRADA) ---
-            # Si el cliente tiene Razón Social, se antepone al formato tradicional.
-            df_clie['Display'] = df_clie.apply(
-                lambda row: f"{str(row['Razón Social']).strip()} | {row['Nombre']} {row['Apellido']} ({row['Telefono']}) - ID: {row['ID_Cliente']}"
-                if pd.notna(row.get('Razón Social')) and str(row.get('Razón Social')).strip() != ""
-                else f"{row['Nombre']} {row['Apellido']} ({row['Telefono']}) - ID: {row['ID_Cliente']}",
-                axis=1
-            )
+            # --- HELPER AUXILIAR DE LIMPIEZA ---
+            def limpiar_val(val):
+                if pd.isna(val) or val is None or str(val).strip().upper() in ["NAN", "NONE", "NULL"]:
+                    return ""
+                return str(val).strip()
+        
+            # --- 1. CREAR LA COLUMNA DISPLAY (CON RAZÓN SOCIAL INTEGRADA Y LIMPIA) ---
+            def obtener_display_cliente(row):
+                razon = limpiar_val(row.get('Razón Social'))
+                nombre = limpiar_val(row.get('Nombre'))
+                apellido = limpiar_val(row.get('Apellido'))
+                tel = limpiar_val(row.get('Telefono'))
+                id_c = row.get('ID_Cliente')
+        
+                # Formatear teléfono si existe
+                txt_tel = f" ({tel})" if tel else ""
+        
+                # Si tiene Razón Social válida
+                if razon:
+                    # Si además tiene nombre/apellido cargados, los sumamos opcionalmente
+                    nombre_completo = f"{nombre} {apellido}".strip()
+                    if nombre_completo:
+                        return f"{razon.upper()} | {nombre_completo.upper()}{txt_tel} - ID: {id_c}"
+                    else:
+                        return f"{razon.upper()}{txt_tel} - ID: {id_c}"
+                else:
+                    # Si no hay razón social (Persona / Consumidor Final)
+                    nombre_completo = f"{nombre} {apellido}".strip()
+                    if not nombre_completo:
+                        nombre_completo = "SIN NOMBRE"
+                    return f"{nombre_completo.upper()}{txt_tel} - ID: {id_c}"
+        
+            df_clie['Display'] = df_clie.apply(obtener_display_cliente, axis=1)
             
             # --- 2. AHORA SÍ: LÓGICA DE PERSISTENCIA ---
             valor_inicial = None
@@ -1152,7 +1177,7 @@ else:
                 candidatos = df_clie[df_clie['ID_Cliente'].astype(str) == str(st.session_state.id_cliente_recuperado)]
                 if not candidatos.empty:
                     valor_inicial = candidatos.iloc[0]['Display']
-
+        
             # --- 3. SELECTOR DE CLIENTE ---
             cliente_display = c1.selectbox(
                 "👤 Buscar Cliente (Nombre, Apellido, Teléfono o Razón Social)", 
@@ -1160,7 +1185,7 @@ else:
                 index=df_clie['Display'].tolist().index(valor_inicial) if valor_inicial and valor_inicial in df_clie['Display'].tolist() else None, 
                 placeholder="Seleccione o busque un cliente..."
             )
-
+        
             # --- EXTRACCIÓN SEGURA Y ÚNICA ---
             if cliente_display and " - ID: " in cliente_display:
                 try:
@@ -1177,16 +1202,22 @@ else:
             if c2.button("➕", help="Agregar nuevo cliente"):
                 abrir_alta_cliente_rapida()
             
-            # --- LÓGICA DE ASIGNACIÓN (Indentación corregida) ---
+            # --- LÓGICA DE ASIGNACIÓN Y NOMBRE EN TICKET ---
             cliente_sel_row = None
             if cliente_display:
                 cliente_sel_row = df_clie[df_clie['Display'] == cliente_display].iloc[0]
                 
-                # 🔥 MEJORA DE FLUJO: Si tiene Razón Social, el ticket sale con ese nombre comercial, sino con Nombre + Apellido
-                if pd.notna(cliente_sel_row.get('Razón Social')) and str(cliente_sel_row.get('Razón Social')).strip() != "":
-                    cliente_nombre_final = str(cliente_sel_row['Razón Social']).upper()
+                razon_sel = limpiar_val(cliente_sel_row.get('Razón Social'))
+                nombre_sel = limpiar_val(cliente_sel_row.get('Nombre'))
+                apellido_sel = limpiar_val(cliente_sel_row.get('Apellido'))
+                
+                # 🔥 MEJORA DE FLUJO: Nombre comercial prioritario si existe Razón Social, sino Nombre + Apellido
+                if razon_sel:
+                    cliente_nombre_final = razon_sel.upper()
                 else:
-                    cliente_nombre_final = cliente_sel_row['Nombre'] + " " + cliente_sel_row['Apellido']
+                    cliente_nombre_final = f"{nombre_sel} {apellido_sel}".strip().upper()
+                    if not cliente_nombre_final:
+                        cliente_nombre_final = "CONSUMIDOR FINAL"
                     
                 id_cliente_final = str(cliente_sel_row['ID_Cliente'])
                 st.session_state.id_cliente_recuperado = id_cliente_final 
@@ -1195,7 +1226,7 @@ else:
                 cliente_nombre_final = "Consumidor Final"
                 if 'id_cliente_recuperado' in st.session_state:
                     del st.session_state.id_cliente_recuperado
-
+        
             # --- 🔥 MAPEO DINÁMICO DE VENDEDOR EN C4 (CON RECUPERACIÓN) ---
             vendedor_id_final = "1" # Fallback por defecto si no hay datos
             if 'df_vend' in locals() and not df_vend.empty:
@@ -1215,7 +1246,7 @@ else:
                         idx_vendedor = lista_opciones.index(id_recup)
                     # Lo eliminamos para que afecte solo a esta carga y no quede fijo en las próximas ventas
                     del st.session_state.vendedor_recuperado
-
+        
                 # El selectbox opera sobre los IDs (claves) pero muestra los nombres legibles
                 vendedor_id_sel = c4.selectbox(
                     "👔 Vendedor", 
@@ -1233,7 +1264,7 @@ else:
             # Lista ahora en c3
             def cambiar_lista_global():
                 st.session_state.lista_global_vta = st.session_state.selector_global
-
+        
             lista_opciones = ["Lista 1", "Lista 2", "Lista 3", "Lista 4", "Lista 5"]
             lista_global = c3.selectbox(
                 "🏷️ Lista", 
