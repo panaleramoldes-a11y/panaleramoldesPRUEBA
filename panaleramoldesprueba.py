@@ -1822,24 +1822,32 @@ else:
         if tab_modificar is not None:
             with tab_modificar:
                 st.subheader("Modificar Cliente Existente")
-
+            
+                # Función auxiliar para limpiar NaNs de Pandas a string vacío o None
+                def limpiar_val(val):
+                    if pd.isna(val) or val is None or str(val).strip().upper() in ["NAN", "NONE", "NULL"]:
+                        return ""
+                    return str(val).strip()
+            
                 # --- 1. SELECTOR DINÁMICO (SOPORTA PERSONAS Y EMPRESAS) ---
-                # Evaluamos fila por fila para armar un texto descriptivo correcto
-                lista_clientes = df_clientes.apply(
-                    lambda row: f"{str(row['Razón Social']).strip()} (ID: {row['ID_Cliente']})"
-                    if pd.notna(row.get('Razón Social')) and str(row.get('Razón Social')).strip() != ""
-                    else f"{row['Nombre']} {row['Apellido']} (ID: {row['ID_Cliente']})",
-                    axis=1
-                )
+                def obtener_etiqueta_cliente(row):
+                    razon = limpiar_val(row.get('Razón Social'))
+                    if razon:
+                        return f"{razon} (ID: {row['ID_Cliente']})"
+                    else:
+                        nombre = limpiar_val(row.get('Nombre'))
+                        apellido = limpiar_val(row.get('Apellido'))
+                        return f"{nombre} {apellido}".strip() + f" (ID: {row['ID_Cliente']})"
+            
+                lista_clientes = df_clientes.apply(obtener_etiqueta_cliente, axis=1)
                 
                 seleccion = st.selectbox("Seleccione el cliente", [""] + lista_clientes.tolist(), key="sel_modificar")
                 
                 if seleccion:
-                    # La extracción del ID sigue funcionando igual porque mantuvimos el patrón "(ID: " al final
                     id_modificar = seleccion.split("(ID: ")[1].replace(")", "")
                     fila = df_clientes[df_clientes['ID_Cliente'].astype(str) == id_modificar].iloc[0]
-
-                    # Primero buscamos si tiene gift card activa
+            
+                    # Buscamos Gift Card activa
                     gc_data = db.table("GIFT_CARDS").select("*").eq("ID_Cliente", int(id_modificar)).eq("Estado", True).execute().data
                     
                     if gc_data:
@@ -1853,30 +1861,30 @@ else:
                     
                     if st.session_state.get('rol') == "Administrador":
                         if st.button("🎁 Gestionar Gift Card"):
-                            # Adaptamos también el nombre que se le pasa al diálogo de la Gift Card
-                            nombre_para_gc = str(fila['Razón Social']).upper() if pd.notna(fila.get('Razón Social')) and str(fila.get('Razón Social')).strip() != "" else f"{fila['Nombre']} {fila['Apellido']}"
+                            razon_limpia = limpiar_val(fila.get('Razón Social'))
+                            nombre_para_gc = razon_limpia.upper() if razon_limpia else f"{limpiar_val(fila.get('Nombre'))} {limpiar_val(fila.get('Apellido'))}".strip()
                             abrir_asignacion_gift_card(id_modificar, nombre_para_gc)
-
-                    # 2. Formulario
+            
+                    # 2. Formulario con valores de entrada sanitizados
                     with st.form("form_datos"):
                         c1, c2 = st.columns(2)
                         with c1:
-                            nuevo_nombre = st.text_input("Nombre", value=fila.get('Nombre', ''))
-                            nuevo_apellido = st.text_input("Apellido", value=fila.get('Apellido', ''))
-                            nuevo_dni = st.text_input("DNI", value=fila.get('DNI', ''))
-                            nueva_razon = st.text_input("Razón Social", value=fila.get('Razón Social', ''))
-                            nuevo_cuit = st.text_input("CUIT", value=fila.get('CUIT', ''))
-                            nuevo_telefono = st.text_input("Teléfono", value=fila.get('Telefono', ''), max_chars=10)
+                            nuevo_nombre = st.text_input("Nombre", value=limpiar_val(fila.get('Nombre')))
+                            nuevo_apellido = st.text_input("Apellido", value=limpiar_val(fila.get('Apellido')))
+                            nuevo_dni = st.text_input("DNI", value=limpiar_val(fila.get('DNI')))
+                            nueva_razon = st.text_input("Razón Social", value=limpiar_val(fila.get('Razón Social')))
+                            nuevo_cuit = st.text_input("CUIT", value=limpiar_val(fila.get('CUIT')))
+                            nuevo_telefono = st.text_input("Teléfono", value=limpiar_val(fila.get('Telefono')), max_chars=10)
                         
                         with c2:
-                            nuevo_dir1 = st.text_input("Dirección 1", value=fila.get('Direccion_1', ''))
-                            nuevo_link1 = st.text_input("Link Dirección 1", value=fila.get('Link_Direccion_1', ''))
-                            nuevo_dir2 = st.text_input("Dirección 2", value=fila.get('Direccion_2', ''))
-                            nuevo_link2 = st.text_input("Link Dirección 2", value=fila.get('Link_Direccion_2', ''))
-                            nuevo_dir3 = st.text_input("Dirección 3", value=fila.get('Direccion_3', ''))
-                            nuevo_link3 = st.text_input("Link Dirección 3", value=fila.get('Link_Direccion_3', ''))
+                            nuevo_dir1 = st.text_input("Dirección 1", value=limpiar_val(fila.get('Direccion_1')))
+                            nuevo_link1 = st.text_input("Link Dirección 1", value=limpiar_val(fila.get('Link_Direccion_1')))
+                            nuevo_dir2 = st.text_input("Dirección 2", value=limpiar_val(fila.get('Direccion_2')))
+                            nuevo_link2 = st.text_input("Link Dirección 2", value=limpiar_val(fila.get('Link_Direccion_2')))
+                            nuevo_dir3 = st.text_input("Dirección 3", value=limpiar_val(fila.get('Direccion_3')))
+                            nuevo_link3 = st.text_input("Link Dirección 3", value=limpiar_val(fila.get('Link_Direccion_3')))
                         
-                        nueva_obs = st.text_area("Observaciones", value=fila.get('Observaciones', ''))
+                        nueva_obs = st.text_area("Observaciones", value=limpiar_val(fila.get('Observaciones')))
                         
                         zonas_lista = ["NORTE", "SUR", "CENTRO", "ESTE", "OESTE", "SANLO CHICO"]
                         idx_zona = zonas_lista.index(fila.get('Zona')) if fila.get('Zona') in zonas_lista else 0
@@ -1892,29 +1900,35 @@ else:
                     if guardar_btn:
                         usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
                         
+                        # Sanitizamos lo que ingresó el usuario antes de enviar a BD
+                        razon_final = nueva_razon.strip().upper() if nueva_razon and nueva_razon.strip().upper() != "NAN" else None
+                        nombre_final = nuevo_nombre.strip().upper() if nuevo_nombre and nuevo_nombre.strip().upper() != "NAN" else ""
+                        apellido_final = nuevo_apellido.strip().upper() if nuevo_apellido and nuevo_apellido.strip().upper() != "NAN" else ""
+            
                         try:
                             db.table("CLIENTES").update({
-                                "Nombre": str(nuevo_nombre or "").upper(),
-                                "Apellido": (nuevo_apellido or "").upper(),
-                                "DNI": nuevo_dni,
-                                "Razón Social": (nueva_razon or "").upper(),
-                                "CUIT": nuevo_cuit,
-                                "Telefono": nuevo_telefono,
-                                "Direccion_1": (nuevo_dir1 or "").upper(),
-                                "Link_Direccion_1": nuevo_link1,
-                                "Direccion_2": (nuevo_dir2 or "").upper(),
-                                "Link_Direccion_2": nuevo_link2,
-                                "Direccion_3": (nuevo_dir3 or "").upper(),
-                                "Link_Direccion_3": nuevo_link3,
-                                "Observaciones": nueva_obs,
+                                "Nombre": nombre_final,
+                                "Apellido": apellido_final,
+                                "DNI": nuevo_dni.strip(),
+                                "Razón Social": razon_final,
+                                "CUIT": nuevo_cuit.strip(),
+                                "Telefono": nuevo_telefono.strip(),
+                                "Direccion_1": nuevo_dir1.strip().upper(),
+                                "Link_Direccion_1": nuevo_link1.strip(),
+                                "Direccion_2": nuevo_dir2.strip().upper(),
+                                "Link_Direccion_2": nuevo_link2.strip(),
+                                "Direccion_3": nuevo_dir3.strip().upper(),
+                                "Link_Direccion_3": nuevo_link3.strip(),
+                                "Observaciones": nueva_obs.strip(),
                                 "Zona": input_zona,
                                 "Tipo_Cliente": input_tipo
                             }).eq("ID_Cliente", int(id_modificar)).execute()
                             
-                            # Log de auditoría adaptado para contemplar si es empresa o persona en el texto descriptivo
-                            nombre_antiguo = fila.get('Razón Social') if fila.get('Razón Social') else f"{fila.get('Apellido')}, {fila.get('Nombre')}"
-                            nombre_nuevo = nueva_razon.upper() if nueva_razon else f"{nuevo_apellido.upper()}, {nuevo_nombre.upper()}"
-
+                            # Log de auditoría
+                            razon_antigua = limpiar_val(fila.get('Razón Social'))
+                            nombre_antiguo = razon_antigua if razon_antigua else f"{limpiar_val(fila.get('Apellido'))}, {limpiar_val(fila.get('Nombre'))}"
+                            nombre_nuevo = razon_final if razon_final else f"{apellido_final}, {nombre_final}"
+            
                             log_auditoria(
                                 tabla="CLIENTES",
                                 accion="UPDATE",
@@ -1931,18 +1945,18 @@ else:
                                         "nombre_comercial_o_completo": nombre_nuevo,
                                         "telefono": nuevo_telefono,
                                         "zona": input_zona,
-                                        "direccion_1": nuevo_dir1.upper()
+                                        "direccion_1": nuevo_dir1.strip().upper()
                                     }
                                 },
                                 usuario=usuario_logueado
                             )
                             
-                            st.success("Guardado")
+                            st.success("Guardado correctamente")
                             st.rerun()
                             
                         except Exception as e:
                             st.error(f"Error al modificar el cliente: {e}")
-
+            
                     # ACCIÓN DE ELIMINAR
                     st.divider()
                     if st.session_state.get('rol') == "Administrador":
@@ -1954,8 +1968,9 @@ else:
                                 try:
                                     db.table("CLIENTES").delete().eq("ID_Cliente", int(id_modificar)).execute()
                                     
-                                    cliente_identificador = fila.get('Razón Social') if fila.get('Razón Social') else f"{fila.get('Apellido')}, {fila.get('Nombre')}"
-
+                                    razon_antigua = limpiar_val(fila.get('Razón Social'))
+                                    cliente_identificador = razon_antigua if razon_antigua else f"{limpiar_val(fila.get('Apellido'))}, {limpiar_val(fila.get('Nombre'))}"
+            
                                     log_auditoria(
                                         tabla="CLIENTES",
                                         accion="DELETE",
