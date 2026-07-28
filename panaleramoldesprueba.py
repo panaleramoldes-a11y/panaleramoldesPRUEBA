@@ -2715,6 +2715,16 @@ else:
                                                         db.table("PRODUCTOS").update({
                                                             "Stock_Actual": nuevo_stock_int
                                                         }).eq("ID_Producto", id_prod_str).execute()
+                                                
+                                                        # ------------------------------------------------------------------
+                                                        # ⚡ NUEVO: ACTUALIZAR EL DATAFRAME EN MEMORIA PARA REFLEJAR EN KARDEX
+                                                        # ------------------------------------------------------------------
+                                                        if "df_prod" in st.session_state:
+                                                            st.session_state.df_prod.loc[
+                                                                st.session_state.df_prod['ID_Producto'].astype(str) == id_prod_str, 
+                                                                'Stock_Actual'
+                                                            ] = nuevo_stock_int
+                                                        # ------------------------------------------------------------------
                                                         
                                                         # 5. Actualizar estado en INVENTARIOS_DETALLE
                                                         id_detalle_int = int(item['id'])
@@ -2722,12 +2732,12 @@ else:
                                                             "estado_item": "AJUSTADO"
                                                         }).eq("id", id_detalle_int).execute()
                                                         
-                                                        # 6. Auditoría (Actualizado con la variación para el Kardex)
+                                                        # 6. Auditoría
                                                         if 'log_auditoria' in globals():
                                                             variacion_real = nuevo_stock_int - int(stock_previo)
                                                             log_auditoria(
                                                                 tabla="PRODUCTOS",
-                                                                accion="AJUSTE_INVENTARIO",  # Usamos una acción distintiva
+                                                                accion="AJUSTE_INVENTARIO",
                                                                 id_entidad=id_prod_str,
                                                                 detalles={
                                                                     "operacion": "Ajuste de Inventario",
