@@ -3176,59 +3176,6 @@ else:
                                 })
                         except Exception as e_aud:
                             pass
-    
-                        # Renderizar resultados con trazabilidad de stock
-                        if movimientos:
-                            df_kardex = pd.DataFrame(movimientos)
-                            
-                            # Conversión segura de fechas heterogéneas
-                            df_kardex["Fecha_datetime"] = pd.to_datetime(
-                                df_kardex["Fecha_raw"], 
-                                format='mixed', 
-                                utc=True, 
-                                errors='coerce'
-                            )
-                            
-                            # Eliminar registros con fechas inválidas si los hubiera y ordenar desc
-                            df_kardex = df_kardex.dropna(subset=["Fecha_datetime"])
-                            df_kardex = df_kardex.sort_values(by="Fecha_datetime", ascending=False).reset_index(drop=True)
-                            
-                            # Reconstrucción trazable de Stock Anterior y Nuevo Stock hacia atrás
-                            stock_cursor = stock_actual
-                            stock_anterior_list = []
-                            nuevo_stock_list = []
-                            
-                            for _, row in df_kardex.iterrows():
-                                var = row["Variación"]
-                                nuevo_stk = stock_cursor
-                                stk_ant = nuevo_stk - var
-                                
-                                nuevo_stock_list.append(nuevo_stk)
-                                stock_anterior_list.append(stk_ant)
-                                
-                                stock_cursor = stk_ant
-                            
-                            df_kardex["Stock Anterior"] = stock_anterior_list
-                            df_kardex["Nuevo Stock"] = nuevo_stock_list
-                            df_kardex["Fecha"] = df_kardex["Fecha_datetime"].dt.strftime("%d/%m/%Y %H:%M")
-                            
-                            # Reordenar columnas para la vista final
-                            columnas_ordenadas = [
-                                "Fecha", "Concepto", "ID Referencia", 
-                                "Stock Anterior", "Variación", "Nuevo Stock", 
-                                "Detalle / Observaciones"
-                            ]
-                            df_kardex = df_kardex[columnas_ordenadas]
-                            
-                            # Métricas resumidas
-                            col_m1, col_m2 = st.columns(2)
-                            total_entradas = df_kardex[df_kardex["Variación"] > 0]["Variación"].sum()
-                            total_salidas = abs(df_kardex[df_kardex["Variación"] < 0]["Variación"].sum())
-                            
-                            col_m1.metric("📥 Total Ingresos/Entradas", f"+{total_entradas} un.")
-                            col_m2.metric("📤 Total Salidas/Egresos", f"-{total_salidas} un.")
-                            
-                            st.dataframe(df_kardex, use_container_width=True, hide_index=True)
 
                         # E. Consultar AJUSTES DE INVENTARIO (NUEVA SECCIÓN)
                         try:
