@@ -3179,41 +3179,63 @@ else:
 
                         # E. Consultar AJUSTES / INVENTARIOS DETALLE
                         try:
-                            # Conversión flexible del ID por si en Supabase está como INT o TEXT
+                            # Conversión flexible del ID (por si es numérico o texto)
                             id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
                             
-                            f_desde_iso = f"{fecha_desde}T00:00:00"
-                            f_hasta_iso = f"{fecha_hasta}T23:59:59"
-                            
-                            # Consultamos la tabla INVENTARIOS_DETALLE
+                            # Nombre de columna en minúsculas 'id_producto' como lo requiere tu tabla
                             res_aj = db.table("INVENTARIOS_DETALLE").select("*")\
-                                .eq("ID_Producto", id_prod_query).execute().data
+                                .eq("id_producto", id_prod_query).execute().data
                             
                             if res_aj:
-                                # Traemos los IDs de cabecera para obtener la Fecha si la fecha está en la cabecera
-                                ids_inventario = list(set([aj.get("ID_Inventario") or aj.get("id_inventario") for aj in res_aj if (aj.get("ID_Inventario") or aj.get("id_inventario")) is not None]))
+                                # Capturamos los IDs de la cabecera del inventario/ajuste
+                                ids_inventario = list(set([
+                                    aj.get("id_inventario") or aj.get("ID_Inventario") or aj.get("id_inv") 
+                                    for aj in res_aj if (aj.get("id_inventario") or aj.get("ID_Inventario") or aj.get("id_inv")) is not None
+                                ]))
                                 
                                 cabeceras_inv = {}
                                 if ids_inventario:
                                     try:
-                                        # Intentamos obtener la fecha de la tabla cabecera si existe
-                                        res_cab_inv = db.table("INVENTARIOS_CABECERA").select("*").in_("ID_Inventario", ids_inventario).execute().data
-                                        cabeceras_inv = {cab.get("ID_Inventario") or cab.get("id"): cab for cab in res_cab_inv}
+                                        res_cab_inv = db.table("INVENTARIOS_CABECERA").select("*").in_("id_inventario", ids_inventario).execute().data
+                                        cabeceras_inv = {
+                                            (cab.get("id_inventario") or cab.get("ID_Inventario") or cab.get("id")): cab 
+                                            for cab in res_cab_inv
+                                        }
                                     except Exception:
-                                        pass # Si no existe la cabecera, usará la fecha propia del detalle
+                                        try:
+                                            # Intento alternativo con ID_Inventario en mayúscula en la cabecera si falla el anterior
+                                            res_cab_inv = db.table("INVENTARIOS_CABECERA").select("*").in_("ID_Inventario", ids_inventario).execute().data
+                                            cabeceras_inv = {
+                                                (cab.get("ID_Inventario") or cab.get("id_inventario") or cab.get("id")): cab 
+                                                for cab in res_cab_inv
+                                            }
+                                        except Exception:
+                                            pass
                                 
                                 for aj in res_aj:
-                                    id_inv = aj.get("ID_Inventario") or aj.get("id_inventario")
+                                    id_inv = aj.get("id_inventario") or aj.get("ID_Inventario") or aj.get("id_inv")
                                     cabecera = cabeceras_inv.get(id_inv, {})
                                     
-                                    # Extraer fecha (revisa cabecera o detalle)
-                                    f_aj = cabecera.get("Fecha") or aj.get("Fecha") or aj.get("created_at")
+                                    # Extraer fecha desde la cabecera o el detalle
+                                    f_aj = (cabecera.get("fecha") or cabecera.get("Fecha") or 
+                                            aj.get("fecha") or aj.get("Fecha") or aj.get("created_at"))
+                                    
                                     f_aj_date = str(f_aj)[:10] if f_aj else ""
                                     
                                     if f_aj and str(fecha_desde) <= f_aj_date <= str(fecha_hasta):
-                                        # Captura de variación (Diferencia, Cantidad o Ajuste)
-                                        var_aj = int(aj.get("Diferencia") or aj.get("Variacion") or aj.get("Cantidad") or 0)
-                                        motivo = aj.get("Observacion") or aj.get("Motivo") or cabecera.get("Observacion") or "Ajuste de inventario"
+                                        # Captura de variación (soporta nombres en minúsculas y mayúsculas)
+                                        var_aj = int(
+                                            aj.get("diferencia") or aj.get("Diferencia") or 
+                                            aj.get("variacion") or aj.get("Variacion") or 
+                                            aj.get("cantidad") or aj.get("Cantidad") or 0
+                                        )
+                                        
+                                        motivo = (
+                                            aj.get("observacion") or aj.get("Observacion") or 
+                                            aj.get("motivo") or aj.get("Motivo") or 
+                                            cabecera.get("observacion") or cabecera.get("Observacion") or 
+                                            "Ajuste de inventario"
+                                        )
                                         
                                         movimientos.append({
                                             "Fecha_raw": f_aj,
