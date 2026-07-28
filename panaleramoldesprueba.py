@@ -2760,11 +2760,12 @@ else:
                                                     p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod_str).execute().data
                                                     if p_actual:
                                                         stock_vivo = float(p_actual[0]['Stock_Actual'] or 0)
+                                                        dif_real = float(item['diferencia_admin'])
                                                         nuevo_stock = stock_vivo + dif_real
-
+                                                    
                                                         # Actualizar PRODUCTOS
                                                         db.table("PRODUCTOS").update({
-                                                            "Stock_Actual": nuevo_stock
+                                                            "Stock_Actual": nuevo_stock  # <-- Aquí se envía como float (ej: 0.0)
                                                         }).eq("ID_Producto", id_prod_str).execute()
 
                                                         # Actualizar DETALLE conservando ambos conteos
