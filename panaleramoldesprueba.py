@@ -2684,10 +2684,10 @@ else:
                                         "stock_contado",
                                         "stock_contado_admin",
                                         "diferencia_admin",
-                                        "desviacion_vendedor",
+                                        "diferencia_vendedor",
                                         "estado_item"
                                     ],
-                                    disabled=["id_producto", "Nombre", "stock_sistema_snap", "stock_contado", "diferencia_admin", "desviacion_vendedor", "estado_item"],
+                                    disabled=["id_producto", "Nombre", "stock_sistema_snap", "stock_contado", "diferencia_admin", "diferencia_vendedor", "estado_item"],
                                     column_config={
                                         "id_producto": "ID Prod",
                                         "Nombre": "Producto",
@@ -2695,7 +2695,7 @@ else:
                                         "stock_contado": st.column_config.NumberColumn(f"Contado ({vendedor_original})", format="%.2f"),
                                         "stock_contado_admin": st.column_config.NumberColumn("Re-conteo (Admin) ✏️", format="%.2f", min_value=0.0),
                                         "diferencia_admin": st.column_config.NumberColumn("Dif. Real vs Sistema", format="%.2f"),
-                                        "desviacion_vendedor": st.column_config.NumberColumn("Error Vendedor", format="%.2f"),
+                                        "diferencia_vendedor": st.column_config.NumberColumn("Error Vendedor", format="%.2f"),
                                         "estado_item": "Estado"
                                     },
                                     hide_index=True,
@@ -2703,14 +2703,13 @@ else:
                                     key=f"editor_audit_{id_cabecera}"
                                 )
 
-                                # Cálculos de auditoría
-                                # 1. Diferencia real de inventario (Admin vs Sistema)
+                                # 1. Recalcular Diferencia Real (Admin vs Sistema)
                                 df_editado["diferencia_admin"] = df_editado["stock_contado_admin"] - df_editado["stock_sistema_snap"]
                                 
-                                # 2. Desviación/Error del vendedor (Admin vs Vendedor)
-                                df_editado["desviacion_vendedor"] = df_editado["stock_contado_admin"] - df_editado["stock_contado"]
+                                # 2. Recalcular Error/Desviación Vendedor (Admin vs Vendedor)
+                                df_editado["diferencia_vendedor"] = df_editado["stock_contado_admin"] - df_editado["stock_contado"]
 
-                                items_con_error_vendedor = (df_editado["desviacion_vendedor"] != 0).sum()
+                                items_con_error_vendedor = (df_editado["diferencia_vendedor"] != 0).sum()
                                 impacto_real = (df_editado['diferencia_admin'] * df_editado['Precio_Costo']).sum()
 
                                 st.markdown("---")
@@ -2734,6 +2733,7 @@ else:
                                                 db.table("INVENTARIOS_DETALLE").update({
                                                     "stock_contado_admin": float(row["stock_contado_admin"]),
                                                     "diferencia": float(row["diferencia_admin"]),
+                                                    "diferencia_vendedor": float(row["diferencia_vendedor"]),  # <-- AHORA SÍ SE GUARDA EN BD
                                                     "auditado_por": admin_usuario
                                                 }).eq("id", int(row["id"])).execute()
 
@@ -2753,6 +2753,7 @@ else:
                                             admin_usuario = st.session_state.get('usuario_actual', 'Admin')
                                             for _, item in df_editado.iterrows():
                                                 dif_real = float(item['diferencia_admin'])
+                                                dif_vendedor = float(item['diferencia_vendedor'])
                                                 
                                                 if item['estado_item'] == 'PENDIENTE':
                                                     id_prod_str = str(item['id_producto']).strip()
@@ -2760,25 +2761,23 @@ else:
                                                     p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod_str).execute().data
                                                     if p_actual:
                                                         stock_vivo = float(p_actual[0]['Stock_Actual'] or 0)
-                                                        dif_real = float(item['diferencia_admin'])
-                                                        
-                                                        # 1. Convertimos el cálculo explícitamente a un entero (int)
                                                         nuevo_stock_int = int(round(stock_vivo + dif_real))
-                                                    
-                                                        # 2. Actualizamos la tabla PRODUCTOS enviando el entero
+
+                                                        # Actualizar PRODUCTOS
                                                         db.table("PRODUCTOS").update({
                                                             "Stock_Actual": nuevo_stock_int
                                                         }).eq("ID_Producto", id_prod_str).execute()
-                                                    
-                                                        # 3. Actualizar DETALLE conservando ambos conteos
+
+                                                        # Actualizar DETALLE conservando ambos conteos
                                                         db.table("INVENTARIOS_DETALLE").update({
                                                             "stock_contado_admin": float(item["stock_contado_admin"]),
                                                             "diferencia": dif_real,
+                                                            "diferencia_vendedor": dif_vendedor,  # <-- TAMBIÉN SE GUARDA AL AJUSTAR
                                                             "estado_item": "AJUSTADO",
                                                             "auditado_por": admin_usuario
                                                         }).eq("id", int(item['id'])).execute()
-                                                    
-                                                        # 4. Auditoría en Log
+
+                                                        # Auditoría en Log
                                                         if 'log_auditoria' in globals():
                                                             log_auditoria(
                                                                 tabla="PRODUCTOS",
@@ -2789,7 +2788,7 @@ else:
                                                                     "vendedor": vendedor_original,
                                                                     "conteo_vendedor": float(item["stock_contado"]),
                                                                     "conteo_admin": float(item["stock_contado_admin"]),
-                                                                    "error_vendedor": float(item["desviacion_vendedor"]),
+                                                                    "error_vendedor": dif_vendedor,
                                                                     "nuevo_stock": nuevo_stock_int
                                                                 },
                                                                 usuario=admin_usuario
