@@ -3177,38 +3177,53 @@ else:
                         except Exception as e_aud:
                             pass
 
-                        # E. Consultar AJUSTES DE INVENTARIO
+                        # E. Consultar AJUSTES / INVENTARIOS DETALLE
                         try:
-                            # 1. Adaptación de tipo de dato para evitar fallos int vs str
+                            # Conversión flexible del ID por si en Supabase está como INT o TEXT
                             id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
                             
-                            # 2. Formato estricto de fecha con horas extremas (00:00:00 a 23:59:59)
                             f_desde_iso = f"{fecha_desde}T00:00:00"
                             f_hasta_iso = f"{fecha_hasta}T23:59:59"
                             
-                            # Reemplaza 'AJUSTES_INVENTARIO' por el nombre de tu tabla si es distinto
-                            res_aj = db.table("AJUSTES_INVENTARIO").select("*")\
-                                .eq("ID_Producto", id_prod_query)\
-                                .gte("Fecha", f_desde_iso)\
-                                .lte("Fecha", f_hasta_iso).execute().data
+                            # Consultamos la tabla INVENTARIOS_DETALLE
+                            res_aj = db.table("INVENTARIOS_DETALLE").select("*")\
+                                .eq("ID_Producto", id_prod_query).execute().data
                             
                             if res_aj:
+                                # Traemos los IDs de cabecera para obtener la Fecha si la fecha está en la cabecera
+                                ids_inventario = list(set([aj.get("ID_Inventario") or aj.get("id_inventario") for aj in res_aj if (aj.get("ID_Inventario") or aj.get("id_inventario")) is not None]))
+                                
+                                cabeceras_inv = {}
+                                if ids_inventario:
+                                    try:
+                                        # Intentamos obtener la fecha de la tabla cabecera si existe
+                                        res_cab_inv = db.table("INVENTARIOS_CABECERA").select("*").in_("ID_Inventario", ids_inventario).execute().data
+                                        cabeceras_inv = {cab.get("ID_Inventario") or cab.get("id"): cab for cab in res_cab_inv}
+                                    except Exception:
+                                        pass # Si no existe la cabecera, usará la fecha propia del detalle
+                                
                                 for aj in res_aj:
-                                    # Extraer diferencia (prueba varios nombres habituales de campo)
-                                    var_aj = int(aj.get("Diferencia") or aj.get("Cantidad") or aj.get("Variacion") or 0)
-                                    motivo = aj.get("Motivo") or aj.get("Observaciones") or "Ajuste manual de stock"
-                                    usuario = aj.get("Usuario") or aj.get("usuario") or "S/D"
-                                    fecha_mov = aj.get("Fecha") or aj.get("fecha") or aj.get("created_at")
+                                    id_inv = aj.get("ID_Inventario") or aj.get("id_inventario")
+                                    cabecera = cabeceras_inv.get(id_inv, {})
                                     
-                                    movimientos.append({
-                                        "Fecha_raw": fecha_mov,
-                                        "Concepto": "⚖️ AJUSTE INVENTARIO",
-                                        "ID Referencia": f"ID_Ajuste: {aj.get('id') or aj.get('ID_Ajuste') or 'S/I'}",
-                                        "Variación": var_aj,
-                                        "Detalle / Observaciones": f"{motivo} (Usuario: {usuario})"
-                                    })
+                                    # Extraer fecha (revisa cabecera o detalle)
+                                    f_aj = cabecera.get("Fecha") or aj.get("Fecha") or aj.get("created_at")
+                                    f_aj_date = str(f_aj)[:10] if f_aj else ""
+                                    
+                                    if f_aj and str(fecha_desde) <= f_aj_date <= str(fecha_hasta):
+                                        # Captura de variación (Diferencia, Cantidad o Ajuste)
+                                        var_aj = int(aj.get("Diferencia") or aj.get("Variacion") or aj.get("Cantidad") or 0)
+                                        motivo = aj.get("Observacion") or aj.get("Motivo") or cabecera.get("Observacion") or "Ajuste de inventario"
+                                        
+                                        movimientos.append({
+                                            "Fecha_raw": f_aj,
+                                            "Concepto": "⚖️ AJUSTE INVENTARIO",
+                                            "ID Referencia": f"ID_Inv: {id_inv if id_inv else 'S/I'}",
+                                            "Variación": var_aj,
+                                            "Detalle / Observaciones": f"{motivo}"
+                                        })
                         except Exception as e_aj:
-                            st.warning(f"⚠️ No se pudieron cargar los ajustes de inventario: {e_aj}")
+                            st.warning(f"⚠️ Error al consultar INVENTARIOS_DETALLE: {e_aj}")
             
                         # Renderizar resultados con trazabilidad de stock
                         if movimientos:
