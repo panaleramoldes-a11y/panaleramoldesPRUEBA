@@ -3229,9 +3229,84 @@ else:
                             col_m2.metric("📤 Total Salidas/Egresos", f"-{total_salidas} un.")
                             
                             st.dataframe(df_kardex, use_container_width=True, hide_index=True)
+
+                        # E. Consultar AJUSTES DE INVENTARIO (NUEVA SECCIÓN)
+                        try:
+                            # Ajusta la tabla 'AJUSTES_INVENTARIO' o 'ID_Producto' si tus nombres en Supabase son diferentes
+                            res_aj = db.table("AJUSTES_INVENTARIO").select("*").eq("ID_Producto", id_kardex)\
+                                .gte("Fecha", str_f_desde).lte("Fecha", str_f_hasta).execute().data
+                            
+                            for aj in res_aj:
+                                # Se calcula la variación directa ingresada en el ajuste (+N o -N)
+                                var_aj = int(aj.get("Diferencia", aj.get("Cantidad", 0)))
+                                motivo = aj.get("Motivo", aj.get("Observaciones", "Ajuste manual de stock"))
+                                usuario = aj.get("Usuario", "S/D")
+                                
+                                movimientos.append({
+                                    "Fecha_raw": aj.get("Fecha") or aj.get("fecha_hora"),
+                                    "Concepto": "⚖️ AJUSTE INVENTARIO",
+                                    "ID Referencia": f"ID_Ajuste: {aj.get('id', 'S/I')}",
+                                    "Variación": var_aj,
+                                    "Detalle / Observaciones": f"{motivo} (Usuario: {usuario})"
+                                })
+                        except Exception as e_aj:
+                            pass
+            
+                        # Renderizar resultados con trazabilidad de stock
+                        if movimientos:
+                            df_kardex = pd.DataFrame(movimientos)
+                            
+                            # Conversión segura de fechas heterogéneas
+                            df_kardex["Fecha_datetime"] = pd.to_datetime(
+                                df_kardex["Fecha_raw"], 
+                                format='mixed', 
+                                utc=True, 
+                                errors='coerce'
+                            )
+                            
+                            # Eliminar registros con fechas inválidas si los hubiera y ordenar desc
+                            df_kardex = df_kardex.dropna(subset=["Fecha_datetime"])
+                            df_kardex = df_kardex.sort_values(by="Fecha_datetime", ascending=False).reset_index(drop=True)
+                            
+                            # Reconstrucción trazable de Stock Anterior y Nuevo Stock hacia atrás
+                            stock_cursor = stock_actual
+                            stock_anterior_list = []
+                            nuevo_stock_list = []
+                            
+                            for _, row in df_kardex.iterrows():
+                                var = row["Variación"]
+                                nuevo_stk = stock_cursor
+                                stk_ant = nuevo_stk - var
+                                
+                                nuevo_stock_list.append(nuevo_stk)
+                                stock_anterior_list.append(stk_ant)
+                                
+                                stock_cursor = stk_ant
+                            
+                            df_kardex["Stock Anterior"] = stock_anterior_list
+                            df_kardex["Nuevo Stock"] = nuevo_stock_list
+                            df_kardex["Fecha"] = df_kardex["Fecha_datetime"].dt.strftime("%d/%m/%Y %H:%M")
+                            
+                            # Reordenar columnas para la vista final
+                            columnas_ordenadas = [
+                                "Fecha", "Concepto", "ID Referencia", 
+                                "Stock Anterior", "Variación", "Nuevo Stock", 
+                                "Detalle / Observaciones"
+                            ]
+                            df_kardex = df_kardex[columnas_ordenadas]
+                            
+                            # Métricas resumidas
+                            col_m1, col_m2 = st.columns(2)
+                            total_entradas = df_kardex[df_kardex["Variación"] > 0]["Variación"].sum()
+                            total_salidas = abs(df_kardex[df_kardex["Variación"] < 0]["Variación"].sum())
+                            
+                            col_m1.metric("📥 Total Ingresos/Entradas", f"+{total_entradas} un.")
+                            col_m2.metric("📤 Total Salidas/Egresos", f"-{total_salidas} un.")
+                            
+                            st.dataframe(df_kardex, use_container_width=True, hide_index=True)
                         else:
                             st.info("No se encontraron movimientos registrados para este producto en el rango de fechas seleccionado.")
-    
+   
     # =====================================================================
     # MODULO: 📦 STOCK
     # =====================================================================
