@@ -2995,7 +2995,11 @@ else:
                 st.subheader("📜 Histórico de Movimientos por Producto (Kardex)")
                 
                 # 1. Buscador de producto
-                opciones_kardex = (st.session_state.df_prod['ID_Producto'].astype(str) + " - " + st.session_state.df_prod['Nombre']).tolist()
+                # AHORA:
+                df_kardex_lista = st.session_state.df_prod.copy()
+                opciones_kardex = sorted(
+                    (df_kardex_lista['ID_Producto'].astype(str) + " - " + df_kardex_lista['Nombre'].astype(str)).tolist()
+                )
                 prod_kardex_sel = st.selectbox("Seleccionar producto para auditoría:", [""] + opciones_kardex, key="kardex_prod_sel")
                 
                 # 2. Filtro Rango de Fechas
