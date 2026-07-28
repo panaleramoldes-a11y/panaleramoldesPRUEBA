@@ -2722,16 +2722,17 @@ else:
                                                             "estado_item": "AJUSTADO"
                                                         }).eq("id", id_detalle_int).execute()
                                                         
-                                                        # 6. Auditoría
+                                                        # 6. Auditoría (Actualizado con la variación para el Kardex)
                                                         if 'log_auditoria' in globals():
+                                                            variacion_real = nuevo_stock_int - int(stock_previo)
                                                             log_auditoria(
                                                                 tabla="PRODUCTOS",
-                                                                accion="UPDATE",
+                                                                accion="AJUSTE_INVENTARIO",  # Usamos una acción distintiva
                                                                 id_entidad=id_prod_str,
                                                                 detalles={
-                                                                    "operacion": "Ajuste Directo Conteo Admin",
-                                                                    "conteo_vendedor": float(item['stock_contado']),
-                                                                    "stock_anterior": stock_previo,
+                                                                    "operacion": "Ajuste de Inventario",
+                                                                    "diferencia_aplicada": variacion_real,
+                                                                    "stock_anterior": int(stock_previo),
                                                                     "nuevo_stock": nuevo_stock_int
                                                                 },
                                                                 usuario=st.session_state.get('usuario_actual', 'Admin')
@@ -3033,32 +3034,25 @@ else:
                                     })
                         except Exception as e_v:
                             st.warning(f"Nota sobre Ventas: {e_v}")
-    
-                        # B. Consultar COMPRAS (Nombres exactos: DETALLE_COMPRAS y COMPRAS_CABECERA)
+            
+                        # B. Consultar COMPRAS
                         try:
                             id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
-                            
-                            # 1. Obtener detalles del producto
                             res_c = db.table("DETALLE_COMPRAS").select("*").eq("ID_Producto", id_prod_query).execute().data
                             
                             if res_c:
-                                # Obtener IDs de compras únicos
                                 ids_compras = list(set([c.get("ID_Compra") for c in res_c if c.get("ID_Compra") is not None]))
-                                
-                                # 2. Obtener fechas de COMPRAS_CABECERA
                                 cabeceras_dict = {}
                                 if ids_compras:
                                     res_cab = db.table("COMPRAS_CABECERA").select("ID_Compra, Fecha").in_("ID_Compra", ids_compras).execute().data
                                     cabeceras_dict = {cab["ID_Compra"]: cab for cab in res_cab if "ID_Compra" in cab}
-                    
-                                # 3. Unir movimientos
+                                
                                 for c in res_c:
                                     id_compra = c.get("ID_Compra")
                                     cabecera = cabeceras_dict.get(id_compra, {})
                                     f_c = cabecera.get("Fecha") or c.get("Fecha")
                                     f_c_date = str(f_c)[:10] if f_c else ""
                                     
-                                    # Filtrar por rango de fechas seleccionado
                                     if f_c and str_f_desde <= f_c_date <= str_f_hasta:
                                         cant = int(c.get("Cantidad", 0))
                                         movimientos.append({
@@ -3070,7 +3064,7 @@ else:
                                         })
                         except Exception as e_c:
                             st.error(f"Error al consultar Compras: {e_c}")
-    
+            
                         # C. Consultar CAMBIOS / DEVOLUCIONES / DIVISOR
                         try:
                             res_cam = db.table("CAMBIOS").select("*").eq("Código", id_kardex)\
@@ -3089,23 +3083,44 @@ else:
                                 })
                         except Exception as e_cam:
                             pass
-    
-                        # D. Consultar LOGS DE AUDITORÍA
+            
+                        # D. Consultar LOGS DE AUDITORÍA (INCLUYE AJUSTES DE INVENTARIO)
                         try:
                             res_aud = db.table("LOGS_AUDITORIA").select("*").eq("id_entidad", str(id_kardex))\
                                 .gte("fecha_hora", str_f_desde).lte("fecha_hora", str_f_hasta).execute().data
                             
                             for aud in res_aud:
-                                movimientos.append({
-                                    "Fecha_raw": aud.get("fecha_hora"),
-                                    "Concepto": "🛠️ AUDITORÍA MANUAL",
-                                    "ID Referencia": f"ID_Log: {aud.get('id', 'S/I')}",
-                                    "Variación": 0,
-                                    "Detalle / Observaciones": f"Acción: {aud.get('accion')} | User: {aud.get('usuario')}"
-                                })
+                                accion = aud.get("accion", "")
+                                detalles = aud.get("detalles") or {}
+                                
+                                # Convertir json/string de detalles si fuera necesario
+                                if isinstance(detalles, str):
+                                    import json
+                                    try: detalles = json.loads(detalles)
+                                    except: detalles = {}
+            
+                                # Si es un ajuste de inventario, extrae la variación y se marca distintivo
+                                if accion == "AJUSTE_INVENTARIO" or detalles.get("operacion") in ["Ajuste de Inventario", "Ajuste Directo Conteo Admin"]:
+                                    var_ajuste = int(detalles.get("diferencia_aplicada", 0))
+                                    movimientos.append({
+                                        "Fecha_raw": aud.get("fecha_hora"),
+                                        "Concepto": "⚖️ AJUSTE INVENTARIO",
+                                        "ID Referencia": f"ID_Log: {aud.get('id', 'S/I')}",
+                                        "Variación": var_ajuste,
+                                        "Detalle / Observaciones": f"Ajuste manual aplicado por {aud.get('usuario', 'Admin')}"
+                                    })
+                                else:
+                                    # Auditorías regulares sin variación de stock
+                                    movimientos.append({
+                                        "Fecha_raw": aud.get("fecha_hora"),
+                                        "Concepto": "🛠️ AUDITORÍA MANUAL",
+                                        "ID Referencia": f"ID_Log: {aud.get('id', 'S/I')}",
+                                        "Variación": 0,
+                                        "Detalle / Observaciones": f"Acción: {accion} | User: {aud.get('usuario')}"
+                                    })
                         except Exception as e_aud:
                             pass
-    
+            
                         # Renderizar resultados con trazabilidad de stock
                         if movimientos:
                             df_kardex = pd.DataFrame(movimientos)
