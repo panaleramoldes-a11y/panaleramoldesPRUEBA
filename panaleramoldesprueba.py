@@ -3177,27 +3177,38 @@ else:
                         except Exception as e_aud:
                             pass
 
-                        # E. Consultar AJUSTES DE INVENTARIO (NUEVA SECCIÓN)
+                        # E. Consultar AJUSTES DE INVENTARIO
                         try:
-                            # Ajusta la tabla 'AJUSTES_INVENTARIO' o 'ID_Producto' si tus nombres en Supabase son diferentes
-                            res_aj = db.table("AJUSTES_INVENTARIO").select("*").eq("ID_Producto", id_kardex)\
-                                .gte("Fecha", str_f_desde).lte("Fecha", str_f_hasta).execute().data
+                            # 1. Adaptación de tipo de dato para evitar fallos int vs str
+                            id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
                             
-                            for aj in res_aj:
-                                # Se calcula la variación directa ingresada en el ajuste (+N o -N)
-                                var_aj = int(aj.get("Diferencia", aj.get("Cantidad", 0)))
-                                motivo = aj.get("Motivo", aj.get("Observaciones", "Ajuste manual de stock"))
-                                usuario = aj.get("Usuario", "S/D")
-                                
-                                movimientos.append({
-                                    "Fecha_raw": aj.get("Fecha") or aj.get("fecha_hora"),
-                                    "Concepto": "⚖️ AJUSTE INVENTARIO",
-                                    "ID Referencia": f"ID_Ajuste: {aj.get('id', 'S/I')}",
-                                    "Variación": var_aj,
-                                    "Detalle / Observaciones": f"{motivo} (Usuario: {usuario})"
-                                })
+                            # 2. Formato estricto de fecha con horas extremas (00:00:00 a 23:59:59)
+                            f_desde_iso = f"{fecha_desde}T00:00:00"
+                            f_hasta_iso = f"{fecha_hasta}T23:59:59"
+                            
+                            # Reemplaza 'AJUSTES_INVENTARIO' por el nombre de tu tabla si es distinto
+                            res_aj = db.table("AJUSTES_INVENTARIO").select("*")\
+                                .eq("ID_Producto", id_prod_query)\
+                                .gte("Fecha", f_desde_iso)\
+                                .lte("Fecha", f_hasta_iso).execute().data
+                            
+                            if res_aj:
+                                for aj in res_aj:
+                                    # Extraer diferencia (prueba varios nombres habituales de campo)
+                                    var_aj = int(aj.get("Diferencia") or aj.get("Cantidad") or aj.get("Variacion") or 0)
+                                    motivo = aj.get("Motivo") or aj.get("Observaciones") or "Ajuste manual de stock"
+                                    usuario = aj.get("Usuario") or aj.get("usuario") or "S/D"
+                                    fecha_mov = aj.get("Fecha") or aj.get("fecha") or aj.get("created_at")
+                                    
+                                    movimientos.append({
+                                        "Fecha_raw": fecha_mov,
+                                        "Concepto": "⚖️ AJUSTE INVENTARIO",
+                                        "ID Referencia": f"ID_Ajuste: {aj.get('id') or aj.get('ID_Ajuste') or 'S/I'}",
+                                        "Variación": var_aj,
+                                        "Detalle / Observaciones": f"{motivo} (Usuario: {usuario})"
+                                    })
                         except Exception as e_aj:
-                            pass
+                            st.warning(f"⚠️ No se pudieron cargar los ajustes de inventario: {e_aj}")
             
                         # Renderizar resultados con trazabilidad de stock
                         if movimientos:
