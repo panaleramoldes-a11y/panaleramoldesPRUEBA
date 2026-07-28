@@ -2747,58 +2747,80 @@ else:
                                             st.error(f"Error al guardar auditoría: {e}")
 
                                 with col_act2:
-                                    # BOTÓN 2: Aplicar re-conteo definitivo a la tabla PRODUCTOS
-                                    if st.button("⚙️ Aplicar Ajustes de Stock Reales", type="primary", use_container_width=True, key="btn_apply_stock_audit"):
+                                    # BOTÓN 2: Aplicación Inteligente de Ajustes
+                                    if st.button("⚙️ Aplicar / Confirmar Ajustes de Stock", type="primary", use_container_width=True, key="btn_apply_stock_audit"):
                                         try:
                                             admin_usuario = st.session_state.get('usuario_actual', 'Admin')
+                                            
                                             for _, item in df_editado.iterrows():
-                                                dif_real = float(item['diferencia_admin'])
-                                                dif_vendedor = float(item['diferencia_vendedor'])
-                                                
                                                 if item['estado_item'] == 'PENDIENTE':
                                                     id_prod_str = str(item['id_producto']).strip()
                                                     
+                                                    conteo_vendedor = float(item["stock_contado"])
+                                                    conteo_admin = float(item["stock_contado_admin"])
+                                                    dif_vendedor = float(item["diferencia_vendedor"])
+                                                    dif_admin = float(item["diferencia_admin"])
+                                                    
+                                                    # Cargar stock vivo actual en base de datos
                                                     p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod_str).execute().data
-                                                    if p_actual:
-                                                        stock_vivo = float(p_actual[0]['Stock_Actual'] or 0)
-                                                        nuevo_stock_int = int(round(stock_vivo + dif_real))
+                                                    stock_vivo = float(p_actual[0]['Stock_Actual'] or 0) if p_actual else 0.0
 
-                                                        # Actualizar PRODUCTOS
+                                                    # --- LÓGICA DE DECISIÓN DE STOCK ---
+                                                    if conteo_admin == conteo_vendedor and dif_admin == 0:
+                                                        # CASO 1: El vendedor contó BIEN (Dif=0) y el Admin no modificó nada.
+                                                        # NO se toca el stock vivo (se respetan las ventas/movimientos del día).
+                                                        nuevo_stock_final = int(round(stock_vivo))
+                                                        se_actualizo_stock = False
+
+                                                    elif conteo_admin != conteo_vendedor:
+                                                        # CASO 2: El Admin HIZO UN RE-CONTEO FÍSICO propio.
+                                                        # La palabra del Admin manda: se fija el stock exactamente a lo que contó el Admin.
+                                                        nuevo_stock_final = int(round(conteo_admin))
+                                                        se_actualizo_stock = True
+
+                                                    else:
+                                                        # CASO 3: El vendedor contó MAL (Dif != 0), pero el Admin no hizo re-conteo.
+                                                        # Se aplica el delta/diferencia detectada sobre el stock vivo actual.
+                                                        nuevo_stock_final = int(round(stock_vivo + dif_admin))
+                                                        se_actualizo_stock = True
+
+                                                    # 1. Actualizar tabla PRODUCTOS solo si hubo un ajuste real
+                                                    if se_actualizo_stock:
                                                         db.table("PRODUCTOS").update({
-                                                            "Stock_Actual": nuevo_stock_int
+                                                            "Stock_Actual": nuevo_stock_final
                                                         }).eq("ID_Producto", id_prod_str).execute()
 
-                                                        # Actualizar DETALLE conservando ambos conteos
-                                                        db.table("INVENTARIOS_DETALLE").update({
-                                                            "stock_contado_admin": float(item["stock_contado_admin"]),
-                                                            "diferencia": dif_real,
-                                                            "diferencia_vendedor": dif_vendedor,  # <-- TAMBIÉN SE GUARDA AL AJUSTAR
-                                                            "estado_item": "AJUSTADO",
-                                                            "auditado_por": admin_usuario
-                                                        }).eq("id", int(item['id'])).execute()
+                                                    # 2. Actualizar DETALLE del inventario para cerrar el ítem
+                                                    db.table("INVENTARIOS_DETALLE").update({
+                                                        "stock_contado_admin": conteo_admin,
+                                                        "diferencia": dif_admin,
+                                                        "diferencia_vendedor": dif_vendedor,
+                                                        "estado_item": "AJUSTADO",
+                                                        "auditado_por": admin_usuario
+                                                    }).eq("id", int(item['id'])).execute()
 
-                                                        # Auditoría en Log
-                                                        if 'log_auditoria' in globals():
-                                                            log_auditoria(
-                                                                tabla="PRODUCTOS",
-                                                                accion="UPDATE",
-                                                                id_entidad=id_prod_str,
-                                                                detalles={
-                                                                    "operacion": "Ajuste Auditoría Admin",
-                                                                    "vendedor": vendedor_original,
-                                                                    "conteo_vendedor": float(item["stock_contado"]),
-                                                                    "conteo_admin": float(item["stock_contado_admin"]),
-                                                                    "error_vendedor": dif_vendedor,
-                                                                    "nuevo_stock": nuevo_stock_int
-                                                                },
-                                                                usuario=admin_usuario
-                                                            )
+                                                    # 3. Registrar en Auditoría si se modificó el stock
+                                                    if se_actualizo_stock and 'log_auditoria' in globals():
+                                                        log_auditoria(
+                                                            tabla="PRODUCTOS",
+                                                            accion="UPDATE",
+                                                            id_entidad=id_prod_str,
+                                                            detalles={
+                                                                "operacion": "Ajuste Auditoría Admin",
+                                                                "vendedor": vendedor_original,
+                                                                "conteo_vendedor": conteo_vendedor,
+                                                                "conteo_admin": conteo_admin,
+                                                                "stock_anterior": stock_vivo,
+                                                                "nuevo_stock": nuevo_stock_final
+                                                            },
+                                                            usuario=admin_usuario
+                                                        )
 
                                             db.table("INVENTARIOS_CABECERA").update({
                                                 "impactofinanciero": round(float(impacto_real), 2)
                                             }).eq("id", id_cabecera).execute()
 
-                                            st.success("✅ Stock ajustado correctamente preservando la trazabilidad de auditoría.")
+                                            st.success("✅ Procesamiento de inventario completado de forma inteligente sin afectar ventas intermadias.")
                                             st.rerun()
 
                                         except Exception as e:
