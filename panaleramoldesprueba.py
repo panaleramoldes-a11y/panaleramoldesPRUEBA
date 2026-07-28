@@ -2761,22 +2761,24 @@ else:
                                                     if p_actual:
                                                         stock_vivo = float(p_actual[0]['Stock_Actual'] or 0)
                                                         dif_real = float(item['diferencia_admin'])
-                                                        nuevo_stock = stock_vivo + dif_real
+                                                        
+                                                        # 1. Convertimos el cálculo explícitamente a un entero (int)
+                                                        nuevo_stock_int = int(round(stock_vivo + dif_real))
                                                     
-                                                        # Actualizar PRODUCTOS
+                                                        # 2. Actualizamos la tabla PRODUCTOS enviando el entero
                                                         db.table("PRODUCTOS").update({
-                                                            "Stock_Actual": nuevo_stock  # <-- Aquí se envía como float (ej: 0.0)
+                                                            "Stock_Actual": nuevo_stock_int
                                                         }).eq("ID_Producto", id_prod_str).execute()
-
-                                                        # Actualizar DETALLE conservando ambos conteos
+                                                    
+                                                        # 3. Actualizar DETALLE conservando ambos conteos
                                                         db.table("INVENTARIOS_DETALLE").update({
                                                             "stock_contado_admin": float(item["stock_contado_admin"]),
                                                             "diferencia": dif_real,
                                                             "estado_item": "AJUSTADO",
                                                             "auditado_por": admin_usuario
                                                         }).eq("id", int(item['id'])).execute()
-
-                                                        # Auditoría en Log
+                                                    
+                                                        # 4. Auditoría en Log
                                                         if 'log_auditoria' in globals():
                                                             log_auditoria(
                                                                 tabla="PRODUCTOS",
@@ -2788,7 +2790,7 @@ else:
                                                                     "conteo_vendedor": float(item["stock_contado"]),
                                                                     "conteo_admin": float(item["stock_contado_admin"]),
                                                                     "error_vendedor": float(item["desviacion_vendedor"]),
-                                                                    "nuevo_stock": nuevo_stock
+                                                                    "nuevo_stock": nuevo_stock_int
                                                                 },
                                                                 usuario=admin_usuario
                                                             )
