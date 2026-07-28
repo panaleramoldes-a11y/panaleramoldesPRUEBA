@@ -2619,10 +2619,10 @@ else:
                                 except Exception as e:
                                     st.error(f"Error al enviar recuento: {e}")
 
-            # --- VISTA 2: ADMIN AUDITORÍA ---
+            # --- VISTA 2: ADMIN AUDITORÍA Y RE-CONTEO CON TRAZABILIDAD ---
             if st.session_state.rol == "Administrador" and subtab_admin:
                 with subtab_admin:
-                    st.caption("Supervisión, detección de inconsistencias y aplicación de diferencias.")
+                    st.caption("Supervisión, auditoría de errores del vendedor y aplicación de ajustes de stock.")
                     
                     cabeceras_data = db.table("INVENTARIOS_CABECERA").select("*").eq("estado", "ENVIADO").order("created_at", desc=True).execute().data
                     
@@ -2631,15 +2631,17 @@ else:
                     else:
                         df_cabeceras = pd.DataFrame(cabeceras_data)
                         
-                        # Formato de opción agregando el impacto financiero guardado en BD
                         opciones_inv = [
-                            f"ID #{r['id']} - {r['vendedor']} ({r['parametro']}) - Impacto Est.: ${float(r.get('impactofinanciero') or 0):,.2f} - {str(r['created_at'])[:10]}" 
+                            f"ID #{r['id']} - {r['vendedor']} ({r['parametro']}) - Imp. Est. Vendedor: ${float(r.get('impactofinanciero') or 0):,.2f} - {str(r['created_at'])[:10]}" 
                             for _, r in df_cabeceras.iterrows()
                         ]
                         inv_seleccionado = st.selectbox("Seleccione recuento para auditar:", opciones_inv, key="rev_inv_sel")
                         
                         if inv_seleccionado:
                             id_cabecera = int(inv_seleccionado.split(" - ")[0].replace("ID #", ""))
+                            cabecera_actual = next(c for c in cabeceras_data if c["id"] == id_cabecera)
+                            vendedor_original = cabecera_actual.get("vendedor", "Vendedor")
+
                             detalle_data = db.table("INVENTARIOS_DETALLE").select("*").eq("inventario_id", id_cabecera).execute().data
                             
                             if detalle_data:
@@ -2648,7 +2650,7 @@ else:
                                 
                                 df_prods_info = pd.DataFrame(
                                     db.table("PRODUCTOS")
-                                    .select("ID_Producto, Nombre, Precio_Costo, Stock_Actual")
+                                    .select("ID_Producto, Nombre, Precio_Costo")
                                     .in_("ID_Producto", ids_det)
                                     .execute().data
                                 )
@@ -2658,100 +2660,155 @@ else:
                                 
                                 df_merged = pd.merge(df_det, df_prods_info, left_on="id_producto", right_on="ID_Producto", suffixes=('', '_actual'))
                                 
-                                total_dif = df_merged['diferencia'].sum()
-                                impacto_dinero = (df_merged['diferencia'] * df_merged['Precio_Costo'].fillna(0)).sum()
+                                # Asegurar tipos
+                                df_merged["stock_sistema_snap"] = df_merged["stock_sistema_snap"].astype(float)
+                                df_merged["stock_contado"] = df_merged["stock_contado"].astype(float)
                                 
-                                m1, m2 = st.columns(2)
-                                m1.metric("Diferencia Total (Unidades)", f"{total_dif:.0f}")
-                                m2.metric("Impacto Financiero Estimado", f"${impacto_dinero:,.2f}", delta_color="inverse")
+                                # Si no se ha auditado aún, pre-cargar el valor del admin igual al del vendedor
+                                if "stock_contado_admin" not in df_merged.columns or df_merged["stock_contado_admin"].isnull().all():
+                                    df_merged["stock_contado_admin"] = df_merged["stock_contado"]
+                                else:
+                                    df_merged["stock_contado_admin"] = df_merged["stock_contado_admin"].fillna(df_merged["stock_contado"]).astype(float)
+
+                                df_merged["Precio_Costo"] = df_merged["Precio_Costo"].fillna(0).astype(float)
+
+                                st.info(f"👤 **Conteo original de:** `{vendedor_original}`. Edite la columna **'Re-conteo (Admin)'** si encuentra inconsistencias.")
+
+                                # EDITOR INTERACTIVO CON AMBAS COLUMNAS
+                                df_editado = st.data_editor(
+                                    df_merged,
+                                    column_order=[
+                                        "id_producto",
+                                        "Nombre",
+                                        "stock_sistema_snap",
+                                        "stock_contado",
+                                        "stock_contado_admin",
+                                        "diferencia_admin",
+                                        "desviacion_vendedor",
+                                        "estado_item"
+                                    ],
+                                    disabled=["id_producto", "Nombre", "stock_sistema_snap", "stock_contado", "diferencia_admin", "desviacion_vendedor", "estado_item"],
+                                    column_config={
+                                        "id_producto": "ID Prod",
+                                        "Nombre": "Producto",
+                                        "stock_sistema_snap": st.column_config.NumberColumn("Stock Sistema", format="%.2f"),
+                                        "stock_contado": st.column_config.NumberColumn(f"Contado ({vendedor_original})", format="%.2f"),
+                                        "stock_contado_admin": st.column_config.NumberColumn("Re-conteo (Admin) ✏️", format="%.2f", min_value=0.0),
+                                        "diferencia_admin": st.column_config.NumberColumn("Dif. Real vs Sistema", format="%.2f"),
+                                        "desviacion_vendedor": st.column_config.NumberColumn("Error Vendedor", format="%.2f"),
+                                        "estado_item": "Estado"
+                                    },
+                                    hide_index=True,
+                                    use_container_width=True,
+                                    key=f"editor_audit_{id_cabecera}"
+                                )
+
+                                # Cálculos de auditoría
+                                # 1. Diferencia real de inventario (Admin vs Sistema)
+                                df_editado["diferencia_admin"] = df_editado["stock_contado_admin"] - df_editado["stock_sistema_snap"]
                                 
+                                # 2. Desviación/Error del vendedor (Admin vs Vendedor)
+                                df_editado["desviacion_vendedor"] = df_editado["stock_contado_admin"] - df_editado["stock_contado"]
+
+                                items_con_error_vendedor = (df_editado["desviacion_vendedor"] != 0).sum()
+                                impacto_real = (df_editado['diferencia_admin'] * df_editado['Precio_Costo']).sum()
+
                                 st.markdown("---")
                                 
-                                for idx, item in df_merged.iterrows():
-                                    dif = item['diferencia']
-                                    if dif == 0:
-                                        color_status = "🟢 COINCIDE"
-                                        border = False
-                                    elif dif < 0:
-                                        color_status = f"🔴 FALTANTE ({dif:.0f})"
-                                        border = True
-                                    else:
-                                        color_status = f"🟡 SOBRANTE (+{dif:.0f})"
-                                        border = True
-                                        
-                                    with st.container(border=border):
-                                        c1, c2, c3, c4, c5 = st.columns([3, 1.5, 1.5, 2, 2])
-                                        c1.write(f"**{item['Nombre']}** (`{item['id_producto']}`)")
-                                        c2.write(f"Snap: **{item['stock_sistema_snap']}**")
-                                        c3.write(f"Contado: **{item['stock_contado']}**")
-                                        c4.write(f"Estado: **{color_status}**")
-                                        
-                                        with c5:
-                                            if item['estado_item'] == 'PENDIENTE' and dif != 0:
-                                                if st.button("✔️ Aplicar Ajuste", key=f"btn_aj_{item['id']}"):
-                                                    try:
-                                                        # 1. Asegurar tipo text estricto para la clave
-                                                        id_prod_str = str(item['id_producto']).strip()
-                                                        
-                                                        # 2. Consultar el stock actual en tiempo real en la BD
-                                                        p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod_str).execute().data
-                                                        
-                                                        if not p_actual:
-                                                            st.error(f"No se encontró el producto con ID '{id_prod_str}' en la base de datos.")
-                                                            st.stop()
-                                                        
-                                                        # Convertir a float primero por si viene None o vacio, luego operar
+                                # METRICAS COMPARATIVAS DE AUDITORÍA
+                                col_m1, col_m2, col_m3 = st.columns(3)
+                                col_m1.metric("Errores de Conteo del Vendedor", f"{items_con_error_vendedor} productos")
+                                col_m2.metric("Diferencia Real (Unidades)", f"{df_editado['diferencia_admin'].sum():+.2f} un.")
+                                col_m3.metric("Impacto Financiero Real", f"${impacto_real:,.2f}", delta_color="inverse")
+
+                                st.markdown("---")
+
+                                col_act1, col_act2 = st.columns(2)
+
+                                with col_act1:
+                                    # BOTÓN 1: Guardar auditoría sin ajustar productos aún
+                                    if st.button("💾 Guardar Auditoría y Re-conteo", use_container_width=True, key="btn_save_audit"):
+                                        try:
+                                            admin_usuario = st.session_state.get('usuario_actual', 'Admin')
+                                            for _, row in df_editado.iterrows():
+                                                db.table("INVENTARIOS_DETALLE").update({
+                                                    "stock_contado_admin": float(row["stock_contado_admin"]),
+                                                    "diferencia": float(row["diferencia_admin"]),
+                                                    "auditado_por": admin_usuario
+                                                }).eq("id", int(row["id"])).execute()
+
+                                            db.table("INVENTARIOS_CABECERA").update({
+                                                "impactofinanciero": round(float(impacto_real), 2)
+                                            }).eq("id", id_cabecera).execute()
+
+                                            st.success("✅ Auditoría guardada con histórico de diferencias.")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error al guardar auditoría: {e}")
+
+                                with col_act2:
+                                    # BOTÓN 2: Aplicar re-conteo definitivo a la tabla PRODUCTOS
+                                    if st.button("⚙️ Aplicar Ajustes de Stock Reales", type="primary", use_container_width=True, key="btn_apply_stock_audit"):
+                                        try:
+                                            admin_usuario = st.session_state.get('usuario_actual', 'Admin')
+                                            for _, item in df_editado.iterrows():
+                                                dif_real = float(item['diferencia_admin'])
+                                                
+                                                if item['estado_item'] == 'PENDIENTE':
+                                                    id_prod_str = str(item['id_producto']).strip()
+                                                    
+                                                    p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod_str).execute().data
+                                                    if p_actual:
                                                         stock_vivo = float(p_actual[0]['Stock_Actual'] or 0)
-                                                        dif_float = float(item['diferencia'])
-                                                        
-                                                        # 3. CASTEO ESTRICTO A INT4 (int nativo de Python)
-                                                        nuevo_stock_int = int(round(stock_vivo + dif_float))
-                                                        
-                                                        # 4. Actualizar tabla PRODUCTOS
+                                                        nuevo_stock = stock_vivo + dif_real
+
+                                                        # Actualizar PRODUCTOS
                                                         db.table("PRODUCTOS").update({
-                                                            "Stock_Actual": nuevo_stock_int
+                                                            "Stock_Actual": nuevo_stock
                                                         }).eq("ID_Producto", id_prod_str).execute()
-                                                        
-                                                        # 5. Actualizar estado en INVENTARIOS_DETALLE
-                                                        id_detalle_int = int(item['id'])
+
+                                                        # Actualizar DETALLE conservando ambos conteos
                                                         db.table("INVENTARIOS_DETALLE").update({
-                                                            "estado_item": "AJUSTADO"
-                                                        }).eq("id", id_detalle_int).execute()
-                                                        
-                                                        # 6. Auditoría
+                                                            "stock_contado_admin": float(item["stock_contado_admin"]),
+                                                            "diferencia": dif_real,
+                                                            "estado_item": "AJUSTADO",
+                                                            "auditado_por": admin_usuario
+                                                        }).eq("id", int(item['id'])).execute()
+
+                                                        # Auditoría en Log
                                                         if 'log_auditoria' in globals():
                                                             log_auditoria(
                                                                 tabla="PRODUCTOS",
                                                                 accion="UPDATE",
                                                                 id_entidad=id_prod_str,
                                                                 detalles={
-                                                                    "operacion": "Ajuste de Inventario",
-                                                                    "diferencia_aplicada": dif_float,
-                                                                    "stock_anterior": stock_vivo,
-                                                                    "nuevo_stock": nuevo_stock_int
+                                                                    "operacion": "Ajuste Auditoría Admin",
+                                                                    "vendedor": vendedor_original,
+                                                                    "conteo_vendedor": float(item["stock_contado"]),
+                                                                    "conteo_admin": float(item["stock_contado_admin"]),
+                                                                    "error_vendedor": float(item["desviacion_vendedor"]),
+                                                                    "nuevo_stock": nuevo_stock
                                                                 },
-                                                                usuario=st.session_state.get('usuario_actual', 'Admin')
+                                                                usuario=admin_usuario
                                                             )
-                                                        
-                                                        st.success(f"✅ ¡Ajustado! {int(stock_vivo)} ➔ {nuevo_stock_int}")
-                                                        st.rerun()
-                                                        
-                                                    except Exception as e:
-                                                        st.error(f"Error al aplicar ajuste: {e}")
-                                            elif item['estado_item'] == 'AJUSTADO':
-                                                st.caption("✅ Ajustado")
-                                            else:
-                                                st.caption("Sin diferencia")
-            
+
+                                            db.table("INVENTARIOS_CABECERA").update({
+                                                "impactofinanciero": round(float(impacto_real), 2)
+                                            }).eq("id", id_cabecera).execute()
+
+                                            st.success("✅ Stock ajustado correctamente preservando la trazabilidad de auditoría.")
+                                            st.rerun()
+
+                                        except Exception as e:
+                                            st.error(f"Error al aplicar el ajuste: {e}")
+
                                 st.markdown("---")
                                 
-                                # -------------------------------------------------------------
-                                # BOTONES INFERIORES: ARCHIVAR O ELIMINAR
-                                # -------------------------------------------------------------
+                                # SECCIÓN BORRAR / ARCHIVAR
                                 col_accion1, col_accion2 = st.columns(2)
             
                                 with col_accion1:
-                                    if st.button("🏁 Finalizar y Archivar Auditoría", type="primary", use_container_width=True, key="btn_cerrar_inv"):
+                                    if st.button("🏁 Finalizar y Archivar Auditoría", use_container_width=True, key="btn_cerrar_inv"):
                                         db.table("INVENTARIOS_CABECERA").update({"estado": "REVISADO"}).eq("id", id_cabecera).execute()
                                         st.success("✅ Inventario cerrado correctamente.")
                                         st.rerun()
@@ -2759,20 +2816,14 @@ else:
                                 with col_accion2:
                                     with st.popover("🗑️ Eliminar Auditoría", use_container_width=True):
                                         st.warning("⚠️ **¿Está seguro de eliminar este recuento?**")
-                                        st.caption("Esta acción borrará permanentemente la cabecera y sus detalles.")
-                                        
                                         if st.button("💥 Confirmar y Borrar", type="primary", use_container_width=True, key="btn_del_inv_confirm"):
                                             try:
-                                                # 1. Borrar detalle
                                                 db.table("INVENTARIOS_DETALLE").delete().eq("inventario_id", id_cabecera).execute()
-                                                
-                                                # 2. Borrar cabecera
                                                 db.table("INVENTARIOS_CABECERA").delete().eq("id", id_cabecera).execute()
-                                                
                                                 st.success("🗑️ Recuento eliminado exitosamente.")
                                                 st.rerun()
                                             except Exception as e:
-                                                st.error(f"Error al eliminar la auditoría: {e}")
+                                                st.error(f"Error al eliminar auditoría: {e}")
     
         # --- PESTAÑAS DE ADMINISTRADOR ---
         if st.session_state.rol == "Administrador":
