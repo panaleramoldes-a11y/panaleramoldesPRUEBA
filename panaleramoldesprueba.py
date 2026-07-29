@@ -2715,7 +2715,7 @@ else:
                                                         db.table("PRODUCTOS").update({
                                                             "Stock_Actual": nuevo_stock_int
                                                         }).eq("ID_Producto", id_prod_str).execute()
-                                                
+                                                        
                                                         # ------------------------------------------------------------------
                                                         # ⚡ NUEVO: ACTUALIZAR EL DATAFRAME EN MEMORIA PARA REFLEJAR EN KARDEX
                                                         # ------------------------------------------------------------------
@@ -2750,9 +2750,9 @@ else:
                                                         
                                                         st.success(f"✅ ¡Stock Fijado! {int(stock_previo)} ➔ {nuevo_stock_int}")
                                                         st.rerun()
-                                                        
+                                        
                                                     except Exception as e:
-                                                        st.error(f"Error al aplicar ajuste: {e}")
+                                                        st.error(f"Error al aplicar el ajuste: {e}")
                                             elif item['estado_item'] == 'AJUSTADO':
                                                 st.caption("✅ Ajustado")
                                             else:
