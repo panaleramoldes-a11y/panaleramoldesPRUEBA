@@ -3114,61 +3114,63 @@ else:
                     key="kardex_prod_sel"
                 )
                 
-                # 2. Filtro Rango de Fechas (solo fechas en formato YYYY-MM-DD)
+                # 2. Filtro Rango de Fechas
                 col_f1, col_f2 = st.columns(2)
                 fecha_desde = col_f1.date_input("Fecha Desde:", value=datetime.now() - timedelta(days=30))
                 fecha_hasta = col_f2.date_input("Fecha Hasta:", value=datetime.now())
             
+                str_f_desde = datetime.combine(fecha_desde, datetime.min.time()).isoformat()
+                str_f_hasta = datetime.combine(fecha_hasta, datetime.max.time()).isoformat()
+            
                 with st.spinner("Cargando movimientos de stock desde la base de datos..."):
                     try:
-                        # Consulta a la tabla MOVIMIENTOS_STOCK filtrando solo por la fecha
+                        # Consulta a la tabla MOVIMIENTOS_STOCK usando la columna 'fecha'
                         query = db.table("MOVIMIENTOS_STOCK").select("*")\
-                            .gte("created_at", str(fecha_desde))\
-                            .lte("created_at", f"{fecha_hasta}T23:59:59")
+                            .gte("fecha", str_f_desde)\
+                            .lte("fecha", str_f_hasta)
             
-                        # Si se seleccionó un producto específico, filtramos por id_producto
+                        # Filtro opcional por producto
                         if prod_kardex_sel != "Todos los Productos":
                             id_kardex = prod_kardex_sel.split(" - ")[0]
                             query = query.eq("id_producto", str(id_kardex))
             
-                        # Ejecutamos la consulta
-                        res_mov = query.order("created_at", desc=True).execute().data
+                        # Ordenar por fecha descendente
+                        res_mov = query.order("fecha", desc=True).execute().data
             
                         if res_mov:
                             df_kardex = pd.DataFrame(res_mov)
             
-                            # Identificar la columna de fecha
-                            col_fecha = "created_at" if "created_at" in df_kardex.columns else "fecha"
-            
-                            # Formateo solo FECHA (día/mes/año)
+                            # Formatear la columna 'fecha' a solo día/mes/año
                             df_kardex["Fecha_Corta"] = pd.to_datetime(
-                                df_kardex[col_fecha], errors='coerce'
+                                df_kardex["fecha"], errors='coerce'
                             ).dt.strftime("%d/%m/%Y")
             
-                            # Cálculo de variación
-                            df_kardex["variacion"] = df_kardex["stock_nuevo"].astype(float) - df_kardex["stock_anterior"].astype(float)
+                            # Asegurar conversión numérica de la cantidad para las métricas
+                            df_kardex["cantidad"] = pd.to_numeric(df_kardex["cantidad"], errors='coerce').fillna(0)
             
-                            # Métricas
-                            entradas = df_kardex[df_kardex["variacion"] > 0]["cantidad"].astype(float).sum()
-                            salidas = df_kardex[df_kardex["variacion"] < 0]["cantidad"].astype(float).sum()
+                            # Métricas basadas en si la cantidad es positiva (ingresos) o negativa (egresos)
+                            entradas = df_kardex[df_kardex["cantidad"] > 0]["cantidad"].sum()
+                            salidas = abs(df_kardex[df_kardex["cantidad"] < 0]["cantidad"].sum())
             
                             col_m1, col_m2, col_m3 = st.columns(3)
                             col_m1.metric("📊 Total Registros", len(df_kardex))
                             col_m2.metric("📥 Total Unid. Ingresadas", f"+{int(entradas)} un.")
                             col_m3.metric("📤 Total Unid. Egresadas", f"-{int(salidas)} un.")
             
-                            # Mapeo de columnas para la vista sencilla
+                            # Mapeo exacto con los nombres de columnas de tu SQL
                             columnas_mostrar = {
                                 "Fecha_Corta": "Fecha",
                                 "nombre_producto": "Producto",
                                 "tipo_movimiento": "Tipo Movimiento",
-                                "stock_anterior": "Stock Ant.",
                                 "cantidad": "Cantidad",
+                                "stock_anterior": "Stock Ant.",
                                 "stock_nuevo": "Stock Nuevo",
                                 "origen_referencia": "Origen / Referencia",
-                                "usuario": "Usuario"
+                                "usuario": "Usuario",
+                                "observacion": "Observación"
                             }
             
+                            # Seleccionar solo las columnas existentes
                             cols_existentes = {k: v for k, v in columnas_mostrar.items() if k in df_kardex.columns}
                             df_vista = df_kardex[list(cols_existentes.keys())].rename(columns=cols_existentes)
             
