@@ -2253,40 +2253,45 @@ else:
         # --- PESTAÑA CAMBIOS ---
         with tab_cambios:
             st.subheader("🔄 Gestión de Cambios y Devoluciones")
-    
+        
             if st.session_state.get('rol') == "Administrador":
                 st.divider()
                 st.subheader("🛡️ Panel de Supervisión (Admin)")
                 pendientes = db.table("PRE_CAMBIOS").select("*").eq("Estado", "PENDIENTE").execute().data
-                
+        
                 if pendientes:
                     for p in pendientes:
                         with st.container(border=True):
                             c1, c2 = st.columns([3, 1])
                             with c1:
-                                st.markdown(f"**Producto:** {p['Nombre']} | **Usuario:** {p['Usuario']}")
+                                st.markdown(f"**Producto:** {p['Nombre']} | **Usuario Solicitante:** {p['Usuario']}")
                                 st.caption(f"Motivo original: {p['Descripción']}")
-                            
+        
                             with st.form(f"form_admin_{p['id']}"):
                                 col_a, col_b, col_c = st.columns(3)
                                 new_cant = col_a.number_input("Cantidad:", value=max(p['Entra'], p['Sale']), key=f"cant_{p['id']}")
                                 new_tipo = col_b.selectbox("Tipo:", ["ENTRA", "SALE"], index=0 if p['Entra'] > 0 else 1, key=f"tipo_{p['id']}")
                                 new_desc = col_c.text_input("Motivo editado:", value=p['Descripción'], key=f"desc_{p['id']}")
-                                
+        
                                 btn_col1, btn_col2 = st.columns(2)
                                 if btn_col1.form_submit_button("💾 Aprobar y Procesar", use_container_width=True):
-                                    prod_data = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", p['Código']).execute().data
-                                    
+                                    prod_data = db.table("PRODUCTOS").select("Stock_Actual", "Nombre").eq("ID_Producto", p['Código']).execute().data
+        
                                     if prod_data:
                                         stock_viejo = int(prod_data[0]['Stock_Actual'])
-                                        stock_nuevo = (stock_viejo + new_cant) if new_tipo == 'ENTRA' else (stock_viejo - new_cant)
-                                            
+                                        nombre_producto_kardex = prod_data[0].get('Nombre', p['Nombre'])
+        
+                                        cantidad_movimiento = int(new_cant) if new_tipo == 'ENTRA' else -int(new_cant)
+                                        stock_nuevo = stock_viejo + cantidad_movimiento
+        
+                                        # 1. Actualización de Stock Actual del Producto
                                         db.table("PRODUCTOS").update({"Stock_Actual": stock_nuevo}).eq("ID_Producto", p['Código']).execute()
-                                        
+        
                                         try:
+                                            # 2. Registrar en Tabla CAMBIOS
                                             db.table("CAMBIOS").insert({
                                                 "Fecha": datetime.now().isoformat(),
-                                                "Usuario": st.session_state.get('usuario_actual', 'Administrador'),
+                                                "Usuario": st.session_state.get('usuario_nombre') or st.session_state.get('usuario_actual', 'Administrador'),
                                                 "Código": p['Código'],
                                                 "Nombre": p['Nombre'],
                                                 "Descripción": new_desc,
@@ -2295,37 +2300,53 @@ else:
                                                 "existencia_ant": stock_viejo,
                                                 "existencia_actual": stock_nuevo
                                             }).execute()
-                                            
+        
+                                            # 3. REGISTRAR EN MOVIMIENTOS_STOCK (KARDEX)
+                                            usuario_admin = st.session_state.get('usuario_nombre') or st.session_state.get('usuario_actual', 'Administrador')
+                                            tipo_mov_kardex = "DEVOLUCIÓN ENTRADA" if new_tipo == 'ENTRA' else "CAMBIO SALIDA"
+        
+                                            db.table("MOVIMIENTOS_STOCK").insert({
+                                                "id_producto": str(p['Código']),
+                                                "nombre_producto": nombre_producto_kardex,
+                                                "tipo_movimiento": tipo_mov_kardex,
+                                                "cantidad": cantidad_movimiento,
+                                                "stock_anterior": stock_viejo,
+                                                "stock_nuevo": stock_nuevo,
+                                                "origen_referencia": f"Cambio/Devolución ID: {p['id']} - Motivo: {new_desc}",
+                                                "usuario": str(usuario_admin)
+                                            }).execute()
+        
+                                            # 4. Cambiar estado a PROCESADO
                                             db.table("PRE_CAMBIOS").update({"Estado": "PROCESADO"}).eq("id", p['id']).execute()
-                                            st.success("✅ Stock actualizado correctamente.")
+                                            st.success("✅ Stock y Kardex actualizados correctamente.")
                                             st.rerun()
-    
+        
                                         except Exception as e:
-                                            st.error(f"Error al insertar en CAMBIOS: {e}")
-                                
+                                            st.error(f"Error al procesar el cambio: {e}")
+        
                                 if btn_col2.form_submit_button("❌ Rechazar", use_container_width=True):
                                     db.table("PRE_CAMBIOS").update({"Estado": "RECHAZADO"}).eq("id", p['id']).execute()
                                     st.rerun()
                 else:
                     st.info("No hay cambios pendientes.")
                 st.divider()
-            
+        
             if 'lista_cambios' not in st.session_state:
                 st.session_state.lista_cambios = []
-            
+        
             opciones_productos = (st.session_state.df_prod['Nombre'] + " (ID: " + 
                                   st.session_state.df_prod['ID_Producto'].astype(str) + ")").tolist()
-            
+        
             prod_seleccionado = st.selectbox("Buscar producto", options=opciones_productos, index=None, placeholder="Escriba para buscar...", key="buscador_cambios")
-            
+        
             if prod_seleccionado:
                 nombre_real = prod_seleccionado.split(" (ID: ")[0]
                 id_real = prod_seleccionado.split("(ID: ")[1].replace(")", "")
-                
+        
                 c1, c2 = st.columns(2)
                 cant_sel = c1.number_input("Cantidad:", min_value=1, value=1, key="cant_input")
                 tipo_sel = c2.radio("Tipo:", ["ENTRA", "SALE"], horizontal=True, key="tipo_input")
-                
+        
                 if st.button("➕ Añadir a la lista"):
                     st.session_state.lista_cambios.append({
                         "ID": id_real,
@@ -2334,19 +2355,20 @@ else:
                         "Tipo": tipo_sel
                     })
                     st.rerun()
-            
+        
             if st.session_state.lista_cambios:
                 st.write("Resumen del movimiento:")
                 st.table(pd.DataFrame(st.session_state.lista_cambios))
-                
+        
                 if st.button("❌ Limpiar lista"):
                     st.session_state.lista_cambios = []
                     st.rerun()
-            
+        
                 motivo = st.text_input("Motivo del cambio:")
-                    
+        
                 if st.button("📤 Enviar Pre-cambio a Revisión"):
                     try:
+                        usuario_solicitante = st.session_state.get('usuario_nombre') or st.session_state.get('usuario_actual', 'Desconocido')
                         for item in st.session_state.lista_cambios:
                             db.table("PRE_CAMBIOS").insert({
                                 "Fecha": datetime.now().isoformat(),
@@ -2356,7 +2378,7 @@ else:
                                 "Entra": int(item['Cantidad']) if item['Tipo'] == 'ENTRA' else 0,
                                 "Sale": int(item['Cantidad']) if item['Tipo'] == 'SALE' else 0,
                                 "Estado": "PENDIENTE",
-                                "Usuario": st.session_state.get('usuario_actual', 'Desconocido')
+                                "Usuario": str(usuario_solicitante)
                             }).execute()
                         st.success("✅ Enviado a revisión.")
                         st.session_state.lista_cambios = []
