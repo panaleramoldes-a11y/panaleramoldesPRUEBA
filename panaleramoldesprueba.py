@@ -2701,54 +2701,49 @@ else:
                                             if item['estado_item'] == 'PENDIENTE':
                                                 if st.button("✔️ Aplicar Ajuste", key=f"btn_aj_{item['id']}"):
                                                     try:
-                                                        # 1. Asegurar tipo text estricto para la clave
+                                                        # 1. Identificar producto y stock previo
                                                         id_prod_str = str(item['id_producto']).strip()
-                                                        
-                                                        # 2. Consultar el stock actual previo en la BD para el log
                                                         p_actual = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod_str).execute().data
                                                         stock_previo = float(p_actual[0]['Stock_Actual'] or 0) if p_actual else 0.0
                                                         
-                                                        # 3. El valor ingresado por el Admin PISA directamente el stock
+                                                        # 2. Calcular la diferencia (Delta) que genera el movimiento
                                                         nuevo_stock_int = int(valor_admin)
+                                                        diferencia_unidades = nuevo_stock_int - int(stock_previo) # Puede ser positivo o negativo
                                                         
-                                                        # 4. Actualizar tabla PRODUCTOS con el valor corregido
+                                                        # 3. ACTUALIZAR Stock Actual en PRODUCTOS
                                                         db.table("PRODUCTOS").update({
                                                             "Stock_Actual": nuevo_stock_int
                                                         }).eq("ID_Producto", id_prod_str).execute()
                                                         
                                                         # ------------------------------------------------------------------
-                                                        # ⚡ NUEVO: ACTUALIZAR EL DATAFRAME EN MEMORIA PARA REFLEJAR EN KARDEX
+                                                        # ⚡ 4. REGISTRAR EL MOVIMIENTO EN EL HISTÓRICO / KARDEX DE STOCK
+                                                        # (Ajusta los nombres de la tabla y columnas según tu base de datos)
                                                         # ------------------------------------------------------------------
+                                                        db.table("MOVIMIENTOS_STOCK").insert({
+                                                            "id_producto": id_prod_str,
+                                                            "tipo_movimiento": "AJUSTE INVENTARIO",  # Identificador del motivo
+                                                            "cantidad": diferencia_unidades,        # Cantidad (+) o (-)
+                                                            "stock_anterior": int(stock_previo),
+                                                            "stock_nuevo": nuevo_stock_int,
+                                                            "origen_referencia": f"Inventario Detalle ID: {item['id']}",
+                                                            "usuario": st.session_state.get('usuario_actual', 'Admin')
+                                                        }).execute()
+                                                        # ------------------------------------------------------------------
+                                        
+                                                        # 5. Actualizar en el DataFrame local si lo mantienes en sesión
                                                         if "df_prod" in st.session_state:
                                                             st.session_state.df_prod.loc[
                                                                 st.session_state.df_prod['ID_Producto'].astype(str) == id_prod_str, 
                                                                 'Stock_Actual'
                                                             ] = nuevo_stock_int
-                                                        # ------------------------------------------------------------------
                                                         
-                                                        # 5. Actualizar estado en INVENTARIOS_DETALLE
+                                                        # 6. Marcar detalle de inventario como AJUSTADO
                                                         id_detalle_int = int(item['id'])
                                                         db.table("INVENTARIOS_DETALLE").update({
                                                             "estado_item": "AJUSTADO"
                                                         }).eq("id", id_detalle_int).execute()
                                                         
-                                                        # 6. Auditoría
-                                                        if 'log_auditoria' in globals():
-                                                            variacion_real = nuevo_stock_int - int(stock_previo)
-                                                            log_auditoria(
-                                                                tabla="PRODUCTOS",
-                                                                accion="AJUSTE_INVENTARIO",
-                                                                id_entidad=id_prod_str,
-                                                                detalles={
-                                                                    "operacion": "Ajuste de Inventario",
-                                                                    "diferencia_aplicada": variacion_real,
-                                                                    "stock_anterior": int(stock_previo),
-                                                                    "nuevo_stock": nuevo_stock_int
-                                                                },
-                                                                usuario=st.session_state.get('usuario_actual', 'Admin')
-                                                            )
-                                                        
-                                                        st.success(f"✅ ¡Stock Fijado! {int(stock_previo)} ➔ {nuevo_stock_int}")
+                                                        st.success(f"✅ ¡Ajuste y movimiento registrados! {int(stock_previo)} ➔ {nuevo_stock_int} ({diferencia_unidades:+d} unid.)")
                                                         st.rerun()
                                         
                                                     except Exception as e:
