@@ -1630,7 +1630,6 @@ else:
                     # --- NUEVO: BLINDAJE DE SEGURIDAD PARA GIFT CARDS ---
                     for pago in st.session_state.pagos_split:
                         if "Gift Card" in pago["metodo"]:
-                            # Re-consultamos el saldo real en la base de datos en este instante
                             gc_check = db.table("GIFT_CARDS") \
                                          .select("Saldo_Actual") \
                                          .eq("ID_GiftCard", st.session_state.get('gc_activa_id')) \
@@ -1640,7 +1639,7 @@ else:
                             
                             if pago["monto"] > saldo_real:
                                 st.error(f"❌ ¡Saldo insuficiente en Gift Card! Disponible: ${saldo_real:,.2f}")
-                                st.stop() # Detiene todo el proceso antes de que se grabe nada
+                                st.stop()
                     # ----------------------------------------------------
                     
                     try:
@@ -1648,11 +1647,17 @@ else:
                         id_v = datetime.now().strftime("%Y%m%d%H%M%S")
                         f = datetime.now().strftime("%Y-%m-%d")
                         
-                        # --- OBTENER TURNO ANTES DE NADA ---
+                        # --- OBTENER TURNO Y NOMBRE DE USUARIO ---
                         turno_res = db.table("CONTROL_TURNOS").select("ID_Turno").eq("Estado", "Abierto").maybe_single().execute()
                         id_turno_val = turno_res.data['ID_Turno'] if (turno_res and turno_res.data) else "SIN_TURNO"
             
-                        # 2. Registrar Cabecera (AÑADIDO ID_Vendedor DINÁMICO)
+                        # Obtenemos el nombre del vendedor (o tomamos el de st.session_state si existe)
+                        nombre_usuario_actual = st.session_state.get('usuario_nombre')
+                        if not nombre_usuario_actual:
+                            u_res = db.table("USUARIOS").select("Nombre").eq("ID_Usuario", vendedor_id_final).single().execute()
+                            nombre_usuario_actual = u_res.data.get('Nombre') if (u_res and u_res.data) else str(vendedor_id_final)
+            
+                        # 2. Registrar Cabecera
                         desglose_pagos = " | ".join([f"{p['metodo']}: ${p['monto']:,.0f}" for p in st.session_state.pagos_split])
                         db.table("VENTAS_CABECERA").insert({
                             "ID_Venta": id_v,
@@ -1674,7 +1679,7 @@ else:
                             costo_historico = prod_data.data.get('Precio_Costo', 0) if prod_data.data else 0
                             nombre_prod = art.get('nombre') or (prod_data.data.get('Nombre') if prod_data.data else 'Artículo')
             
-                            # 3. INSERTAMOS EN VENTAS_DETALLE INCLUYENDO EL COSTO CAPTURADO
+                            # 3. INSERTAMOS EN VENTAS_DETALLE
                             db.table("VENTAS_DETALLE").insert({
                                 "ID_Venta": id_v,
                                 "ID_Producto": str(art['id']),
@@ -1691,11 +1696,11 @@ else:
                                 cantidad_vendida = int(art['cantidad'])
                                 stock_nuevo = stock_actual - cantidad_vendida
             
-                                # Actualización del stock actual del producto
+                                # Actualización del stock actual
                                 db.table("PRODUCTOS").update({"Stock_Actual": stock_nuevo}) \
                                     .eq("ID_Producto", art['id']).execute()
             
-                                # Registro del movimiento en el Kardex
+                                # Registro del movimiento en el Kardex guardando el Nombre del Usuario
                                 db.table("MOVIMIENTOS_STOCK").insert({
                                     "id_producto": str(art['id']),
                                     "nombre_producto": nombre_prod,
@@ -1704,10 +1709,10 @@ else:
                                     "stock_anterior": stock_actual,
                                     "stock_nuevo": stock_nuevo,
                                     "origen_referencia": f"Venta ID: {id_v}",
-                                    "usuario": str(vendedor_id_final)
+                                    "usuario": str(nombre_usuario_actual)  # 👈 Guardamos el Nombre
                                 }).execute()
             
-                        # 4. Registrar Pagos en la nueva tabla VENTAS_PAGOS
+                        # 4. Registrar Pagos en VENTAS_PAGOS
                         for pago in st.session_state.pagos_split:
                             db.table("VENTAS_PAGOS").insert({
                                 "ID_Venta": id_v,
@@ -1720,7 +1725,6 @@ else:
                             metodo = pago["metodo"]
                             monto = float(pago["monto"])
                             
-                            # --- A. REGISTRO DE INGRESO (Siempre ocurre) ---
                             db.table("CAJA").insert({
                                 "ID_Turno": id_turno_val,
                                 "Fecha": datetime.now().isoformat(),
@@ -1730,7 +1734,6 @@ else:
                                 "Forma_Pago": metodo
                             }).execute()
             
-                            # --- B. LÓGICA DE EGRESO AUTOMÁTICO ---
                             es_efectivo_reparto = (metodo == "Efectivo" and st.session_state.tipo_entrega == "Reparto")
                             es_otro_metodo = (metodo != "Efectivo")
                             
@@ -1742,7 +1745,6 @@ else:
                                     if nuevo_saldo <= 0:
                                         db.table("GIFT_CARDS").update({"Estado": False}).eq("ID_GiftCard", gc_id).execute()
             
-                                # Registro del egreso en caja
                                 db.table("CAJA").insert({
                                     "ID_Turno": id_turno_val,
                                     "Fecha": datetime.now().isoformat(),
