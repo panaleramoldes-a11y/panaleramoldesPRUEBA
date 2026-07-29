@@ -3886,17 +3886,22 @@ else:
                 
                 if es_valido:
                     id_c = f"COM-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    usuario_logueado = st.session_state.get("usuario_actual", "Admin")
                     
                     # 1. Guardar Cabecera de Compra
                     db.table("COMPRAS_CABECERA").insert({
-                        "ID_Compra": id_c, "Fecha": str(fecha_factura), "Proveedor": prov_sel, 
-                        "Nro_Factura": nro_fact, "Metodo_Pago": pago_compra, "Total_Compra": float(total_final)
+                        "ID_Compra": id_c, 
+                        "Fecha": str(fecha_factura), 
+                        "Proveedor": prov_sel, 
+                        "Nro_Factura": nro_fact, 
+                        "Metodo_Pago": pago_compra, 
+                        "Total_Compra": float(total_final)
                     }).execute()
                     
-                    # 2. Guardar Detalle y Actualizar Stock Y PRECIOS
+                    # 2. Guardar Detalle, Actualizar Stock, Precios y registrar KARDEX
                     for item in st.session_state.carrito_compra:
-                        # A. Actualizar Stock, Costo y Precios (1 al 5) en la tabla PRODUCTOS
-                        # Solo si el producto es stockeable, o siempre si quieres que los precios siempre se actualicen:
+                        id_p_str = str(item['id'])
+                        cant_comprada = int(item['cantidad'])
                         
                         data_update = {
                             "Precio_Costo": float(item['costo']),
@@ -3907,38 +3912,62 @@ else:
                             "Precio_5": float(item.get('Precio_5', 0))
                         }
                         
-                        # Si además quieres actualizar el stock:
-                        prod_info = df_prod[df_prod['ID_Producto'].astype(str) == str(item['id'])]
-                        if not prod_info.empty and prod_info.iloc[0].get('Es_Stockeable') == True:
-                            data_update["Stock_Actual"] = int(prod_info.iloc[0]['Stock_Actual']) + int(item['cantidad'])
+                        # Obtener datos del producto desde df_prod
+                        prod_info = df_prod[df_prod['ID_Producto'].astype(str) == id_p_str]
+                        
+                        es_stockeable = False
+                        stock_anterior = 0
+                        stock_nuevo = 0
+                        nombre_producto = item.get('nombre', '')
+            
+                        if not prod_info.empty:
+                            fila_p = prod_info.iloc[0]
+                            es_stockeable = fila_p.get('Es_Stockeable', False) == True
+                            stock_anterior = int(fila_p.get('Stock_Actual', 0) or 0)
+                            if not nombre_producto:
+                                nombre_producto = str(fila_p.get('Nombre', ''))
+            
+                        if es_stockeable:
+                            stock_nuevo = stock_anterior + cant_comprada
+                            data_update["Stock_Actual"] = stock_nuevo
                         
                         # Ejecutamos el update en la tabla PRODUCTOS
-                        db.table("PRODUCTOS").update(data_update).eq("ID_Producto", str(item['id'])).execute()
-
-                        # B. Guardar Detalle (en tu nueva tabla DETALLE_COMPRAS)
+                        db.table("PRODUCTOS").update(data_update).eq("ID_Producto", id_p_str).execute()
+            
+                        # B. Guardar Detalle (en la tabla DETALLE_COMPRAS)
                         db.table("DETALLE_COMPRAS").insert({
                             "ID_Compra": id_c,
-                            "ID_Producto": str(item['id']),
-                            "Cantidad": int(item['cantidad']),
+                            "ID_Producto": id_p_str,
+                            "Cantidad": cant_comprada,
                             "Precio_Costo_Unitario": float(item['costo']),
                             "Subtotal": float(item['subtotal'])
                         }).execute()
-                    
-                    # --- AQUÍ ESTÁ EL CAMBIO CLAVE ---
-                    # Si la orden estaba en edición, la eliminamos de las tablas de Órdenes
+            
+                        # C. REGISTRO EN MOVIMIENTOS_STOCK (KARDEX - ENTRADA POR COMPRA)
+                        # Solo registramos el movimiento de stock si el producto incrementa inventario
+                        if es_stockeable:
+                            db.table("MOVIMIENTOS_STOCK").insert({
+                                "id_producto": id_p_str,
+                                "nombre_producto": str(nombre_producto),
+                                "tipo_movimiento": "COMPRA (ENTRADA)",
+                                "cantidad": cant_comprada,
+                                "stock_anterior": float(stock_anterior),
+                                "stock_nuevo": float(stock_nuevo),
+                                "origen_referencia": f"Ingreso por Compra (ID: {id_c} - Factura: {nro_fact})",
+                                "usuario": str(usuario_logueado)
+                            }).execute()
+            
+                    # --- Limpieza de Órdenes en Edición ---
                     if 'oc_en_edicion' in st.session_state:
                         id_a_borrar = st.session_state.oc_en_edicion
                         db.table("DETALLE_ORDENES").delete().eq("ID_Compra", id_a_borrar).execute()
                         db.table("ORDENES_COMPRA").delete().eq("ID_Compra", id_a_borrar).execute()
-                        
-                        # Limpiamos el estado
                         del st.session_state.oc_en_edicion
-                    # ----------------------------------
                     
-                    st.success("¡Compra registrada y orden procesada correctamente!")
+                    st.success("¡Compra registrada, stock cargado y Kardex actualizado correctamente!")
                     st.session_state.carrito_compra = []
                     st.rerun()
-
+                    
     # =====================================================================
     # MODULO: 👤 VENDEDORES
     # =====================================================================
