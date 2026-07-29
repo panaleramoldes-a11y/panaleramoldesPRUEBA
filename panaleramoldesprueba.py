@@ -2432,43 +2432,74 @@ else:
                                 st.stop() 
                             
                             try:
-                                nuevo_stock_fardo = int(fila_fardo['Stock_Actual']) - 1
-                                db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock_fardo}).eq("ID_Producto", id_fardo).execute()
-                                
+                                # 1. Verificar existencia de la cajita individual
                                 prod_cajita = db.table("PRODUCTOS").select("Stock_Actual", "Nombre").eq("ID_Producto", id_cajita).execute().data
                                 if not prod_cajita:
                                     st.error("¡Error! El código de la cajita no existe en la base de datos.")
                                     st.stop()
-                                    
+        
+                                usuario_logueado = st.session_state.get('usuario_nombre') or st.session_state.get('usuario_actual', 'Desconocido')
+        
+                                # 2. Descuento del Fardo
+                                stock_fardo_old = int(fila_fardo['Stock_Actual'])
+                                nuevo_stock_fardo = stock_fardo_old - 1
+                                db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock_fardo}).eq("ID_Producto", id_fardo).execute()
+        
+                                # 3. Incremento de la Cajita Individual
                                 stock_cajita_old = int(prod_cajita[0]['Stock_Actual'])
                                 nombre_cajita = prod_cajita[0].get('Nombre', 'Cajita Individual')
-                                nuevo_stock_cajita = stock_cajita_old + unidades
+                                nuevo_stock_cajita = stock_cajita_old + int(unidades)
                                 db.table("PRODUCTOS").update({"Stock_Actual": nuevo_stock_cajita}).eq("ID_Producto", id_cajita).execute()
-                                
-                                usuario_logueado = st.session_state.get('usuario_actual', 'Desconocido')
-                                
+        
+                                # 4. Registrar en Tabla CAMBIOS (Fardo)
                                 db.table("CAMBIOS").insert({
                                     "Fecha": datetime.now().isoformat(),
-                                    "Usuario": usuario_logueado,
+                                    "Usuario": str(usuario_logueado),
                                     "Código": id_fardo,
                                     "Nombre": fila_fardo['Nombre'],
                                     "Descripción": f"División de fardo: Se transformó en {unidades} unidades de {id_cajita}",
                                     "Entra": 0, "Sale": 1,
-                                    "existencia_ant": int(fila_fardo['Stock_Actual']),
+                                    "existencia_ant": stock_fardo_old,
                                     "existencia_actual": nuevo_stock_fardo
                                 }).execute()
                                 
+                                # 5. Registrar en Tabla CAMBIOS (Cajita)
                                 db.table("CAMBIOS").insert({
                                     "Fecha": datetime.now().isoformat(),
-                                    "Usuario": usuario_logueado,
+                                    "Usuario": str(usuario_logueado),
                                     "Código": id_cajita,
-                                    "Nombre": "Cajitas (División)",
+                                    "Nombre": nombre_cajita,
                                     "Descripción": f"Ingreso por división de fardo {id_fardo}",
                                     "Entra": int(unidades), "Sale": 0,
                                     "existencia_ant": stock_cajita_old,
                                     "existencia_actual": nuevo_stock_cajita
                                 }).execute()
+        
+                                # 6. REGISTRO EN MOVIMIENTOS_STOCK (KARDEX) - FARDO (SALIDA)
+                                db.table("MOVIMIENTOS_STOCK").insert({
+                                    "id_producto": str(id_fardo),
+                                    "nombre_producto": str(fila_fardo['Nombre']),
+                                    "tipo_movimiento": "DIVISIÓN FARDO (SALIDA)",
+                                    "cantidad": -1,
+                                    "stock_anterior": stock_fardo_old,
+                                    "stock_nuevo": nuevo_stock_fardo,
+                                    "origen_referencia": f"División en {unidades} uds de Cajita (ID: {id_cajita})",
+                                    "usuario": str(usuario_logueado)
+                                }).execute()
+        
+                                # 7. REGISTRO EN MOVIMIENTOS_STOCK (KARDEX) - CAJITA (ENTRADA)
+                                db.table("MOVIMIENTOS_STOCK").insert({
+                                    "id_producto": str(id_cajita),
+                                    "nombre_producto": str(nombre_cajita),
+                                    "tipo_movimiento": "DIVISIÓN FARDO (ENTRADA)",
+                                    "cantidad": int(unidades),
+                                    "stock_anterior": stock_cajita_old,
+                                    "stock_nuevo": nuevo_stock_cajita,
+                                    "origen_referencia": f"Ingreso por división de Fardo (ID: {id_fardo})",
+                                    "usuario": str(usuario_logueado)
+                                }).execute()
                                 
+                                # 8. Log de Auditoría
                                 log_auditoria(
                                     tabla="PRODUCTOS",
                                     accion="UPDATE",
@@ -2487,7 +2518,6 @@ else:
                                 
                             except Exception as e:
                                 st.error(f"Error al procesar la división: {e}")
-
         # --- PESTAÑA INVENTARIO (NUEVA) ---
         with tab_inventario:
             st.subheader("📋 Módulo de Toma de Inventarios")
