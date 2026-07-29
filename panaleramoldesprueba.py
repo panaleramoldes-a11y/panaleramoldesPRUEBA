@@ -3100,7 +3100,7 @@ else:
             with tab_historico:
                 st.subheader("📜 Histórico de Movimientos de Inventario (Kardex)")
                 
-                # 1. Buscador opcional de producto (Permite ver general o por producto específico)
+                # 1. Buscador opcional de producto
                 if 'df_prod' in st.session_state and not st.session_state.df_prod.empty:
                     opciones_kardex = (
                         st.session_state.df_prod['ID_Producto'].astype(str) + " - " + st.session_state.df_prod['Nombre']
@@ -3114,52 +3114,52 @@ else:
                     key="kardex_prod_sel"
                 )
                 
-                # 2. Filtro Rango de Fechas
+                # 2. Filtro Rango de Fechas (solo fechas en formato YYYY-MM-DD)
                 col_f1, col_f2 = st.columns(2)
                 fecha_desde = col_f1.date_input("Fecha Desde:", value=datetime.now() - timedelta(days=30))
                 fecha_hasta = col_f2.date_input("Fecha Hasta:", value=datetime.now())
-                
-                str_f_desde = datetime.combine(fecha_desde, datetime.min.time()).isoformat()
-                str_f_hasta = datetime.combine(fecha_hasta, datetime.max.time()).isoformat()
             
                 with st.spinner("Cargando movimientos de stock desde la base de datos..."):
                     try:
-                        # Armamos la consulta a la tabla MOVIMIENTOS_STOCK
+                        # Consulta a la tabla MOVIMIENTOS_STOCK filtrando solo por la fecha
                         query = db.table("MOVIMIENTOS_STOCK").select("*")\
-                            .gte("fecha_hora", str_f_desde)\
-                            .lte("fecha_hora", str_f_hasta)
+                            .gte("created_at", str(fecha_desde))\
+                            .lte("created_at", f"{fecha_hasta}T23:59:59")
             
                         # Si se seleccionó un producto específico, filtramos por id_producto
                         if prod_kardex_sel != "Todos los Productos":
                             id_kardex = prod_kardex_sel.split(" - ")[0]
                             query = query.eq("id_producto", str(id_kardex))
             
-                        # Ejecutamos la consulta ordenada por fecha decreciente
-                        res_mov = query.order("fecha_hora", desc=True).execute().data
+                        # Ejecutamos la consulta
+                        res_mov = query.order("created_at", desc=True).execute().data
             
                         if res_mov:
                             df_kardex = pd.DataFrame(res_mov)
             
-                            # Formateo y renombrado de columnas para presentación
-                            df_kardex["Fecha"] = pd.to_datetime(
-                                df_kardex["fecha_hora"], errors='coerce'
-                            ).dt.strftime("%d/%m/%Y %H:%M:%S")
+                            # Identificar la columna de fecha
+                            col_fecha = "created_at" if "created_at" in df_kardex.columns else "fecha"
             
-                            # Cálculo de la Variación de stock
+                            # Formateo solo FECHA (día/mes/año)
+                            df_kardex["Fecha_Corta"] = pd.to_datetime(
+                                df_kardex[col_fecha], errors='coerce'
+                            ).dt.strftime("%d/%m/%Y")
+            
+                            # Cálculo de variación
                             df_kardex["variacion"] = df_kardex["stock_nuevo"].astype(float) - df_kardex["stock_anterior"].astype(float)
             
-                            # Métricas rápidas
-                            entradas = df_kardex[df_kardex["variacion"] > 0]["cantidad"].sum()
-                            salidas = df_kardex[df_kardex["variacion"] < 0]["cantidad"].sum()
+                            # Métricas
+                            entradas = df_kardex[df_kardex["variacion"] > 0]["cantidad"].astype(float).sum()
+                            salidas = df_kardex[df_kardex["variacion"] < 0]["cantidad"].astype(float).sum()
             
                             col_m1, col_m2, col_m3 = st.columns(3)
                             col_m1.metric("📊 Total Registros", len(df_kardex))
                             col_m2.metric("📥 Total Unid. Ingresadas", f"+{int(entradas)} un.")
                             col_m3.metric("📤 Total Unid. Egresadas", f"-{int(salidas)} un.")
             
-                            # Selección y renombramiento de columnas para visualización clara
+                            # Mapeo de columnas para la vista sencilla
                             columnas_mostrar = {
-                                "Fecha": "Fecha / Hora",
+                                "Fecha_Corta": "Fecha",
                                 "nombre_producto": "Producto",
                                 "tipo_movimiento": "Tipo Movimiento",
                                 "stock_anterior": "Stock Ant.",
@@ -3169,8 +3169,8 @@ else:
                                 "usuario": "Usuario"
                             }
             
-                            # Si es para un producto específico, podemos ocultar la columna "Producto" si se desea
-                            df_vista = df_kardex[list(columnas_mostrar.keys())].rename(columns=columnas_mostrar)
+                            cols_existentes = {k: v for k, v in columnas_mostrar.items() if k in df_kardex.columns}
+                            df_vista = df_kardex[list(cols_existentes.keys())].rename(columns=cols_existentes)
             
                             st.dataframe(
                                 df_vista, 
