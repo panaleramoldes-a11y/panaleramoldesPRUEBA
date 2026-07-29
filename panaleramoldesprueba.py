@@ -1651,7 +1651,7 @@ else:
                         # --- OBTENER TURNO ANTES DE NADA ---
                         turno_res = db.table("CONTROL_TURNOS").select("ID_Turno").eq("Estado", "Abierto").maybe_single().execute()
                         id_turno_val = turno_res.data['ID_Turno'] if (turno_res and turno_res.data) else "SIN_TURNO"
-
+            
                         # 2. Registrar Cabecera (AÑADIDO ID_Vendedor DINÁMICO)
                         desglose_pagos = " | ".join([f"{p['metodo']}: ${p['monto']:,.0f}" for p in st.session_state.pagos_split])
                         db.table("VENTAS_CABECERA").insert({
@@ -1663,32 +1663,50 @@ else:
                             "Total": total_final_vta,
                             "Forma_Entrega": st.session_state.tipo_entrega,
                             "Direccion_Entrega": st.session_state.direccion_entrega if st.session_state.tipo_entrega == "Reparto" else "N/A",
-                            "Observaciones": st.session_state.get('observaciones_entrega', '') # 👈 AGREGAR AQUÍ
+                            "Observaciones": st.session_state.get('observaciones_entrega', '')
                         }).execute()
                         
                         for art in st.session_state.carrito_vta:
-                            # 1. CONSULTA EL COSTO ACTUAL DEL PRODUCTO
-                            prod_data = db.table("PRODUCTOS").select("Precio_Costo").eq("ID_Producto", str(art['id'])).single().execute()
+                            # 1. CONSULTA EL COSTO ACTUAL Y NOMBRE DEL PRODUCTO
+                            prod_data = db.table("PRODUCTOS").select("Precio_Costo", "Nombre").eq("ID_Producto", str(art['id'])).single().execute()
                             
-                            # 2. DEFINIMOS EL COSTO (si no encuentra el producto, usamos 0 por seguridad)
+                            # 2. DEFINIMOS EL COSTO Y NOMBRE
                             costo_historico = prod_data.data.get('Precio_Costo', 0) if prod_data.data else 0
-
+                            nombre_prod = art.get('nombre') or (prod_data.data.get('Nombre') if prod_data.data else 'Artículo')
+            
                             # 3. INSERTAMOS EN VENTAS_DETALLE INCLUYENDO EL COSTO CAPTURADO
                             db.table("VENTAS_DETALLE").insert({
                                 "ID_Venta": id_v,
                                 "ID_Producto": str(art['id']),
                                 "Cantidad": int(art['cantidad']),
                                 "Precio_Unitario": float(art['precio']),
-                                "Precio_Costo_Unitario": float(costo_historico), # <--- AQUÍ ESTÁ LA MAGIA
+                                "Precio_Costo_Unitario": float(costo_historico),
                                 "Subtotal": float(art['subtotal'])
                             }).execute()
                             
+                            # 4. ACTUALIZAMOS EL STOCK Y REGISTRAMOS EN MOVIMIENTOS_STOCK
                             prod_res = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", art['id']).single().execute()
                             if prod_res.data:
                                 stock_actual = int(prod_res.data.get('Stock_Actual', 0))
-                                db.table("PRODUCTOS").update({"Stock_Actual": stock_actual - art['cantidad']}) \
+                                cantidad_vendida = int(art['cantidad'])
+                                stock_nuevo = stock_actual - cantidad_vendida
+            
+                                # Actualización del stock actual del producto
+                                db.table("PRODUCTOS").update({"Stock_Actual": stock_nuevo}) \
                                     .eq("ID_Producto", art['id']).execute()
-
+            
+                                # Registro del movimiento en el Kardex
+                                db.table("MOVIMIENTOS_STOCK").insert({
+                                    "id_producto": str(art['id']),
+                                    "nombre_producto": nombre_prod,
+                                    "tipo_movimiento": "VENTA",
+                                    "cantidad": -cantidad_vendida,
+                                    "stock_anterior": stock_actual,
+                                    "stock_nuevo": stock_nuevo,
+                                    "origen_referencia": f"Venta ID: {id_v}",
+                                    "usuario": str(vendedor_id_final)
+                                }).execute()
+            
                         # 4. Registrar Pagos en la nueva tabla VENTAS_PAGOS
                         for pago in st.session_state.pagos_split:
                             db.table("VENTAS_PAGOS").insert({
@@ -1696,7 +1714,7 @@ else:
                                 "Metodo_Pago": pago["metodo"],
                                 "Monto": float(pago["monto"])
                             }).execute()
-
+            
                         # 5. Registrar en Caja
                         for pago in st.session_state.pagos_split:
                             metodo = pago["metodo"]
@@ -1711,21 +1729,19 @@ else:
                                 "Monto": monto,
                                 "Forma_Pago": metodo
                             }).execute()
-
+            
                             # --- B. LÓGICA DE EGRESO AUTOMÁTICO ---
-                            # Si es efectivo y reparto, O si es otro método (incluyendo Gift Card)
                             es_efectivo_reparto = (metodo == "Efectivo" and st.session_state.tipo_entrega == "Reparto")
                             es_otro_metodo = (metodo != "Efectivo")
                             
                             if es_efectivo_reparto or es_otro_metodo:
-                                # Aquí incluimos la lógica de descuento de saldo si es Gift Card
                                 if "Gift Card" in metodo:
                                     gc_id = st.session_state.get('gc_activa_id')
                                     nuevo_saldo = st.session_state.get('gc_saldo_disponible', 0) - monto
                                     db.table("GIFT_CARDS").update({"Saldo_Actual": float(nuevo_saldo)}).eq("ID_GiftCard", gc_id).execute()
                                     if nuevo_saldo <= 0:
                                         db.table("GIFT_CARDS").update({"Estado": False}).eq("ID_GiftCard", gc_id).execute()
-
+            
                                 # Registro del egreso en caja
                                 db.table("CAJA").insert({
                                     "ID_Turno": id_turno_val,
@@ -1735,16 +1751,17 @@ else:
                                     "Monto": monto,
                                     "Forma_Pago": metodo
                                 }).execute()
+            
                         if 'id_pendiente_cargado' in st.session_state:
                             db.table("VENTAS_PENDIENTES").delete().eq("ID_Pendiente", st.session_state.id_pendiente_cargado).execute()
                             del st.session_state.id_pendiente_cargado
-
+            
                         st.success("✅ Venta registrada correctamente!")
                         st.session_state.carrito_vta = []
                         st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
                         st.session_state.observaciones_entrega = ""
                         st.rerun()
-
+            
                     except Exception as e:
                         st.error(f"Error al registrar: {e}")
 
