@@ -2859,7 +2859,7 @@ else:
             # --- PESTAÑA MODIFICAR ---
             with tab_modificar:
                 st.subheader("✏️ Modificar Producto Completo")
-
+            
                 # --- BOTÓN DE MANTENIMIENTO DE ESTADOS ---
                 with st.expander("⚙️ Herramientas de Mantenimiento"):
                     st.caption("Inactiva productos sin stock y con Stock Mínimo en 0/NULL. Reactiva los que recuperen stock.")
@@ -2877,7 +2877,7 @@ else:
                         if val is None or (isinstance(val, float) and pd.isna(val)) or str(val).strip() == "":
                             return default
                         return float(val) if is_float else int(float(val))
-            
+                    
                     if prod_sel:
                         id_sel = prod_sel.split(" - ")[0]
                         fila = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == id_sel].iloc[0]
@@ -2919,20 +2919,23 @@ else:
                                     if val is None or val == "" or str(val).lower() == "none":
                                         return None
                                     return str(val)
-    
+                    
                                 def clean_num(val, is_float=False):
                                     try:
                                         if val in [None, '', 'None']: return 0.0 if is_float else 0
                                         return float(val) if is_float else int(val)
                                     except:
                                         return 0.0 if is_float else 0
-    
+                    
+                                stock_nuevo = clean_num(n_stk)
+                                nombre_producto_nuevo = str(n_nom) if n_nom else "Sin nombre"
+            
                                 datos_update = {
-                                    "Nombre": str(n_nom) if n_nom else "Sin nombre",
+                                    "Nombre": nombre_producto_nuevo,
                                     "Rubro": clean_text(n_rub),
                                     "Marca": clean_text(n_mar),
                                     "ID_Proveedor": clean_num(n_prov),
-                                    "Stock_Actual": clean_num(n_stk),
+                                    "Stock_Actual": stock_nuevo,
                                     "Stock_Min": clean_num(n_min),
                                     "Stock_Max": clean_num(n_max),
                                     "Imagen": clean_text(n_img),
@@ -2945,8 +2948,28 @@ else:
                                 }
                                 
                                 try:
+                                    # 1. Actualización del producto
                                     db.table("PRODUCTOS").update(datos_update).eq("ID_Producto", id_sel).execute()
                                     
+                                    # 2. Obtenemos el nombre del usuario activo
+                                    usuario_activo = st.session_state.get('usuario_nombre') or st.session_state.get('usuario_actual', 'Martin')
+            
+                                    # 3. VERIFICAMOS Y REGISTRAMOS CAMBIO EN STOCK (KARDEX)
+                                    diferencia_stock = stock_nuevo - val_stk
+                                    if diferencia_stock != 0:
+                                        tipo_mov = "AJUSTE POSITIVO" if diferencia_stock > 0 else "AJUSTE NEGATIVO"
+                                        db.table("MOVIMIENTOS_STOCK").insert({
+                                            "id_producto": str(id_sel),
+                                            "nombre_producto": nombre_producto_nuevo,
+                                            "tipo_movimiento": tipo_mov,
+                                            "cantidad": diferencia_stock,  # Puede ser positivo o negativo
+                                            "stock_anterior": int(val_stk),
+                                            "stock_nuevo": int(stock_nuevo),
+                                            "origen_referencia": "Ajuste Manual en Edición de Producto",
+                                            "usuario": str(usuario_activo)
+                                        }).execute()
+            
+                                    # 4. Log de Auditoría
                                     log_auditoria(
                                         tabla="PRODUCTOS",
                                         accion="UPDATE",
@@ -2955,9 +2978,9 @@ else:
                                             "motivo": "Modificación manual desde formulario de edición",
                                             "valores_finales": datos_update
                                         },
-                                        usuario=st.session_state.get('usuario_actual', 'Martin')
+                                        usuario=usuario_activo
                                     )
-    
+                    
                                     st.success("¡Producto actualizado exitosamente!")
                                     if 'df_prod' in st.session_state: del st.session_state['df_prod']
                                     st.rerun()
