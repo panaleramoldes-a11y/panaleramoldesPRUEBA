@@ -3098,175 +3098,90 @@ else:
             # --- PESTAÑA HISTÓRICO DE MOVIMIENTOS (KARDEX) (Solo Administrador) ---
             # =====================================================================
             with tab_historico:
-                st.subheader("📜 Histórico de Movimientos por Producto (Kardex)")
+                st.subheader("📜 Histórico de Movimientos de Inventario (Kardex)")
                 
-                # 1. Buscador de producto
-                opciones_kardex = (st.session_state.df_prod['ID_Producto'].astype(str) + " - " + st.session_state.df_prod['Nombre']).tolist()
-                prod_kardex_sel = st.selectbox("Seleccionar producto para auditoría:", [""] + opciones_kardex, key="kardex_prod_sel")
+                # 1. Buscador opcional de producto (Permite ver general o por producto específico)
+                if 'df_prod' in st.session_state and not st.session_state.df_prod.empty:
+                    opciones_kardex = (
+                        st.session_state.df_prod['ID_Producto'].astype(str) + " - " + st.session_state.df_prod['Nombre']
+                    ).tolist()
+                else:
+                    opciones_kardex = []
+                    
+                prod_kardex_sel = st.selectbox(
+                    "Filtrar por Producto (Dejar en 'Todos' para auditoría general):", 
+                    ["Todos los Productos"] + opciones_kardex, 
+                    key="kardex_prod_sel"
+                )
                 
                 # 2. Filtro Rango de Fechas
                 col_f1, col_f2 = st.columns(2)
                 fecha_desde = col_f1.date_input("Fecha Desde:", value=datetime.now() - timedelta(days=30))
                 fecha_hasta = col_f2.date_input("Fecha Hasta:", value=datetime.now())
                 
-                if prod_kardex_sel:
-                    id_kardex = prod_kardex_sel.split(" - ")[0]
-                    str_f_desde = datetime.combine(fecha_desde, datetime.min.time()).isoformat()
-                    str_f_hasta = datetime.combine(fecha_hasta, datetime.max.time()).isoformat()
-                    
-                    # Obtener el stock actual del producto seleccionado (Usando Stock_Actual)
-                    prod_row = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == str(id_kardex)]
-                    stock_actual = int(prod_row['Stock_Actual'].values[0]) if not prod_row.empty else 0
-                    
-                    with st.spinner("Consultando historial unificado..."):
-                        movimientos = []
-                        
-                        # A. Consultar VENTAS
-                        try:
-                            res_v = db.table("VENTAS_DETALLE").select("*, VENTAS_CABECERA(Fecha, Estado, ID_Venta)")\
-                                .eq("ID_Producto", id_kardex).execute().data
-                            
-                            for v in res_v:
-                                cabecera = v.get("VENTAS_CABECERA") or {}
-                                f_v = cabecera.get("Fecha")
-                                if f_v and str_f_desde <= f_v <= str_f_hasta and cabecera.get("Estado") != "CANCELADO":
-                                    cant = int(v.get("Cantidad", 0))
-                                    movimientos.append({
-                                        "Fecha_raw": f_v,
-                                        "Concepto": "🛒 VENTA",
-                                        "ID Referencia": f"ID_Venta: {cabecera.get('ID_Venta', 'S/I')}",
-                                        "Variación": -cant,
-                                        "Detalle / Observaciones": f"Venta realizada ({cant} un.)"
-                                    })
-                        except Exception as e_v:
-                            st.warning(f"Nota sobre Ventas: {e_v}")
-    
-                        # B. Consultar COMPRAS (Nombres exactos: DETALLE_COMPRAS y COMPRAS_CABECERA)
-                        try:
-                            id_prod_query = int(id_kardex) if str(id_kardex).isdigit() else str(id_kardex)
-                            
-                            # 1. Obtener detalles del producto
-                            res_c = db.table("DETALLE_COMPRAS").select("*").eq("ID_Producto", id_prod_query).execute().data
-                            
-                            if res_c:
-                                # Obtener IDs de compras únicos
-                                ids_compras = list(set([c.get("ID_Compra") for c in res_c if c.get("ID_Compra") is not None]))
-                                
-                                # 2. Obtener fechas de COMPRAS_CABECERA
-                                cabeceras_dict = {}
-                                if ids_compras:
-                                    res_cab = db.table("COMPRAS_CABECERA").select("ID_Compra, Fecha").in_("ID_Compra", ids_compras).execute().data
-                                    cabeceras_dict = {cab["ID_Compra"]: cab for cab in res_cab if "ID_Compra" in cab}
-                    
-                                # 3. Unir movimientos
-                                for c in res_c:
-                                    id_compra = c.get("ID_Compra")
-                                    cabecera = cabeceras_dict.get(id_compra, {})
-                                    f_c = cabecera.get("Fecha") or c.get("Fecha")
-                                    f_c_date = str(f_c)[:10] if f_c else ""
-                                    
-                                    # Filtrar por rango de fechas seleccionado
-                                    if f_c and str_f_desde <= f_c_date <= str_f_hasta:
-                                        cant = int(c.get("Cantidad", 0))
-                                        movimientos.append({
-                                            "Fecha_raw": f_c,
-                                            "Concepto": "🚚 COMPRA",
-                                            "ID Referencia": f"ID_Compra: {id_compra if id_compra else 'S/I'}",
-                                            "Variación": +cant,
-                                            "Detalle / Observaciones": f"Ingreso por compra al proveedor"
-                                        })
-                        except Exception as e_c:
-                            st.error(f"Error al consultar Compras: {e_c}")
-    
-                        # C. Consultar CAMBIOS / DEVOLUCIONES / DIVISOR
-                        try:
-                            res_cam = db.table("CAMBIOS").select("*").eq("Código", id_kardex)\
-                                .gte("Fecha", str_f_desde).lte("Fecha", str_f_hasta).execute().data
-                            
-                            for cam in res_cam:
-                                entra = int(cam.get("Entra", 0))
-                                sale = int(cam.get("Sale", 0))
-                                var = entra - sale
-                                movimientos.append({
-                                    "Fecha_raw": cam.get("Fecha"),
-                                    "Concepto": "🔄 CAMBIO / AJUSTE",
-                                    "ID Referencia": f"ID_Cambio: {cam.get('id', 'S/I')}",
-                                    "Variación": var,
-                                    "Detalle / Observaciones": f"{cam.get('Descripción', '')} (Usuario: {cam.get('Usuario', 'S/D')})"
-                                })
-                        except Exception as e_cam:
-                            pass
-    
-                        # D. Consultar LOGS DE AUDITORÍA
-                        try:
-                            res_aud = db.table("LOGS_AUDITORIA").select("*").eq("id_entidad", str(id_kardex))\
-                                .gte("fecha_hora", str_f_desde).lte("fecha_hora", str_f_hasta).execute().data
-                            
-                            for aud in res_aud:
-                                movimientos.append({
-                                    "Fecha_raw": aud.get("fecha_hora"),
-                                    "Concepto": "🛠️ AUDITORÍA MANUAL",
-                                    "ID Referencia": f"ID_Log: {aud.get('id', 'S/I')}",
-                                    "Variación": 0,
-                                    "Detalle / Observaciones": f"Acción: {aud.get('accion')} | User: {aud.get('usuario')}"
-                                })
-                        except Exception as e_aud:
-                            pass
-    
-                        # Renderizar resultados con trazabilidad de stock
-                        if movimientos:
-                            df_kardex = pd.DataFrame(movimientos)
-                            
-                            # Conversión segura de fechas heterogéneas
-                            df_kardex["Fecha_datetime"] = pd.to_datetime(
-                                df_kardex["Fecha_raw"], 
-                                format='mixed', 
-                                utc=True, 
-                                errors='coerce'
+                str_f_desde = datetime.combine(fecha_desde, datetime.min.time()).isoformat()
+                str_f_hasta = datetime.combine(fecha_hasta, datetime.max.time()).isoformat()
+            
+                with st.spinner("Cargando movimientos de stock desde la base de datos..."):
+                    try:
+                        # Armamos la consulta a la tabla MOVIMIENTOS_STOCK
+                        query = db.table("MOVIMIENTOS_STOCK").select("*")\
+                            .gte("fecha_hora", str_f_desde)\
+                            .lte("fecha_hora", str_f_hasta)
+            
+                        # Si se seleccionó un producto específico, filtramos por id_producto
+                        if prod_kardex_sel != "Todos los Productos":
+                            id_kardex = prod_kardex_sel.split(" - ")[0]
+                            query = query.eq("id_producto", str(id_kardex))
+            
+                        # Ejecutamos la consulta ordenada por fecha decreciente
+                        res_mov = query.order("fecha_hora", desc=True).execute().data
+            
+                        if res_mov:
+                            df_kardex = pd.DataFrame(res_mov)
+            
+                            # Formateo y renombrado de columnas para presentación
+                            df_kardex["Fecha"] = pd.to_datetime(
+                                df_kardex["fecha_hora"], errors='coerce'
+                            ).dt.strftime("%d/%m/%Y %H:%M:%S")
+            
+                            # Cálculo de la Variación de stock
+                            df_kardex["variacion"] = df_kardex["stock_nuevo"].astype(float) - df_kardex["stock_anterior"].astype(float)
+            
+                            # Métricas rápidas
+                            entradas = df_kardex[df_kardex["variacion"] > 0]["cantidad"].sum()
+                            salidas = df_kardex[df_kardex["variacion"] < 0]["cantidad"].sum()
+            
+                            col_m1, col_m2, col_m3 = st.columns(3)
+                            col_m1.metric("📊 Total Registros", len(df_kardex))
+                            col_m2.metric("📥 Total Unid. Ingresadas", f"+{int(entradas)} un.")
+                            col_m3.metric("📤 Total Unid. Egresadas", f"-{int(salidas)} un.")
+            
+                            # Selección y renombramiento de columnas para visualización clara
+                            columnas_mostrar = {
+                                "Fecha": "Fecha / Hora",
+                                "nombre_producto": "Producto",
+                                "tipo_movimiento": "Tipo Movimiento",
+                                "stock_anterior": "Stock Ant.",
+                                "cantidad": "Cantidad",
+                                "stock_nuevo": "Stock Nuevo",
+                                "origen_referencia": "Origen / Referencia",
+                                "usuario": "Usuario"
+                            }
+            
+                            # Si es para un producto específico, podemos ocultar la columna "Producto" si se desea
+                            df_vista = df_kardex[list(columnas_mostrar.keys())].rename(columns=columnas_mostrar)
+            
+                            st.dataframe(
+                                df_vista, 
+                                use_container_width=True, 
+                                hide_index=True
                             )
-                            
-                            # Eliminar registros con fechas inválidas si los hubiera y ordenar desc
-                            df_kardex = df_kardex.dropna(subset=["Fecha_datetime"])
-                            df_kardex = df_kardex.sort_values(by="Fecha_datetime", ascending=False).reset_index(drop=True)
-                            
-                            # Reconstrucción trazable de Stock Anterior y Nuevo Stock hacia atrás
-                            stock_cursor = stock_actual
-                            stock_anterior_list = []
-                            nuevo_stock_list = []
-                            
-                            for _, row in df_kardex.iterrows():
-                                var = row["Variación"]
-                                nuevo_stk = stock_cursor
-                                stk_ant = nuevo_stk - var
-                                
-                                nuevo_stock_list.append(nuevo_stk)
-                                stock_anterior_list.append(stk_ant)
-                                
-                                stock_cursor = stk_ant
-                            
-                            df_kardex["Stock Anterior"] = stock_anterior_list
-                            df_kardex["Nuevo Stock"] = nuevo_stock_list
-                            df_kardex["Fecha"] = df_kardex["Fecha_datetime"].dt.strftime("%d/%m/%Y %H:%M")
-                            
-                            # Reordenar columnas para la vista final
-                            columnas_ordenadas = [
-                                "Fecha", "Concepto", "ID Referencia", 
-                                "Stock Anterior", "Variación", "Nuevo Stock", 
-                                "Detalle / Observaciones"
-                            ]
-                            df_kardex = df_kardex[columnas_ordenadas]
-                            
-                            # Métricas resumidas
-                            col_m1, col_m2 = st.columns(2)
-                            total_entradas = df_kardex[df_kardex["Variación"] > 0]["Variación"].sum()
-                            total_salidas = abs(df_kardex[df_kardex["Variación"] < 0]["Variación"].sum())
-                            
-                            col_m1.metric("📥 Total Ingresos/Entradas", f"+{total_entradas} un.")
-                            col_m2.metric("📤 Total Salidas/Egresos", f"-{total_salidas} un.")
-                            
-                            st.dataframe(df_kardex, use_container_width=True, hide_index=True)
                         else:
-                            st.info("No se encontraron movimientos registrados para este producto en el rango de fechas seleccionado.")
+                            st.info("ℹ️ No se registraron movimientos de stock para los criterios de búsqueda seleccionados.")
+            
+                    except Exception as e:
+                        st.error(f"Error al obtener el historial de movimientos de stock: {e}")
     
     # =====================================================================
     # MODULO: 📦 STOCK
