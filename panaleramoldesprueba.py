@@ -3124,7 +3124,7 @@ else:
             
                 with st.spinner("Cargando movimientos de stock desde la base de datos..."):
                     try:
-                        # Consulta a la tabla MOVIMIENTOS_STOCK usando la columna 'fecha'
+                        # Consulta a la tabla MOVIMIENTOS_STOCK
                         query = db.table("MOVIMIENTOS_STOCK").select("*")\
                             .gte("fecha", str_f_desde)\
                             .lte("fecha", str_f_hasta)
@@ -3145,32 +3145,21 @@ else:
                                 df_kardex["fecha"], errors='coerce'
                             ).dt.strftime("%d/%m/%Y")
             
-                            # Asegurar conversión numérica de la cantidad para las métricas
-                            df_kardex["cantidad"] = pd.to_numeric(df_kardex["cantidad"], errors='coerce').fillna(0)
-            
-                            # Métricas basadas en si la cantidad es positiva (ingresos) o negativa (egresos)
-                            entradas = df_kardex[df_kardex["cantidad"] > 0]["cantidad"].sum()
-                            salidas = abs(df_kardex[df_kardex["cantidad"] < 0]["cantidad"].sum())
-            
-                            col_m1, col_m2, col_m3 = st.columns(3)
-                            col_m1.metric("📊 Total Registros", len(df_kardex))
-                            col_m2.metric("📥 Total Unid. Ingresadas", f"+{int(entradas)} un.")
-                            col_m3.metric("📤 Total Unid. Egresadas", f"-{int(salidas)} un.")
-            
-                            # Mapeo exacto con los nombres de columnas de tu SQL
+                            # Mapeo y orden exacto de columnas solicitado:
+                            # Fecha | ID Producto | Producto | Cantidad | Tipo Movimiento | Stock Ant. | Stock Nuevo | Origen / Referencia | Usuario
                             columnas_mostrar = {
                                 "Fecha_Corta": "Fecha",
+                                "id_producto": "ID Producto",
                                 "nombre_producto": "Producto",
-                                "tipo_movimiento": "Tipo Movimiento",
                                 "cantidad": "Cantidad",
+                                "tipo_movimiento": "Tipo Movimiento",
                                 "stock_anterior": "Stock Ant.",
                                 "stock_nuevo": "Stock Nuevo",
                                 "origen_referencia": "Origen / Referencia",
-                                "usuario": "Usuario",
-                                "observacion": "Observación"
+                                "usuario": "Usuario"
                             }
             
-                            # Seleccionar solo las columnas existentes
+                            # Seleccionar solo las columnas en el orden estricto
                             cols_existentes = {k: v for k, v in columnas_mostrar.items() if k in df_kardex.columns}
                             df_vista = df_kardex[list(cols_existentes.keys())].rename(columns=cols_existentes)
             
