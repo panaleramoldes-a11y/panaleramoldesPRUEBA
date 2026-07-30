@@ -2760,13 +2760,14 @@ else:
                                             dif_efectiva = float(valor_admin) - snap_val
                                             
                                             if dif_efectiva == 0:
-                                                color_status = "🟢 COINCIDE"
+                                                color_status = ":green[🟢 COINCIDE]"
                                             elif dif_efectiva < 0:
-                                                color_status = f"🔴 FALTANTE ({dif_efectiva:.0f})"
+                                                color_status = f":red[🔴 FALTANTE ({dif_efectiva:.0f})]"
                                             else:
-                                                color_status = f"🟡 SOBRANTE (+{dif_efectiva:.0f})"
+                                                color_status = f":orange[🟡 SOBRANTE (+{dif_efectiva:.0f})]"
                                             
-                                            c5.write(f"Estado: **{color_status}**")
+                                            # Se usa markdown para procesar correctamente las etiquetas de color
+                                            c5.markdown(f"Estado: **{color_status}**")
                                             
                                             with c6:
                                                 # CONDICIÓN CLAVE: Solo se permite ajustar si hay diferencia real Y está pendiente
@@ -2837,9 +2838,9 @@ else:
                                                             st.error(f"Error al aplicar ajuste y registrar movimiento: {e}")
                                                             
                                                 elif item['estado_item'] == 'AJUSTADO':
-                                                    st.caption("✅ Ajustado")
+                                                    st.markdown(":green[✅ Ajustado]")
                                                 else:
-                                                    st.caption("🟢 Sin diferencia")
+                                                    st.markdown(":green[🟢 Sin diferencia]")
                                     
                                     st.markdown("---")
                                     
