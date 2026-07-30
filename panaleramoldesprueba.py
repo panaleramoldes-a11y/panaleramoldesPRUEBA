@@ -2586,7 +2586,7 @@ else:
                     
                     if st.button("🎲 Generar Muestra Aleatoria", key="btn_generar_azar"):
                         st.session_state.muestra_azar = df_activos.sample(n=int(cant_items)).copy()
-                        
+                    
                     if "muestra_azar" in st.session_state:
                         productos_a_contar = st.session_state.muestra_azar
                 
@@ -2685,7 +2685,7 @@ else:
                                     
                                 except Exception as e:
                                     st.error(f"Error al enviar recuento: {e}")
-        
+                
             # =============================================================
             # VISTA 2: ADMIN (AUDITORÍA Y AJUSTES)
             # =============================================================
@@ -2728,12 +2728,21 @@ else:
                                     
                                     df_merged = pd.merge(df_det, df_prods_info, left_on="id_producto", right_on="ID_Producto", suffixes=('', '_actual'))
                                     
-                                    total_dif = df_merged['diferencia'].sum()
-                                    impacto_dinero = (df_merged['diferencia'] * df_merged['Precio_Costo'].fillna(0)).sum()
+                                    # --- CÁLCULO DINÁMICO TOMANDO EL CONTEO DEL ADMIN ---
+                                    def calcular_dif_admin(row):
+                                        key_input = f"input_admin_stk_{row['id']}"
+                                        # Si el Admin ya interactuó/ingresó un valor en el input, tomar ese valor; si no, tomar el del vendedor.
+                                        val_admin = st.session_state.get(key_input, int(row['stock_contado']))
+                                        return float(val_admin) - float(row['stock_sistema_snap'])
+        
+                                    df_merged['diferencia_efectiva'] = df_merged.apply(calcular_dif_admin, axis=1)
+                                    
+                                    total_dif = df_merged['diferencia_efectiva'].sum()
+                                    impacto_dinero = (df_merged['diferencia_efectiva'] * df_merged['Precio_Costo'].fillna(0)).sum()
                                     
                                     m1, m2 = st.columns(2)
                                     m1.metric("Diferencia Total (Unidades)", f"{total_dif:.0f}")
-                                    m2.metric("Impacto Financiero Estimado", f"${impacto_dinero:,.2f}", delta_color="inverse")
+                                    m2.metric("Impacto Financiero Estimado (Admin)", f"${impacto_dinero:,.2f}", delta_color="inverse")
                                     
                                     st.markdown("---")
                                     
@@ -2840,7 +2849,7 @@ else:
                                                     st.caption("✅ Ajustado")
                                                 else:
                                                     st.caption("🟢 Sin diferencia")
-                                    
+                                            
                                     st.markdown("---")
                                     
                                     # --- BOTONES DE ACCIÓN GLOBAL DE AUDITORÍA ---
