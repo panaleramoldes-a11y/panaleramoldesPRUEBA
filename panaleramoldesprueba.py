@@ -3329,7 +3329,14 @@ else:
             st.subheader("🎯 Ranking de Priorización de Compras")
             st.caption("Clasifica productos según su relevancia comercial (ABC) y urgencia por faltante de stock mínimo.")
             
-            # Filtros específicos para esta pestaña
+            # Buscador de texto combinado
+            busqueda_abc = st.text_input(
+                "🔍 Buscar por nombre o código en el ranking:", 
+                placeholder="Ej: pampers, babydry, 779...",
+                key="busqueda_texto_abc"
+            )
+    
+            # Filtros de menú desplegable
             fa1, fa2, fa3 = st.columns(3)
             p_rubro = fa1.selectbox("Rubro", rubros, key="p_rubro_abc")
             p_marca = fa2.selectbox("Marca", marcas, key="p_marca_abc")
@@ -3353,11 +3360,8 @@ else:
     
             # 3. Filtro de negocio: Rubro LECHE solo con presentaciones " x24", " x30" o " x12"
             if 'Rubro' in df_ranking.columns and 'Nombre' in df_ranking.columns:
-                # Creamos una máscara para identificar leches que NO tienen esos textos en el nombre
                 es_leche = df_ranking['Rubro'].astype(str).str.upper() == 'LECHE'
                 contiene_bulto = df_ranking['Nombre'].astype(str).str.contains(' x24| x30| x12', case=False, na=False)
-                
-                # Mantenemos los productos que NO sean del rubro Leche O que sí sean Leche y tengan el texto requerido
                 df_ranking = df_ranking[~es_leche | contiene_bulto]
     
             # Limpieza de numéricos
@@ -3365,7 +3369,14 @@ else:
             df_ranking['Stock_Min'] = pd.to_numeric(df_ranking['Stock_Min'], errors='coerce').fillna(0)
             df_ranking['Stock_Max'] = pd.to_numeric(df_ranking['Stock_Max'], errors='coerce').fillna(0)
     
-            # Aplicación de filtros interactivos del usuario (Rubro, Marca, Proveedor)
+            # 4. Aplicación del Buscador por Texto
+            if busqueda_abc:
+                b_txt = busqueda_abc.lower()
+                mask_abc = df_ranking['Nombre'].astype(str).str.lower().str.contains(b_txt, na=False) | \
+                           df_ranking['ID_Producto'].astype(str).str.lower().str.contains(b_txt, na=False)
+                df_ranking = df_ranking[mask_abc]
+    
+            # 5. Aplicación de filtros interactivos del usuario (Rubro, Marca, Proveedor)
             if p_rubro != "Todos":
                 df_ranking = df_ranking[df_ranking['Rubro'] == p_rubro]
             if p_marca != "Todos":
@@ -3380,7 +3391,7 @@ else:
                         df_ranking = df_ranking[df_ranking['ID_Proveedor'] == id_p_abc]
     
             if df_ranking.empty:
-                st.info("No se encontraron productos con los criterios y filtros seleccionados.")
+                st.info("No se encontraron productos con los criterios, texto y filtros seleccionados.")
             else:
                 # Procesar ventas si existen registros
                 if not df_vd.empty:
