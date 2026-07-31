@@ -3507,10 +3507,21 @@ else:
                     if sel_abc.empty:
                         st.warning("⚠️ No seleccionaste ningún producto. Tildá las casillas en la columna '📱 Pedir'.")
                     else:
-                        msg_abc = "🚨 *Pedido Prioritario de Compras:*\n\n"
+                        msg_abc = ""
                         for _, r in sel_abc.iterrows():
                             cant_comprar = int(r['Faltante_Min']) if r['Faltante_Min'] > 0 else 1
-                            msg_abc += f"• [{r['Categoria_ABC']}] *{r['Nombre']}*: Solicitar {cant_comprar} un. (Stock actual: {int(r['Stock_Actual'])})\n"
+                            
+                            # Obtener el rubro del producto si está presente en la fila
+                            rubro_prod = str(r.get('Rubro', '')).strip().upper()
+                            
+                            # Determinar unidad de medida
+                            if rubro_prod == "LECHE":
+                                unid_texto = "fardo" if cant_comprar == 1 else "fardos"
+                            else:
+                                unid_texto = "unidad" if cant_comprar == 1 else "unidades"
+                            
+                            # Construir formato solicitado
+                            msg_abc += f"{cant_comprar} {unid_texto} *{r['Nombre']}*\n"
                         
                         st.text_area("Copiar mensaje para proveedor:", value=msg_abc, height=220, key="txt_area_abc")
     
