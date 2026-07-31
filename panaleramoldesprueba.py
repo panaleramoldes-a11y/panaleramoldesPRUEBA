@@ -3342,15 +3342,30 @@ else:
             df_vd = pd.DataFrame(res_vd) if res_vd else pd.DataFrame()
     
             df_ranking = df_prod.copy()
+            
+            # 1. Filtro: Productos Inactivos
             if 'Estado' in df_ranking.columns:
                 df_ranking = df_ranking[df_ranking['Estado'] != 'INACTIVO']
+    
+            # 2. Filtro: Solo productos stockeables (Es_Stockeable == True)
+            if 'Es_Stockeable' in df_ranking.columns:
+                df_ranking = df_ranking[df_ranking['Es_Stockeable'] == True]
+    
+            # 3. Filtro de negocio: Rubro LECHE solo con presentaciones " x24", " x30" o " x12"
+            if 'Rubro' in df_ranking.columns and 'Nombre' in df_ranking.columns:
+                # Creamos una máscara para identificar leches que NO tienen esos textos en el nombre
+                es_leche = df_ranking['Rubro'].astype(str).str.upper() == 'LECHE'
+                contiene_bulto = df_ranking['Nombre'].astype(str).str.contains(' x24| x30| x12', case=False, na=False)
+                
+                # Mantenemos los productos que NO sean del rubro Leche O que sí sean Leche y tengan el texto requerido
+                df_ranking = df_ranking[~es_leche | contiene_bulto]
     
             # Limpieza de numéricos
             df_ranking['Stock_Actual'] = pd.to_numeric(df_ranking['Stock_Actual'], errors='coerce').fillna(0)
             df_ranking['Stock_Min'] = pd.to_numeric(df_ranking['Stock_Min'], errors='coerce').fillna(0)
             df_ranking['Stock_Max'] = pd.to_numeric(df_ranking['Stock_Max'], errors='coerce').fillna(0)
     
-            # Aplicación de filtros
+            # Aplicación de filtros interactivos del usuario (Rubro, Marca, Proveedor)
             if p_rubro != "Todos":
                 df_ranking = df_ranking[df_ranking['Rubro'] == p_rubro]
             if p_marca != "Todos":
@@ -3365,7 +3380,7 @@ else:
                         df_ranking = df_ranking[df_ranking['ID_Proveedor'] == id_p_abc]
     
             if df_ranking.empty:
-                st.info("No se encontraron productos con los filtros seleccionados.")
+                st.info("No se encontraron productos con los criterios y filtros seleccionados.")
             else:
                 # Procesar ventas si existen registros
                 if not df_vd.empty:
@@ -3410,7 +3425,7 @@ else:
                 # Score = 40% Facturación + 35% Rotación + 25% Ganancia
                 df_ranking['Score_Comercial'] = (0.40 * norm_fact) + (0.35 * norm_rot) + (0.25 * norm_gan)
     
-                # Asignación de Categoría ABC según percentiles/cuantiles
+                # Asignación de Categoría ABC
                 def asignar_categoria(score, p70, p30):
                     if score >= p70 and score > 0:
                         return "🟢 Categoría A"
