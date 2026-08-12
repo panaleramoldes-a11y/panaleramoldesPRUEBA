@@ -1782,17 +1782,35 @@ else:
             st.session_state.link_maps_entrega = link_elegido
             st.session_state.observaciones_entrega = observaciones_vta # 👈 3. GUARDAMOS EN SESSION_STATE
 
-        # --- 6. BOTONES DE CIERRE (CORREGIDO) ---
+        # --- 6. BOTONES DE CIERRE ---
             st.divider()
             col_f1, col_f2 = st.columns(2)
 
             with col_f1:
                 if st.button("🏁 FINALIZAR Y REGISTRAR VENTA", width='stretch', type="primary"):
-                    # 0. Verificación de sumas
+                    # 0. Verificación de sumas de pago
                     suma_pagos = sum(float(p["monto"]) for p in st.session_state.pagos_split)
                     if abs(suma_pagos - total_final_vta) > 0.01:
                         st.error(f"¡Error! La suma de los pagos (${suma_pagos:.2f}) no coincide con el total (${total_final_vta:.2f})")
                         st.stop()
+
+                    # ---------------------------------------------------------
+                    # 🔥 NUEVA VALIDACIÓN: CONTROL DE STOCK DISPONIBLE
+                    # ---------------------------------------------------------
+                    for item in st.session_state.carrito_vta:
+                        res_p = df_prod[df_prod["ID_Producto"].astype(str) == str(item["id"])]
+                        if not res_p.empty:
+                            prod_info = res_p.iloc[0]
+                            es_stockeable = prod_info.get("Es_Stockeable", True)
+                            stock_actual = float(prod_info.get("Stock_Actual", 0))
+                            cant_solicitada = float(item["cantidad"])
+
+                            # Si el producto descuenta stock y la cantidad pedida supera el stock disponible
+                            if es_stockeable and cant_solicitada > stock_actual:
+                                nombre_prod = prod_info.get("Nombre", "Desconocido")
+                                st.error(f'El artículo "{nombre_prod}" no posee esa cantidad para facturar, revisar código y stock')
+                                st.stop()
+                    # ---------------------------------------------------------
                     
                     # --- NUEVO: BLINDAJE DE SEGURIDAD PARA GIFT CARDS ---
                     for pago in st.session_state.pagos_split:
