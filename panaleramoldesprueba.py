@@ -4735,7 +4735,7 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # 1. Consultar a Google la lista exacta de modelos permitidos para esta API Key
+                        # 1. Obtener modelos válidos excluyendo versiones deprecadas o sin cuota
                         url_models = f"https://generativelanguage.googleapis.com/v1/models?key={api_key_val}"
                         res_models = requests.get(url_models, timeout=10)
                         
@@ -4743,56 +4743,55 @@ else:
                             url_models = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key_val}"
                             res_models = requests.get(url_models, timeout=10)
     
+                        modelos_candidatos = []
                         if res_models.status_code == 200:
                             models_data = res_models.json().get('models', [])
-                            
-                            # Filtrar modelos que soporten generateContent Y EXCLUIR los deprecados como '2.5'
-                            modelos_validos = [
-                                m['name'] for m in models_data 
-                                if 'generateContent' in m.get('supportedGenerationMethods', [])
-                                and '2.5' not in m['name']  # <--- Descartamos el 2.5 que genera el 404
-                            ]
-                            
-                            # Buscar prioritariamente gemini-2.0-flash o gemini-1.5-flash
-                            modelo_target = None
-                            for preferencia in ['gemini-2.0-flash', 'gemini-1.5-flash', 'flash']:
-                                for m in modelos_validos:
-                                    if preferencia in m.lower():
-                                        modelo_target = m
-                                        break
-                                if modelo_target:
-                                    break
-                            
-                            if not modelo_target and modelos_validos:
-                                modelo_target = modelos_validos[0]
-                        else:
-                            st.error(f"Error al obtener lista de modelos ({res_models.status_code}): {res_models.text}")
-                            st.stop()
+                            for m in models_data:
+                                nombre = m['name']
+                                metodos = m.get('supportedGenerationMethods', [])
+                                # Filtramos los que soportan texto y descartamos versiones problemáticas (2.5, 3.1)
+                                if 'generateContent' in metodos and not any(bad in nombre for bad in ['2.5', '3.1']):
+                                    modelos_candidatos.append(nombre)
     
-                        if not modelo_target:
-                            st.error("No se encontraron modelos válidos disponibles para tu API Key.")
-                            st.stop()
+                        # Si no obtuvo lista, dejamos una lista por defecto de respaldo
+                        if not modelos_candidatos:
+                            modelos_candidatos = ['models/gemini-2.0-flash', 'models/gemini-1.5-flash', 'models/gemini-1.5-flash-8b']
     
-                        # 2. Hacer la petición de generación con el modelo estable
+                        # Ordernar candidatos dando prioridad a las versiones Flash
+                        modelos_candidatos.sort(key=lambda x: 0 if '2.0-flash' in x else (1 if '1.5-flash' in x else 2))
+    
+                        # 2. Reintentar con varios modelos si el servidor de Google está saturado (503)
                         api_ver = "v1beta" if "v1beta" in url_models else "v1"
-                        url_generate = f"https://generativelanguage.googleapis.com/{api_ver}/{modelo_target}:generateContent?key={api_key_val}"
-                        
-                        headers = {"Content-Type": "application/json"}
-                        payload = {
-                            "contents": [{
-                                "parts": [{"text": prompt_sistema}]
-                            }]
-                        }
+                        respuesta_exitosa = False
+                        ultimo_error = ""
     
-                        res_gen = requests.post(url_generate, headers=headers, json=payload, timeout=30)
+                        for modelo_target in modelos_candidatos:
+                            url_generate = f"https://generativelanguage.googleapis.com/{api_ver}/{modelo_target}:generateContent?key={api_key_val}"
+                            headers = {"Content-Type": "application/json"}
+                            payload = {
+                                "contents": [{
+                                    "parts": [{"text": prompt_sistema}]
+                                }]
+                            }
     
-                        if res_gen.status_code == 200:
-                            data_json = res_gen.json()
-                            texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
-                            st.markdown("### 📋 Análisis del Asistente:")
-                            st.info(texto_respuesta)
-                        else:
-                            st.error(f"Error al generar respuesta ({res_gen.status_code}): {res_gen.text}")
+                            res_gen = requests.post(url_generate, headers=headers, json=payload, timeout=30)
+    
+                            if res_gen.status_code == 200:
+                                data_json = res_gen.json()
+                                texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
+                                st.markdown("### 📋 Análisis del Asistente:")
+                                st.info(texto_respuesta)
+                                respuesta_exitosa = True
+                                break
+                            elif res_gen.status_code == 503:
+                                # Si está saturado el modelo, continúa el bucle con el siguiente modelo de la lista
+                                ultimo_error = f"El modelo {modelo_target} estuvo ocupado (503). Reintentando con otro..."
+                                continue
+                            else:
+                                ultimo_error = f"({res_gen.status_code}): {res_gen.text}"
+    
+                        if not respuesta_exitosa:
+                            st.error(f"No se pudo completar la consulta por alta demanda temporal de Google. Detalle: {ultimo_error}")
     
                 except Exception as e:
                     st.error(f"Error de conexión con el servicio: {e}")
