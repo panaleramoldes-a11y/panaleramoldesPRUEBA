@@ -1058,7 +1058,7 @@ else:
                 "🛒 Punto de Venta", "👥 Clientes", "📋 Historial de Ventas", 
                 "⚙️ Configuración Pagos", "📦 Productos",
                 "📦 Stock", "🚚 Proveedores", "📦 Compras", "👥 Vendedores", 
-                "⚙️ Auditoría", "📈 Reporte de Utilidades", "🚚 Gestión de Repartos" # <--- AQUÍ LO AGREGAMOS
+                "⚙️ Auditoría", "📈 Reporte de Utilidades", "🚚 Gestión de Repartos", "🤖 Asistente IA" # <--- AQUÍ LO AGREGAMOS
             ])
         elif st.session_state.rol == "Vendedor":
             opciones_disponibles.extend(["🛒 Punto de Venta", "🚚 Gestión de Repartos", "📦 Productos", "👥 Clientes"])
@@ -4637,4 +4637,114 @@ else:
                         if pd.notna(obs_entrega) and str(obs_entrega).strip() and str(obs_entrega).strip().lower() not in ["nan", "none"]:
                             st.info(f"📝 **Nota para el repartidor:** {obs_entrega}", icon="📌")
                         
-                        st.caption(f"💰 {v['Metodo_Pago']}")    
+                        st.caption(f"💰 {v['Metodo_Pago']}")
+
+    # =====================================================================
+    # MODULO: 🤖 ASISTENTE IA (Google Gemini)
+    # =====================================================================
+    elif menu == "🤖 Asistente IA":
+        st.title("🤖 Asistente Analítico de Negocio")
+        st.caption("Consulte métricas, tendencias de ventas e inventarios en lenguaje natural.")
+    
+        # Verificar que exista la librería y la API Key
+        try:
+            from google import genai
+            api_key_ok = "GEMINI_API_KEY" in st.secrets
+        except ImportError:
+            st.error("⚠️ La librería `google-genai` no está instalada. Agrégala a tu archivo `requirements.txt`.")
+            st.stop()
+    
+        if not api_key_ok:
+            st.error("⚠️ No se encontró la clave `GEMINI_API_KEY` en los Secrets de Streamlit.")
+            st.stop()
+    
+        # --- CONTROLES Y FUENTE DE DATOS ---
+        st.subheader("1. Selecciona los datos a consultar")
+        col_d1, col_d2 = st.columns(2)
+        
+        with col_d1:
+            fuente_datos = st.selectbox(
+                "¿Qué datos deseas que analice la IA?",
+                ["Stock y Productos", "Historial Reciente de Ventas", "Resumen General (Stock + Ventas)"]
+            )
+    
+        with col_d2:
+            top_registros = st.slider("Cantidad de registros a procesar:", min_value=20, max_value=200, value=50, step=10)
+    
+        # --- CARGA DE DATOS EN MEMORIA (SOLO LECTURA) ---
+        with st.spinner("Preparando contexto de datos..."):
+            contexto_texto = ""
+            
+            try:
+                if fuente_datos in ["Stock y Productos", "Resumen General (Stock + Ventas)"]:
+                    prod_res = db.table("PRODUCTOS").select("Nombre", "Rubro", "Marca", "Stock_Actual", "Precio_1").limit(top_registros).execute()
+                    df_prod_ia = pd.DataFrame(prod_res.data) if prod_res.data else pd.DataFrame()
+                    if not df_prod_ia.empty:
+                        contexto_texto += f"\n--- INVENTARIO Y STOCK (Últimos {len(df_prod_ia)} productos) ---\n"
+                        contexto_texto += df_prod_ia.to_string(index=False) + "\n"
+    
+                if fuente_datos in ["Historial Reciente de Ventas", "Resumen General (Stock + Ventas)"]:
+                    vta_res = db.table("VENTAS_CABECERA").select("ID_Venta", "Fecha", "Total", "Forma_Pago", "Forma_Entrega").order("Fecha", desc=True).limit(top_registros).execute()
+                    df_vta_ia = pd.DataFrame(vta_res.data) if vta_res.data else pd.DataFrame()
+                    if not df_vta_ia.empty:
+                        contexto_texto += f"\n--- VENTAS RECIENTES (Últimas {len(df_vta_ia)} ventas) ---\n"
+                        contexto_texto += df_vta_ia.to_string(index=False) + "\n"
+            except Exception as e:
+                st.error(f"Error al consultar la base de datos: {e}")
+    
+        # --- BOTONES DE PREGUNTAS RÁPIDAS ---
+        st.markdown("---")
+        st.subheader("2. Preguntas sugeridas o consulta personalizada")
+        
+        col_p1, col_p2, col_p3 = st.columns(3)
+        pregunta_rapida = None
+    
+        if col_p1.button("📉 ¿Qué productos tienen menos stock?"):
+            pregunta_rapida = "Indícame los 5 productos con menor stock actual y sugiere si requieren reposición urgente."
+        if col_p2.button("💳 ¿Cuál es el método de pago más usado?"):
+            pregunta_rapida = "Analiza el historial de ventas y dime cuál es la forma de pago más utilizada y el monto total cobrado por cada una."
+        if col_p3.button("📊 Resumen ejecutivo de ventas"):
+            pregunta_rapida = "Hazme un resumen ejecutivo con el total facturado, promedio por venta y hábitos de entrega (Mostrador vs Reparto)."
+    
+        # Campo de texto libre
+        consulta_usuario = st.text_input(
+            "O escribe tu pregunta libremente aquí:",
+            value=pregunta_rapida if pregunta_rapida else "",
+            placeholder="Ej: ¿Cuáles son las marcas con más variedad de productos cargados?"
+        )
+    
+        # --- PROCESAMIENTO CON GOOGLE GEMINI ---
+        if st.button("🚀 Consultar Asistente IA", type="primary") and consulta_usuario:
+            if not contexto_texto:
+                st.warning("⚠️ No hay datos cargados para analizar con los filtros seleccionados.")
+            else:
+                prompt_sistema = f"""
+                Eres el asistente analítico de negocios de 'Pañalera Moldes'. 
+                Tu objetivo es analizar los datos suministrados y responder a la consulta del usuario de forma clara, profesional, concisa y en español.
+    
+                REGLAS ESTRICTAS:
+                1. Responde ÚNICAMENTE basándote en la siguiente información de la base de datos.
+                2. No inventes datos que no estén presentes en el contexto.
+                3. Si la información no alcanza para responder, indícalo amablemente.
+                4. Utiliza viñetas y formato estructurado (negritas, listas) para facilitar la lectura.
+    
+                DATOS DISPONIBLES:
+                {contexto_texto}
+    
+                PREGUNTA DEL USUARIO:
+                {consulta_usuario}
+                """
+    
+                try:
+                    with st.spinner("🤖 Gemini está analizando tu negocio..."):
+                        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                        response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=prompt_sistema
+                        )
+                        
+                        st.markdown("### 📋 Análisis del Asistente:")
+                        st.info(response.text)
+    
+                except Exception as e:
+                    st.error(f"Error al conectar con el servicio de IA: {e}")
