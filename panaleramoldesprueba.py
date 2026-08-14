@@ -4640,174 +4640,143 @@ else:
                         st.caption(f"💰 {v['Metodo_Pago']}")
 
     # =====================================================================
-    # MODULO: 🤖 ASISTENTE IA (Google Gemini - Auto-detectable REST)
+    # MODULO: 🤖 ASISTENTE IA EN TIEMPO REAL (Text-to-SQL Supabase)
     # =====================================================================
     elif menu == "🤖 Asistente IA":
         import requests
         import json
+        import pandas as pd
     
-        st.title("🤖 Asistente Analítico de Negocio")
-        st.caption("Consulte métricas, tendencias de ventas e inventarios en lenguaje natural.")
+        st.title("🤖 Asistente Analítico Integral (Tiempo Real)")
+        st.caption("Consulte sobre ventas, stock, caja, clientes y compras en lenguaje natural.")
     
-        # Obtener API Key de los Secrets de Streamlit
+        # 1. Obtener clave API
         api_key_val = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("desarrollo", {}).get("GEMINI_API_KEY")
     
         if not api_key_val:
             st.error("⚠️ No se encontró la clave `GEMINI_API_KEY` en los Secrets de Streamlit.")
             st.stop()
     
-        # --- CONTROLES Y FUENTE DE DATOS ---
-        st.subheader("1. Selecciona los datos a consultar")
-        col_d1, col_d2 = st.columns(2)
-        
-        with col_d1:
-            fuente_datos = st.selectbox(
-                "¿Qué datos deseas que analice la IA?",
-                ["Stock y Productos", "Historial Reciente de Ventas", "Resumen General (Stock + Ventas)"]
-            )
+        # 2. DEFINICIÓN DEL ESQUEMA COMPLETO DE SUPABASE
+        SCHEMA_SUPABASE = """
+        ESTRUCTURA DE TABLAS EN SUPABASE (Pañalera Moldes):
     
-        with col_d2:
-            top_registros = st.slider("Cantidad de registros a procesar:", min_value=20, max_value=200, value=50, step=10)
+        - PRODUCTOS: ID_Producto (text, PK), Nombre (text), Rubro (text), ID_Proveedor (text), Marca (text), Stock_Actual (int), Stock_Min (int), Stock_Max (int), Precio_Costo (numeric), Precio_1 (numeric), Precio_2 (numeric), Precio_3 (numeric), Es_Stockeable (bool), Estado (text).
+        - VENTAS_CABECERA: ID_Venta (text, PK), Fecha (date), Hora (time), ID_Cliente (bigint, FK -> CLIENTES.ID_Cliente), ID_Vendedor (text), Forma_Pago (text), Total (numeric), Estado (text), Forma_Entrega (text), Direccion_Entrega (text).
+        - VENTAS_DETALLE: ID_Detalle (int, PK), ID_Venta (text, FK -> VENTAS_CABECERA.ID_Venta), ID_Producto (text, FK -> PRODUCTOS.ID_Producto), Cantidad (int), Precio_Unitario (numeric), Subtotal (numeric), Precio_Costo_Unitario (numeric).
+        - VENTAS_PAGOS: ID_Pago (bigint, PK), ID_Venta (text, FK -> VENTAS_CABECERA.ID_Venta), Metodo_Pago (text), Monto (numeric).
+        - CLIENTES: ID_Cliente (bigint, PK), Nombre (text), Apellido (text), DNI (text), "Razón Social" (text), CUIT (text), Telefono (text), Direccion_1 (text), Zona (text), Tipo_Cliente (text).
+        - PROVEEDORES: ID_Proveedor (text, PK), Razon_Social (text), Rubros_Asociados (text), CUIT (text), Telefono (text).
+        - CAJA: ID_Movimiento (bigint, PK), Fecha (timestamp), Tipo (text), Concepto (text), Monto (numeric), Forma_Pago (text), ID_Turno (text), Usuario (text).
+        - CONTROL_TURNOS: ID_Turno (text, PK), Usuario (text), Fecha_Hora_Apertura (timestamp), Monto_Apertura (numeric), Fecha_Hora_Cierre (timestamp), Monto_Cierre_Declarado (numeric), Estado (text).
+        - COMPRAS_CABECERA: ID_Compra (text, PK), Fecha (timestamp), Proveedor (text), Nro_Factura (text), Metodo_Pago (text), Total_Compra (numeric).
+        - DETALLE_COMPRAS: id (bigint, PK), ID_Compra (text, FK -> COMPRAS_CABECERA.ID_Compra), ID_Producto (text, FK -> PRODUCTOS.ID_Producto), Cantidad (int), Precio_Costo_Unitario (numeric), Subtotal (numeric).
+        - MOVIMIENTOS_STOCK: id (bigint, PK), fecha (timestamp), id_producto (text), nombre_producto (text), tipo_movimiento (text), cantidad (numeric), stock_anterior (numeric), stock_nuevo (numeric), origen_referencia (text), usuario (text).
+        - VENDEDORES: ID_Vendedor (text, PK), Nombre (text), Apellido (text), Mail (text), Estado (text).
+        - AUDITORIA: ID_Auditoria (bigint, PK), Fecha_Hora (timestamp), Tabla_Afectada (text), Accion (text), Usuario (text).
+        """
     
-        # --- CARGA DE DATOS EN MEMORIA (SOLO LECTURA) ---
-        with st.spinner("Preparando contexto de datos..."):
-            contexto_texto = ""
-            
-            try:
-                if fuente_datos in ["Stock y Productos", "Resumen General (Stock + Ventas)"]:
-                    prod_res = db.table("PRODUCTOS").select("Nombre", "Rubro", "Marca", "Stock_Actual", "Precio_1").limit(top_registros).execute()
-                    df_prod_ia = pd.DataFrame(prod_res.data) if prod_res.data else pd.DataFrame()
-                    if not df_prod_ia.empty:
-                        contexto_texto += f"\n--- INVENTARIO Y STOCK (Últimos {len(df_prod_ia)} productos) ---\n"
-                        contexto_texto += df_prod_ia.to_string(index=False) + "\n"
-    
-                if fuente_datos in ["Historial Reciente de Ventas", "Resumen General (Stock + Ventas)"]:
-                    vta_res = db.table("VENTAS_CABECERA").select("ID_Venta", "Fecha", "Total", "Forma_Pago", "Forma_Entrega").order("Fecha", desc=True).limit(top_registros).execute()
-                    df_vta_ia = pd.DataFrame(vta_res.data) if vta_res.data else pd.DataFrame()
-                    if not df_vta_ia.empty:
-                        contexto_texto += f"\n--- VENTAS RECIENTES (Últimas {len(df_vta_ia)} ventas) ---\n"
-                        contexto_texto += df_vta_ia.to_string(index=False) + "\n"
-            except Exception as e:
-                st.error(f"Error al consultar la base de datos: {e}")
-    
-        # --- BOTONES DE PREGUNTAS RÁPIDAS ---
-        st.markdown("---")
-        st.subheader("2. Preguntas sugeridas o consulta personalizada")
-        
+        # 3. INTERFAZ Y PREGUNTAS SUGERIDAS
+        st.subheader("💡 Preguntas Rápidas de Negocio")
         col_p1, col_p2, col_p3 = st.columns(3)
         pregunta_rapida = None
     
-        if col_p1.button("📉 ¿Qué productos tienen menos stock?"):
-            pregunta_rapida = "Indícame los 5 productos con menor stock actual y sugiere si requieren reposición urgente."
-        if col_p2.button("💳 ¿Cuál es el método de pago más usado?"):
-            pregunta_rapida = "Analiza el historial de ventas y dime cuál es la forma de pago más utilizada y el monto total cobrado por cada una."
-        if col_p3.button("📊 Resumen ejecutivo de ventas"):
-            pregunta_rapida = "Hazme un resumen ejecutivo con el total facturado, promedio por venta y hábitos de entrega (Mostrador vs Reparto)."
+        if col_p1.button("🏆 ¿Cuál es el producto más vendido?"):
+            pregunta_rapida = "¿Cuál es el Nombre del producto con mayor cantidad total vendida en la tabla VENTAS_DETALLE y cuál fue el volumen total?"
+        if col_p2.button("📉 ¿Qué productos están en stock crítico?"):
+            pregunta_rapida = "Muestra los productos cuyo Stock_Actual sea menor o igual al Stock_Min, indicando Nombre, Stock_Actual y Stock_Min."
+        if col_p3.button("💵 Resumen de Ingresos por Medio de Pago"):
+            pregunta_rapida = "Muestra el total recaudado sumando la columna Total de VENTAS_CABECERA agrupado por Forma_Pago."
     
-        # Campo de texto libre
         consulta_usuario = st.text_input(
-            "O escribe tu pregunta libremente aquí:",
+            "O escribe cualquier consulta sobre tu base de datos:",
             value=pregunta_rapida if pregunta_rapida else "",
-            placeholder="Ej: ¿Cuáles son las marcas con más variedad de productos cargados?"
+            placeholder="Ej: ¿Cuánto vendió el vendedor con ID V01 este mes?"
         )
     
-        # --- PROCESAMIENTO DINÁMICO CON GOOGLE GEMINI ---
+        # 4. PROCESAMIENTO DINÁMICO (Text-to-SQL + Respuesta)
         if st.button("🚀 Consultar Asistente IA", type="primary") and consulta_usuario:
-            if not contexto_texto:
-                st.warning("⚠️ No hay datos cargados para analizar con los filtros seleccionados.")
-            else:
-                instruccion_sistema = (
-                    "Eres el asistente analítico de 'Pañalera Moldes'. "
-                    "TU ÚNICA TAREA ES DEVOLVER LA RESPUESTA FINAL DIRECTA AL USUARIO EN ESPAÑOL. "
-                    "Responde con viñetas y formato estructurado (negritas, listas)."
-                )
+            try:
+                # --- PASO 1: Generar SQL Pura con Gemini ---
+                with st.spinner("🤖 Gemini analizando estructura y generando consulta SQL..."):
+                    prompt_sql = f"""
+                    Eres un DBA Senior de PostgreSQL experto en el ERP de 'Pañalera Moldes'.
+                    
+                    {SCHEMA_SUPABASE}
     
-                prompt_usuario = f"""
-                DATOS DISPONIBLES EN LA BASE DE DATOS:
-                {contexto_texto}
+                    PREGUNTA DEL USUARIO:
+                    "{consulta_usuario}"
     
-                CONSULTA DEL USUARIO:
-                {consulta_usuario}
-                """
+                    REGLAS ESTRICTAS DE GENERACIÓN SQL:
+                    1. Devuelve ÚNICAMENTE la consulta SQL ejecutable. NO agregues etiquetas tipo ```sql, ni texto antes ni después.
+                    2. Si la consulta requiere nombres de productos o clientes, realiza los JOIN correspondientes (ej: VENTAS_DETALLE JOIN PRODUCTOS ON VENTAS_DETALLE.ID_Producto = PRODUCTOS.ID_Producto).
+                    3. Maneja minúsculas y mayúsculas exactamente como están en el esquema.
+                    4. Aplica LIMIT 50 si la respuesta puede devolver cientos de registros.
+                    5. Para filtros de fecha actual o meses, usa funciones PostgreSQL como EXTRACT(MONTH FROM Fecha) o CURRENT_DATE.
+                    """
     
-                try:
-                    with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # 1. Obtener lista de modelos de Google
-                        url_models = f"https://generativelanguage.googleapis.com/v1/models?key={api_key_val}"
-                        res_models = requests.get(url_models, timeout=10)
+                    url_generate = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key_val}"
+                    headers = {"Content-Type": "application/json"}
+                    
+                    payload_sql = {
+                        "contents": [{"parts": [{"text": prompt_sql}]}],
+                        "generationConfig": {"temperature": 0.0}  # Temperatura 0 para precisión estricta
+                    }
+    
+                    res_sql = requests.post(url_generate, headers=headers, json=payload_sql, timeout=15)
+                    
+                    if res_sql.status_code != 200:
+                        st.error(f"Error generando consulta SQL ({res_sql.status_code}): {res_sql.text}")
+                        st.stop()
+    
+                    query_sql = res_sql.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                    # Limpiar cualquier formato sobrante
+                    query_sql = query_sql.replace("```sql", "").replace("```", "").strip()
+    
+                # --- PASO 2: Ejecutar SQL directamente en Supabase ---
+                with st.spinner("📊 Consultando datos en tiempo real en Supabase..."):
+                    res_db = db.rpc("ejecutar_sql_solo_lectura", {"query": query_sql}).execute()
+                    datos_obtenidos = res_db.data if res_db.data else []
+    
+                # --- PASO 3: Redactar la respuesta ejecutiva final ---
+                with st.spinner("✍️ Sintetizando informe de negocio..."):
+                    prompt_respuesta = f"""
+                    Eres el Asistente Ejecutivo de 'Pañalera Moldes'.
+                    
+                    PREGUNTA DEL USUARIO:
+                    "{consulta_usuario}"
+    
+                    DATOS OBTENIDOS EN TIEMPO REAL DESDE SUPABASE:
+                    {json.dumps(datos_obtenidos, ensure_ascii=False)}
+    
+                    INSTRUCCIONES:
+                    - Devuelve una respuesta profesional, concisa y fácil de leer.
+                    - Usa viñetas, tablas de markdown o negritas para resaltar números clave (pesos $, cantidades).
+                    - Si los datos están vacíos ([]), informa amablemente que no hay registros registrados que coincidan con la búsqueda.
+                    - NO menciones nada sobre SQL, ni bases de datos ni código técnico. Habla como un consultor de negocios.
+                    """
+    
+                    payload_resp = {
+                        "system_instruction": {"parts": [{"text": "Responde directo en español con formatoMarkdown ejecutivo."}]},
+                        "contents": [{"parts": [{"text": prompt_respuesta}]}],
+                        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}
+                    }
+    
+                    res_final = requests.post(url_generate, headers=headers, json=payload_resp, timeout=20)
+                    
+                    if res_final.status_code == 200:
+                        parts = res_final.json()['candidates'][0]['content']['parts']
+                        texto_final = "".join([p['text'] for p in parts if 'text' in p])
                         
-                        if res_models.status_code != 200:
-                            url_models = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key_val}"
-                            res_models = requests.get(url_models, timeout=10)
+                        st.markdown("### 📋 Respuesta del Asistente:")
+                        st.info(texto_final)
     
-                        modelos_candidatos = []
-                        if res_models.status_code == 200:
-                            models_data = res_models.json().get('models', [])
-                            for m in models_data:
-                                nombre = m['name']
-                                metodos = m.get('supportedGenerationMethods', [])
-                                if 'generateContent' in metodos and not any(bad in nombre for bad in ['2.5', '3.1']):
-                                    modelos_candidatos.append(nombre)
+                        # Sección colapsable para auditoría técnica
+                        with st.expander("🛠️ Ver consulta SQL ejecutada en Supabase"):
+                            st.code(query_sql, language="sql")
+                            st.json(datos_obtenidos)
+                    else:
+                        st.error(f"Error generando respuesta final: {res_final.text}")
     
-                        if not modelos_candidatos:
-                            modelos_candidatos = ['models/gemini-2.0-flash', 'models/gemini-1.5-flash', 'models/gemini-1.5-flash-8b']
-    
-                        modelos_candidatos.sort(key=lambda x: 0 if '2.0-flash' in x else (1 if '1.5-flash' in x else 2))
-    
-                        # 2. Petición HTTP con desactivación de pensamiento (thinking_budget: 0)
-                        api_ver = "v1beta" if "v1beta" in url_models else "v1"
-                        respuesta_exitosa = False
-                        ultimo_error = ""
-    
-                        for modelo_target in modelos_candidatos:
-                            url_generate = f"https://generativelanguage.googleapis.com/{api_ver}/{modelo_target}:generateContent?key={api_key_val}"
-                            headers = {"Content-Type": "application/json"}
-                            
-                            payload = {
-                                "system_instruction": {
-                                    "parts": [{"text": instruccion_sistema}]
-                                },
-                                "contents": [{
-                                    "parts": [{"text": prompt_usuario}]
-                                }],
-                                "generationConfig": {
-                                    "thinkingConfig": {
-                                        "thinkingBudget": 0
-                                    }
-                                }
-                            }
-    
-                            res_gen = requests.post(url_generate, headers=headers, json=payload, timeout=30)
-    
-                            if res_gen.status_code == 200:
-                                data_json = res_gen.json()
-                                
-                                # Extracción robusta de las partes de texto
-                                parts = data_json.get('candidates', [{}])[0].get('content', {}).get('parts', [])
-                                texto_respuesta = ""
-                                
-                                for p in parts:
-                                    # Ignorar partes marcadas como pensamiento interno si existieran
-                                    if not p.get('thought', False) and 'text' in p:
-                                        texto_respuesta += p['text']
-                                
-                                # Respuestas de respaldo si no extrajo nada explícito
-                                if not texto_respuesta.strip() and parts:
-                                    texto_respuesta = parts[-1].get('text', '')
-    
-                                if texto_respuesta.strip():
-                                    st.markdown("### 📋 Análisis del Asistente:")
-                                    st.info(texto_respuesta)
-                                    respuesta_exitosa = True
-                                    break
-                            elif res_gen.status_code in [503, 429]:
-                                ultimo_error = f"El modelo {modelo_target} estuvo ocupado ({res_gen.status_code}). Reintentando..."
-                                continue
-                            else:
-                                ultimo_error = f"({res_gen.status_code}): {res_gen.text}"
-    
-                        if not respuesta_exitosa:
-                            st.error(f"No se pudo completar la consulta. Detalle: {ultimo_error}")
-    
-                except Exception as e:
-                    st.error(f"Error de conexión con el servicio: {e}")
+            except Exception as e:
+                st.error(f"⚠️ Ocurrió un inconveniente procesando la consulta: {e}")
