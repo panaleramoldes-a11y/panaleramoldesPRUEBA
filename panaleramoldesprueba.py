@@ -4716,13 +4716,10 @@ else:
             if not contexto_texto:
                 st.warning("⚠️ No hay datos cargados para analizar con los filtros seleccionados.")
             else:
-                # Instrucción de sistema separada estructuralmente
                 instruccion_sistema = (
                     "Eres el asistente analítico de 'Pañalera Moldes'. "
                     "TU ÚNICA TAREA ES DEVOLVER LA RESPUESTA FINAL DIRECTA AL USUARIO EN ESPAÑOL. "
-                    "ESTÁ ESTRICTAMENTE PROHIBIDO INCLUIR TU PENSAMIENTO INTERNO, BORRADORES, TRADUCCIONES, "
-                    "SECCIONES DE 'Goal', 'Role', 'Rules', 'Drafting' O EVALUACIÓN DE REGLAS. "
-                    "Sé claro, profesional, conciso y usa viñetas/negritas."
+                    "Responde con viñetas y formato estructurado (negritas, listas)."
                 )
     
                 prompt_usuario = f"""
@@ -4757,7 +4754,7 @@ else:
     
                         modelos_candidatos.sort(key=lambda x: 0 if '2.0-flash' in x else (1 if '1.5-flash' in x else 2))
     
-                        # 2. Reintentar con estructura de System Instruction
+                        # 2. Petición HTTP con desactivación de pensamiento (thinking_budget: 0)
                         api_ver = "v1beta" if "v1beta" in url_models else "v1"
                         respuesta_exitosa = False
                         ultimo_error = ""
@@ -4766,25 +4763,43 @@ else:
                             url_generate = f"https://generativelanguage.googleapis.com/{api_ver}/{modelo_target}:generateContent?key={api_key_val}"
                             headers = {"Content-Type": "application/json"}
                             
-                            # PAYLOAD ESTRUCTURADO CON system_instruction
                             payload = {
                                 "system_instruction": {
                                     "parts": [{"text": instruccion_sistema}]
                                 },
                                 "contents": [{
                                     "parts": [{"text": prompt_usuario}]
-                                }]
+                                }],
+                                "generationConfig": {
+                                    "thinkingConfig": {
+                                        "thinkingBudget": 0
+                                    }
+                                }
                             }
     
                             res_gen = requests.post(url_generate, headers=headers, json=payload, timeout=30)
     
                             if res_gen.status_code == 200:
                                 data_json = res_gen.json()
-                                texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
-                                st.markdown("### 📋 Análisis del Asistente:")
-                                st.info(texto_respuesta)
-                                respuesta_exitosa = True
-                                break
+                                
+                                # Extracción robusta de las partes de texto
+                                parts = data_json.get('candidates', [{}])[0].get('content', {}).get('parts', [])
+                                texto_respuesta = ""
+                                
+                                for p in parts:
+                                    # Ignorar partes marcadas como pensamiento interno si existieran
+                                    if not p.get('thought', False) and 'text' in p:
+                                        texto_respuesta += p['text']
+                                
+                                # Respuestas de respaldo si no extrajo nada explícito
+                                if not texto_respuesta.strip() and parts:
+                                    texto_respuesta = parts[-1].get('text', '')
+    
+                                if texto_respuesta.strip():
+                                    st.markdown("### 📋 Análisis del Asistente:")
+                                    st.info(texto_respuesta)
+                                    respuesta_exitosa = True
+                                    break
                             elif res_gen.status_code in [503, 429]:
                                 ultimo_error = f"El modelo {modelo_target} estuvo ocupado ({res_gen.status_code}). Reintentando..."
                                 continue
