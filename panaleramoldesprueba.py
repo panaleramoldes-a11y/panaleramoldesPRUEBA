@@ -4742,37 +4742,32 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # 1. Obtener todos los modelos soportados
-                        modelos_disponibles = [
-                            m.name for m in genai.list_models() 
-                            if 'generateContent' in m.supported_generation_methods
+                        # Lista de modelos estables en orden de preferencia
+                        modelos_a_probar = [
+                            'gemini-1.5-flash',
+                            'gemini-1.5-flash-latest',
+                            'gemini-1.5-pro',
+                            'gemini-pro'
                         ]
                         
-                        # 2. Buscar prioritariamente los modelos 'flash' (capa gratuita accesible)
-                        modelo_elegido = None
-                        # Priorizamos versiones Flash en orden de preferencia
-                        orden_preferencia = ['gemini-2.5-flash', 'gemini-1.5-flash', 'flash']
-                        
-                        for pref in orden_preferencia:
-                            for m in modelos_disponibles:
-                                # Ignoramos expresamente modelos 'pro' que requieren facturación o cuota cero
-                                if pref in m.lower() and 'pro' not in m.lower():
-                                    modelo_elegido = m
-                                    break
-                            if modelo_elegido:
-                                break
-                        
-                        # Si no encontró un Flash específico, toma el primero que NO sea 'pro'
-                        if not modelo_elegido:
-                            modelos_sin_pro = [m for m in modelos_disponibles if 'pro' not in m.lower()]
-                            modelo_elegido = modelos_sin_pro[0] if modelos_sin_pro else modelos_disponibles[0]
+                        response = None
+                        ultimo_error = None
     
-                        # 3. Instanciar y generar respuesta
-                        model = genai.GenerativeModel(modelo_elegido)
-                        response = model.generate_content(prompt_sistema)
-                        
-                        st.markdown("### 📋 Análisis del Asistente:")
-                        st.info(response.text)
+                        for mod_nombre in modelos_a_probar:
+                            try:
+                                model = genai.GenerativeModel(mod_nombre)
+                                response = model.generate_content(prompt_sistema)
+                                if response:
+                                    break
+                            except Exception as err_m:
+                                ultimo_error = err_m
+                                continue
+    
+                        if response and hasattr(response, 'text'):
+                            st.markdown("### 📋 Análisis del Asistente:")
+                            st.info(response.text)
+                        else:
+                            st.error(f"No se pudo conectar a los modelos probados. Último detalle: {ultimo_error}")
     
                 except Exception as e:
                     st.error(f"Error al conectar con el servicio de IA: {e}")
