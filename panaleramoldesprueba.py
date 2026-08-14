@@ -4742,30 +4742,32 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # 1. Buscar automáticamente un modelo disponible en tu cuenta
+                        # 1. Obtener todos los modelos soportados
                         modelos_disponibles = [
                             m.name for m in genai.list_models() 
                             if 'generateContent' in m.supported_generation_methods
                         ]
                         
-                        if not modelos_disponibles:
-                            st.error("No se encontraron modelos disponibles para tu API Key.")
-                            st.stop()
-                        
-                        # Priorizar flash / pro si existen en la lista, sino usar el primero disponible
+                        # 2. Buscar prioritariamente los modelos 'flash' (capa gratuita accesible)
                         modelo_elegido = None
-                        for target in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-pro']:
+                        # Priorizamos versiones Flash en orden de preferencia
+                        orden_preferencia = ['gemini-2.5-flash', 'gemini-1.5-flash', 'flash']
+                        
+                        for pref in orden_preferencia:
                             for m in modelos_disponibles:
-                                if target in m:
+                                # Ignoramos expresamente modelos 'pro' que requieren facturación o cuota cero
+                                if pref in m.lower() and 'pro' not in m.lower():
                                     modelo_elegido = m
                                     break
                             if modelo_elegido:
                                 break
                         
+                        # Si no encontró un Flash específico, toma el primero que NO sea 'pro'
                         if not modelo_elegido:
-                            modelo_elegido = modelos_disponibles[0]
+                            modelos_sin_pro = [m for m in modelos_disponibles if 'pro' not in m.lower()]
+                            modelo_elegido = modelos_sin_pro[0] if modelos_sin_pro else modelos_disponibles[0]
     
-                        # 2. Instanciar y generar respuesta
+                        # 3. Instanciar y generar respuesta
                         model = genai.GenerativeModel(modelo_elegido)
                         response = model.generate_content(prompt_sistema)
                         
