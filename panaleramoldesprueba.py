@@ -4648,15 +4648,20 @@ else:
     
         # Verificar que exista la librería y la API Key
         try:
-            from google import genai
-            api_key_ok = "GEMINI_API_KEY" in st.secrets
+            import google.generativeai as genai
         except ImportError:
-            st.error("⚠️ La librería `google-genai` no está instalada. Agrégala a tu archivo `requirements.txt`.")
+            st.error("⚠️ La librería `google-generativeai` no está instalada. Agrégala a tu archivo `requirements.txt`.")
             st.stop()
     
-        if not api_key_ok:
+        # Obtener API Key (soporta raíz o dentro del bloque [desarrollo])
+        api_key_val = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("desarrollo", {}).get("GEMINI_API_KEY")
+    
+        if not api_key_val:
             st.error("⚠️ No se encontró la clave `GEMINI_API_KEY` en los Secrets de Streamlit.")
             st.stop()
+    
+        # Configurar API Key
+        genai.configure(api_key=api_key_val)
     
         # --- CONTROLES Y FUENTE DE DATOS ---
         st.subheader("1. Selecciona los datos a consultar")
@@ -4737,11 +4742,9 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                        response = client.models.generate_content(
-                            model='gemini-1.5-flash',
-                            contents=prompt_sistema
-                        )
+                        # Instanciar el modelo con la sintaxis estable
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        response = model.generate_content(prompt_sistema)
                         
                         st.markdown("### 📋 Análisis del Asistente:")
                         st.info(response.text)
