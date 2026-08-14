@@ -4716,17 +4716,16 @@ else:
             if not contexto_texto:
                 st.warning("⚠️ No hay datos cargados para analizar con los filtros seleccionados.")
             else:
-                prompt_sistema = f"""
-                Instrucciones para el modelo:
-                Eres el asistente analítico de negocios de 'Pañalera Moldes'.
-                Tu objetivo es responder a la consulta del usuario de forma directa, profesional, concisa y en español.
+                # Instrucción de sistema separada estructuralmente
+                instruccion_sistema = (
+                    "Eres el asistente analítico de 'Pañalera Moldes'. "
+                    "TU ÚNICA TAREA ES DEVOLVER LA RESPUESTA FINAL DIRECTA AL USUARIO EN ESPAÑOL. "
+                    "ESTÁ ESTRICTAMENTE PROHIBIDO INCLUIR TU PENSAMIENTO INTERNO, BORRADORES, TRADUCCIONES, "
+                    "SECCIONES DE 'Goal', 'Role', 'Rules', 'Drafting' O EVALUACIÓN DE REGLAS. "
+                    "Sé claro, profesional, conciso y usa viñetas/negritas."
+                )
     
-                REGLAS OBLIGATORIAS:
-                1. Proporciona ÚNICAMENTE la respuesta final al usuario. NO incluyas análisis internos, borradores, traducciones, ni pasos intermedios de razonamiento (Chain of Thought / Role / Goal / Rules).
-                2. Responde basándote estrictamente en los datos suministrados a continuación.
-                3. Si la información disponible no alcanza para responder la consulta, indícalo amablemente de forma directa.
-                4. Utiliza formato legible con viñetas y negritas.
-    
+                prompt_usuario = f"""
                 DATOS DISPONIBLES EN LA BASE DE DATOS:
                 {contexto_texto}
     
@@ -4736,7 +4735,7 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # 1. Obtener modelos válidos excluyendo versiones deprecadas o sin cuota
+                        # 1. Obtener lista de modelos de Google
                         url_models = f"https://generativelanguage.googleapis.com/v1/models?key={api_key_val}"
                         res_models = requests.get(url_models, timeout=10)
                         
@@ -4750,18 +4749,15 @@ else:
                             for m in models_data:
                                 nombre = m['name']
                                 metodos = m.get('supportedGenerationMethods', [])
-                                # Filtramos los que soportan texto y descartamos versiones problemáticas (2.5, 3.1)
                                 if 'generateContent' in metodos and not any(bad in nombre for bad in ['2.5', '3.1']):
                                     modelos_candidatos.append(nombre)
     
-                        # Si no obtuvo lista, dejamos una lista por defecto de respaldo
                         if not modelos_candidatos:
                             modelos_candidatos = ['models/gemini-2.0-flash', 'models/gemini-1.5-flash', 'models/gemini-1.5-flash-8b']
     
-                        # Ordernar candidatos dando prioridad a las versiones Flash
                         modelos_candidatos.sort(key=lambda x: 0 if '2.0-flash' in x else (1 if '1.5-flash' in x else 2))
     
-                        # 2. Reintentar con varios modelos si el servidor de Google está saturado (503)
+                        # 2. Reintentar con estructura de System Instruction
                         api_ver = "v1beta" if "v1beta" in url_models else "v1"
                         respuesta_exitosa = False
                         ultimo_error = ""
@@ -4769,9 +4765,14 @@ else:
                         for modelo_target in modelos_candidatos:
                             url_generate = f"https://generativelanguage.googleapis.com/{api_ver}/{modelo_target}:generateContent?key={api_key_val}"
                             headers = {"Content-Type": "application/json"}
+                            
+                            # PAYLOAD ESTRUCTURADO CON system_instruction
                             payload = {
+                                "system_instruction": {
+                                    "parts": [{"text": instruccion_sistema}]
+                                },
                                 "contents": [{
-                                    "parts": [{"text": prompt_sistema}]
+                                    "parts": [{"text": prompt_usuario}]
                                 }]
                             }
     
@@ -4784,15 +4785,14 @@ else:
                                 st.info(texto_respuesta)
                                 respuesta_exitosa = True
                                 break
-                            elif res_gen.status_code == 503:
-                                # Si está saturado el modelo, continúa el bucle con el siguiente modelo de la lista
-                                ultimo_error = f"El modelo {modelo_target} estuvo ocupado (503). Reintentando con otro..."
+                            elif res_gen.status_code in [503, 429]:
+                                ultimo_error = f"El modelo {modelo_target} estuvo ocupado ({res_gen.status_code}). Reintentando..."
                                 continue
                             else:
                                 ultimo_error = f"({res_gen.status_code}): {res_gen.text}"
     
                         if not respuesta_exitosa:
-                            st.error(f"No se pudo completar la consulta por alta demanda temporal de Google. Detalle: {ultimo_error}")
+                            st.error(f"No se pudo completar la consulta. Detalle: {ultimo_error}")
     
                 except Exception as e:
                     st.error(f"Error de conexión con el servicio: {e}")
