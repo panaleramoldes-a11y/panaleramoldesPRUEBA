@@ -4742,8 +4742,31 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # Instanciar el modelo con la sintaxis estable
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        # 1. Buscar automáticamente un modelo disponible en tu cuenta
+                        modelos_disponibles = [
+                            m.name for m in genai.list_models() 
+                            if 'generateContent' in m.supported_generation_methods
+                        ]
+                        
+                        if not modelos_disponibles:
+                            st.error("No se encontraron modelos disponibles para tu API Key.")
+                            st.stop()
+                        
+                        # Priorizar flash / pro si existen en la lista, sino usar el primero disponible
+                        modelo_elegido = None
+                        for target in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-pro']:
+                            for m in modelos_disponibles:
+                                if target in m:
+                                    modelo_elegido = m
+                                    break
+                            if modelo_elegido:
+                                break
+                        
+                        if not modelo_elegido:
+                            modelo_elegido = modelos_disponibles[0]
+    
+                        # 2. Instanciar y generar respuesta
+                        model = genai.GenerativeModel(modelo_elegido)
                         response = model.generate_content(prompt_sistema)
                         
                         st.markdown("### 📋 Análisis del Asistente:")
