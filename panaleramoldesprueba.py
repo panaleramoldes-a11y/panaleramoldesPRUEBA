@@ -4640,20 +4640,16 @@ else:
                         st.caption(f"💰 {v['Metodo_Pago']}")
 
     # =====================================================================
-    # MODULO: 🤖 ASISTENTE IA (Google Gemini)
+    # MODULO: 🤖 ASISTENTE IA (Google Gemini - Conexión Directa REST)
     # =====================================================================
     elif menu == "🤖 Asistente IA":
+        import requests
+        import json
+    
         st.title("🤖 Asistente Analítico de Negocio")
         st.caption("Consulte métricas, tendencias de ventas e inventarios en lenguaje natural.")
     
-        # Importar el SDK moderno oficial de Google
-        try:
-            from google import genai
-        except ImportError:
-            st.error("⚠️ La librería `google-genai` no está instalada. Agrégala a tu archivo `requirements.txt`.")
-            st.stop()
-    
-        # Obtener la API Key desde los secrets de Streamlit
+        # Obtener API Key de los Secrets de Streamlit
         api_key_val = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("desarrollo", {}).get("GEMINI_API_KEY")
     
         if not api_key_val:
@@ -4715,7 +4711,7 @@ else:
             placeholder="Ej: ¿Cuáles son las marcas con más variedad de productos cargados?"
         )
     
-        # --- PROCESAMIENTO CON GOOGLE GEMINI ---
+        # --- PROCESAMIENTO CON GOOGLE GEMINI (PETICIÓN DIRECTA REST) ---
         if st.button("🚀 Consultar Asistente IA", type="primary") and consulta_usuario:
             if not contexto_texto:
                 st.warning("⚠️ No hay datos cargados para analizar con los filtros seleccionados.")
@@ -4739,20 +4735,27 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # Inicializar cliente con el nuevo SDK
-                        client = genai.Client(api_key=api_key_val)
+                        # Endpoint oficial HTTP REST v1beta
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key_val}"
                         
-                        # Llamada a la API con el modelo recomendado por Google
-                        response = client.models.generate_content(
-                            model='gemini-1.5-flash',
-                            contents=prompt_sistema
-                        )
+                        headers = {"Content-Type": "application/json"}
+                        payload = {
+                            "contents": [{
+                                "parts": [{"text": prompt_sistema}]
+                            }]
+                        }
+    
+                        # Petición HTTP
+                        res = requests.post(url, headers=headers, json=payload, timeout=30)
                         
-                        if response and hasattr(response, 'text'):
+                        if res.status_code == 200:
+                            data_json = res.json()
+                            # Extraer respuesta
+                            texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
                             st.markdown("### 📋 Análisis del Asistente:")
-                            st.info(response.text)
+                            st.info(texto_respuesta)
                         else:
-                            st.error("No se recibió respuesta del modelo.")
+                            st.error(f"Error de la API de Google ({res.status_code}): {res.text}")
     
                 except Exception as e:
-                    st.error(f"Error al conectar con el servicio de IA: {e}")
+                    st.error(f"Error de conexión con el servicio: {e}")
