@@ -4640,7 +4640,7 @@ else:
                         st.caption(f"💰 {v['Metodo_Pago']}")
 
     # =====================================================================
-    # MODULO: 🤖 ASISTENTE IA (Google Gemini - Conexión Directa REST)
+    # MODULO: 🤖 ASISTENTE IA (Google Gemini - Auto-detectable REST)
     # =====================================================================
     elif menu == "🤖 Asistente IA":
         import requests
@@ -4711,7 +4711,7 @@ else:
             placeholder="Ej: ¿Cuáles son las marcas con más variedad de productos cargados?"
         )
     
-        # --- PROCESAMIENTO CON GOOGLE GEMINI (PETICIÓN DIRECTA REST) ---
+        # --- PROCESAMIENTO DINÁMICO CON GOOGLE GEMINI ---
         if st.button("🚀 Consultar Asistente IA", type="primary") and consulta_usuario:
             if not contexto_texto:
                 st.warning("⚠️ No hay datos cargados para analizar con los filtros seleccionados.")
@@ -4735,32 +4735,60 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # Probamos los modelos vigentes en la API v1 estable
-                        modelos_probables = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-                        exito = False
+                        # 1. Consultar a Google la lista exacta de modelos permitidos para esta API Key
+                        url_models = f"https://generativelanguage.googleapis.com/v1/models?key={api_key_val}"
+                        res_models = requests.get(url_models, timeout=10)
                         
-                        for mod in modelos_probables:
-                            # Endpoint en versión v1 estable
-                            url = f"https://generativelanguage.googleapis.com/v1/models/{mod}:generateContent?key={api_key_val}"
-                            headers = {"Content-Type": "application/json"}
-                            payload = {
-                                "contents": [{
-                                    "parts": [{"text": prompt_sistema}]
-                                }]
-                            }
+                        if res_models.status_code != 200:
+                            # Si v1 falla, probamos v1beta para listar
+                            url_models = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key_val}"
+                            res_models = requests.get(url_models, timeout=10)
     
-                            res = requests.post(url, headers=headers, json=payload, timeout=30)
+                        if res_models.status_code == 200:
+                            models_data = res_models.json().get('models', [])
+                            # Filtrar solo modelos que soporten generación de contenido (generateContent)
+                            modelos_validos = [
+                                m['name'] for m in models_data 
+                                if 'generateContent' in m.get('supportedGenerationMethods', [])
+                            ]
                             
-                            if res.status_code == 200:
-                                data_json = res.json()
-                                texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
-                                st.markdown("### 📋 Análisis del Asistente:")
-                                st.info(texto_respuesta)
-                                exito = True
-                                break
+                            # Elegir un modelo tipo 'flash' prioritariamente, o el primero disponible
+                            modelo_target = None
+                            for m in modelos_validos:
+                                if 'flash' in m.lower():
+                                    modelo_target = m
+                                    break
+                            if not modelo_target and modelos_validos:
+                                modelo_target = modelos_validos[0]
+                        else:
+                            st.error(f"Error al obtener lista de modelos ({res_models.status_code}): {res_models.text}")
+                            st.stop()
+    
+                        if not modelo_target:
+                            st.error("No se encontraron modelos de generación de contenido disponibles para tu API Key.")
+                            st.stop()
+    
+                        # 2. Hacer la petición de generación con el modelo exacto encontrado
+                        # Determinar versión del endpoint según el formato retornado por la API
+                        api_ver = "v1beta" if "v1beta" in url_models else "v1"
+                        url_generate = f"https://generativelanguage.googleapis.com/{api_ver}/{modelo_target}:generateContent?key={api_key_val}"
                         
-                        if not exito:
-                            st.error(f"Error de la API de Google ({res.status_code}): {res.text}")
+                        headers = {"Content-Type": "application/json"}
+                        payload = {
+                            "contents": [{
+                                "parts": [{"text": prompt_sistema}]
+                            }]
+                        }
+    
+                        res_gen = requests.post(url_generate, headers=headers, json=payload, timeout=30)
+    
+                        if res_gen.status_code == 200:
+                            data_json = res_gen.json()
+                            texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
+                            st.markdown("### 📋 Análisis del Asistente:")
+                            st.info(texto_respuesta)
+                        else:
+                            st.error(f"Error al generar respuesta ({res_gen.status_code}): {res_gen.text}")
     
                 except Exception as e:
                     st.error(f"Error de conexión con el servicio: {e}")
