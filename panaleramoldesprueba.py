@@ -4740,24 +4740,29 @@ else:
                         res_models = requests.get(url_models, timeout=10)
                         
                         if res_models.status_code != 200:
-                            # Si v1 falla, probamos v1beta para listar
                             url_models = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key_val}"
                             res_models = requests.get(url_models, timeout=10)
     
                         if res_models.status_code == 200:
                             models_data = res_models.json().get('models', [])
-                            # Filtrar solo modelos que soporten generación de contenido (generateContent)
+                            
+                            # Filtrar modelos que soporten generateContent Y EXCLUIR los deprecados como '2.5'
                             modelos_validos = [
                                 m['name'] for m in models_data 
                                 if 'generateContent' in m.get('supportedGenerationMethods', [])
+                                and '2.5' not in m['name']  # <--- Descartamos el 2.5 que genera el 404
                             ]
                             
-                            # Elegir un modelo tipo 'flash' prioritariamente, o el primero disponible
+                            # Buscar prioritariamente gemini-2.0-flash o gemini-1.5-flash
                             modelo_target = None
-                            for m in modelos_validos:
-                                if 'flash' in m.lower():
-                                    modelo_target = m
+                            for preferencia in ['gemini-2.0-flash', 'gemini-1.5-flash', 'flash']:
+                                for m in modelos_validos:
+                                    if preferencia in m.lower():
+                                        modelo_target = m
+                                        break
+                                if modelo_target:
                                     break
+                            
                             if not modelo_target and modelos_validos:
                                 modelo_target = modelos_validos[0]
                         else:
@@ -4765,11 +4770,10 @@ else:
                             st.stop()
     
                         if not modelo_target:
-                            st.error("No se encontraron modelos de generación de contenido disponibles para tu API Key.")
+                            st.error("No se encontraron modelos válidos disponibles para tu API Key.")
                             st.stop()
     
-                        # 2. Hacer la petición de generación con el modelo exacto encontrado
-                        # Determinar versión del endpoint según el formato retornado por la API
+                        # 2. Hacer la petición de generación con el modelo estable
                         api_ver = "v1beta" if "v1beta" in url_models else "v1"
                         url_generate = f"https://generativelanguage.googleapis.com/{api_ver}/{modelo_target}:generateContent?key={api_key_val}"
                         
