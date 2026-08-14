@@ -6,3 +6,4 @@ pytz
 pydeck
 ortools
 numpy
+google-genai
