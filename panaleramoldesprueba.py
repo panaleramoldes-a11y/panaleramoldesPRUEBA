@@ -4646,22 +4646,19 @@ else:
         st.title("🤖 Asistente Analítico de Negocio")
         st.caption("Consulte métricas, tendencias de ventas e inventarios en lenguaje natural.")
     
-        # Verificar que exista la librería y la API Key
+        # Importar el SDK moderno oficial de Google
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError:
-            st.error("⚠️ La librería `google-generativeai` no está instalada. Agrégala a tu archivo `requirements.txt`.")
+            st.error("⚠️ La librería `google-genai` no está instalada. Agrégala a tu archivo `requirements.txt`.")
             st.stop()
     
-        # Obtener API Key (soporta raíz o dentro del bloque [desarrollo])
+        # Obtener la API Key desde los secrets de Streamlit
         api_key_val = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("desarrollo", {}).get("GEMINI_API_KEY")
     
         if not api_key_val:
             st.error("⚠️ No se encontró la clave `GEMINI_API_KEY` en los Secrets de Streamlit.")
             st.stop()
-    
-        # Configurar API Key
-        genai.configure(api_key=api_key_val)
     
         # --- CONTROLES Y FUENTE DE DATOS ---
         st.subheader("1. Selecciona los datos a consultar")
@@ -4742,32 +4739,20 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # Lista de modelos estables en orden de preferencia
-                        modelos_a_probar = [
-                            'gemini-1.5-flash',
-                            'gemini-1.5-flash-latest',
-                            'gemini-1.5-pro',
-                            'gemini-pro'
-                        ]
+                        # Inicializar cliente con el nuevo SDK
+                        client = genai.Client(api_key=api_key_val)
                         
-                        response = None
-                        ultimo_error = None
-    
-                        for mod_nombre in modelos_a_probar:
-                            try:
-                                model = genai.GenerativeModel(mod_nombre)
-                                response = model.generate_content(prompt_sistema)
-                                if response:
-                                    break
-                            except Exception as err_m:
-                                ultimo_error = err_m
-                                continue
-    
+                        # Llamada a la API con el modelo recomendado por Google
+                        response = client.models.generate_content(
+                            model='gemini-1.5-flash',
+                            contents=prompt_sistema
+                        )
+                        
                         if response and hasattr(response, 'text'):
                             st.markdown("### 📋 Análisis del Asistente:")
                             st.info(response.text)
                         else:
-                            st.error(f"No se pudo conectar a los modelos probados. Último detalle: {ultimo_error}")
+                            st.error("No se recibió respuesta del modelo.")
     
                 except Exception as e:
                     st.error(f"Error al conectar con el servicio de IA: {e}")
