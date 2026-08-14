@@ -4735,26 +4735,31 @@ else:
     
                 try:
                     with st.spinner("🤖 Gemini está analizando tu negocio..."):
-                        # Endpoint oficial HTTP REST v1beta
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key_val}"
+                        # Probamos los modelos vigentes en la API v1 estable
+                        modelos_probables = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+                        exito = False
                         
-                        headers = {"Content-Type": "application/json"}
-                        payload = {
-                            "contents": [{
-                                "parts": [{"text": prompt_sistema}]
-                            }]
-                        }
+                        for mod in modelos_probables:
+                            # Endpoint en versión v1 estable
+                            url = f"https://generativelanguage.googleapis.com/v1/models/{mod}:generateContent?key={api_key_val}"
+                            headers = {"Content-Type": "application/json"}
+                            payload = {
+                                "contents": [{
+                                    "parts": [{"text": prompt_sistema}]
+                                }]
+                            }
     
-                        # Petición HTTP
-                        res = requests.post(url, headers=headers, json=payload, timeout=30)
+                            res = requests.post(url, headers=headers, json=payload, timeout=30)
+                            
+                            if res.status_code == 200:
+                                data_json = res.json()
+                                texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
+                                st.markdown("### 📋 Análisis del Asistente:")
+                                st.info(texto_respuesta)
+                                exito = True
+                                break
                         
-                        if res.status_code == 200:
-                            data_json = res.json()
-                            # Extraer respuesta
-                            texto_respuesta = data_json['candidates'][0]['content']['parts'][0]['text']
-                            st.markdown("### 📋 Análisis del Asistente:")
-                            st.info(texto_respuesta)
-                        else:
+                        if not exito:
                             st.error(f"Error de la API de Google ({res.status_code}): {res.text}")
     
                 except Exception as e:
