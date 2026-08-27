@@ -1,9 +1,8 @@
 streamlit
-supabase
 pandas
+supabase
 xlsxwriter
 pytz
 pydeck
 ortools
 numpy
-google-genai
