@@ -2656,7 +2656,7 @@ else:
                         costo_unitario = costo_fardo / unidades if unidades > 0 else 0
                         precio_sugerido = ((int((costo_unitario * 1.40) // 100) + 1) * 100)
                         
-                        st.write(f"Costo unitario: `\${costo_unitario:,.2f}` | Precio Sugerido: `\${precio_sugerido:,.0f}`")
+                        st.write(f"Costo unitario: `${costo_unitario:,.2f}` | Precio Sugerido: `${precio_sugerido:,.0f}`")
                         
                         # Botón de formulario solicita confirmación
                         btn_pre_confirmar = st.form_submit_button("🚀 Confirmar División")
