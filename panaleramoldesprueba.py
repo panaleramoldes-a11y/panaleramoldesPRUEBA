@@ -3968,8 +3968,69 @@ else:
 
             with tab_facturas:
                 df_hist = pd.DataFrame(db.table("COMPRAS_CABECERA").select("*").execute().data)
-                if not df_hist.empty: st.dataframe(df_hist, width='stretch')
-                else: st.info("No hay facturas.")
+                
+                if not df_hist.empty:
+                    # Preparamos las opciones para el selector de facturas
+                    df_hist['Opcion_Sel'] = (
+                        df_hist['ID_Compra'].astype(str) + " | " + 
+                        df_hist['Proveedor'].astype(str) + " | Fact: " + 
+                        df_hist['Nro_Factura'].astype(str)
+                    )
+                    
+                    # 1. Selector para elegir la factura a consultar/copiar
+                    fac_sel = st.selectbox("🔍 Seleccionar Factura para ver detalle / notificar al vendedor:", ["-- Seleccionar Factura --"] + df_hist['Opcion_Sel'].tolist())
+                    
+                    # Visualización de la tabla general
+                    st.dataframe(df_hist.drop(columns=['Opcion_Sel'], errors='ignore'), use_container_width=True)
+                    
+                    # 2. Si se selecciona una factura, mostramos las opciones
+                    if fac_sel != "-- Seleccionar Factura --":
+                        id_compra_sel = fac_sel.split(" | ")[0]
+                        
+                        c_btn1, c_btn2 = st.columns([1, 2])
+                        
+                        if c_btn1.button("📲 Generar Reporte para Vendedor", type="primary", key=f"btn_gen_{id_compra_sel}"):
+                            try:
+                                # Traemos el detalle de los productos comprados en esta factura
+                                det_compra = db.table("DETALLE_COMPRAS").select("ID_Producto").eq("ID_Compra", id_compra_sel).execute().data
+                                
+                                if det_compra:
+                                    ids_prods = [str(x['ID_Producto']) for x in det_compra]
+                                    
+                                    # Consultamos la tabla PRODUCTOS para traer Nombre y los 3 Precios
+                                    prods_db = db.table("PRODUCTOS").select("ID_Producto, Nombre, Precio_1, Precio_2, Precio_3").in_("ID_Producto", ids_prods).execute().data
+                                    
+                                    if prods_db:
+                                        # Construcción de la plantilla de WhatsApp sin información del proveedor
+                                        texto_wsp = f"📦 *¡INGRESO DE MERCADERÍA!* 📦\n\n"
+                                        
+                                        for p in prods_db:
+                                            nom = p.get('Nombre', 'Producto Sin Nombre')
+                                            p1 = float(p.get('Precio_1', 0) or 0)
+                                            p2 = float(p.get('Precio_2', 0) or 0)
+                                            p3 = float(p.get('Precio_3', 0) or 0)
+                                            
+                                            texto_wsp += f"🔹 *{nom}*\n"
+                                            texto_wsp += f"   • P1: ${p1:,.0f} | P2: ${p2:,.0f} | P3: ${p3:,.0f}\n\n"
+                                        
+                                        st.session_state[f"texto_vendedor_{id_compra_sel}"] = texto_wsp
+                                    else:
+                                        st.error("No se encontraron los productos en el catálogo.")
+                                else:
+                                    st.error("Esta factura no tiene detalle de productos asociado.")
+                            except Exception as e:
+                                st.error(f"Error al obtener el detalle de la compra: {e}")
+            
+                        # Mostrar el cuadro de texto copiable
+                        if f"texto_vendedor_{id_compra_sel}" in st.session_state:
+                            st.success("✅ Texto generado. Haz clic en el botón de copiar del recuadro o selecciona el texto:")
+                            st.text_area(
+                                "📋 Copiar para WhatsApp (Ctrl + C / Ctrl + V):", 
+                                value=st.session_state[f"texto_vendedor_{id_compra_sel}"], 
+                                height=220
+                            )
+                else:
+                    st.info("No hay facturas.")
 
             with tab_ordenes:
                 df_oc = pd.DataFrame(db.table("ORDENES_COMPRA").select("*").execute().data)
