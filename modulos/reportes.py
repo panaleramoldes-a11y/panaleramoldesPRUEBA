@@ -1,303 +1,285 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
+from datetime import datetime
 
-def render_reportes():
-    # -----------------------------------------------------------------------------
-    # ESTILOS CSS (CARD-STYLE DASHBOARD)
-    # -----------------------------------------------------------------------------
-    custom_css = """
-    <style>
-        .stApp { background-color: #f4f6f9; }
-        .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
-        .dashboard-card {
-            background-color: #ffffff;
-            border-radius: 12px;
-            padding: 18px 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            border: 1px solid #e9ecef;
-            margin-bottom: 15px;
-            height: 100%;
-        }
-        .header-title {
-            font-size: 24px;
-            font-weight: 800;
-            color: #1a2530;
-            border-left: 5px solid #2b5c8f;
-            padding-left: 12px;
-            margin-bottom: 0px;
-        }
-        .header-actions { text-align: right; color: #6c757d; font-weight: 600; font-size: 14px; }
-        .kpi-title { font-size: 12px; font-weight: 700; color: #1a2530; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-        .kpi-value { font-size: 28px; font-weight: 800; color: #1a2530; margin-bottom: 2px; }
-        .kpi-subtext { font-size: 11px; color: #8c98a4; margin-bottom: 8px; }
-        .badge-positive { background-color: #d4edda; color: #155724; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 10px; display: inline-block; }
-        .badge-negative { background-color: #f8d7da; color: #721c24; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 10px; display: inline-block; }
-        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .panel-title { font-size: 13px; font-weight: 700; color: #1a2530; text-transform: uppercase; letter-spacing: 0.5px; }
-        .panel-dots { color: #a0aec0; font-size: 18px; font-weight: bold; }
-        .custom-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .custom-table th { background-color: #e9ecef; color: #495057; font-weight: 700; text-align: left; padding: 8px; }
-        .custom-table td { padding: 8px; border-bottom: 1px solid #f1f3f5; color: #212529; }
-        .progress-bg { background-color: #e9ecef; border-radius: 6px; height: 8px; width: 100%; margin-top: 4px; }
-        .progress-bar-fill { height: 100%; border-radius: 6px; }
-    </style>
+def cargar_datos_reportes(db, mes_num, anio_num):
     """
-    st.markdown(custom_css, unsafe_allow_html=True)
+    Carga y procesa los datos desde Supabase para el mes y año seleccionados.
+    """
+    try:
+        # Definir rango de fechas para el mes seleccionado
+        fecha_inicio = f"{anio_num}-{mes_num:02d}-01"
+        if mes_num == 12:
+            fecha_fin = f"{anio_num + 1}-01-01"
+        else:
+            fecha_fin = f"{anio_num}-{mes_num + 1:02d}-01"
 
-    # -----------------------------------------------------------------------------
-    # SECCIÓN A: ENCABEZADO SUPERIOR
-    # -----------------------------------------------------------------------------
-    col_title, col_actions = st.columns([3, 1])
-    with col_title:
-        st.markdown('<p class="header-title">REPORTES PAÑALERA MOLDES</p>', unsafe_allow_html=True)
-    with col_actions:
-        st.markdown('<div class="header-actions">⬇️ exportar &nbsp;&nbsp;&nbsp;&nbsp; ⚙️ configurar</div>', unsafe_allow_html=True)
+        # 1. Obtener VENTAS_CABECERA del mes
+        res_cab = db.table("VENTAS_CABECERA").select("*") \
+            .gte("Fecha", fecha_inicio) \
+            .lt("Fecha", fecha_fin) \
+            .neq("Estado", "Anulada") \
+            .execute()
+        df_cabecera = pd.DataFrame(res_cab.data)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+        if df_cabecera.empty:
+            return None
 
-    # -----------------------------------------------------------------------------
-    # SECCIÓN B: PRIMERA FILA DE KPIS Y SELECTOR
-    # -----------------------------------------------------------------------------
-    col_b1, col_b2, col_b3 = st.columns([1.2, 1.2, 1.6])
+        ids_ventas = df_cabecera["ID_Venta"].tolist()
 
-    with col_b1:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="kpi-title">CANTIDAD DE REPARTOS</div>
-                <div class="kpi-value">29</div>
-                <hr style="margin: 12px 0; border: 0; border-top: 1px solid #e9ecef;">
-                <div class="kpi-title">REPARTOS % VENTAS</div>
-                <div class="kpi-value">77.5%</div>
-            </div>
-        """, unsafe_allow_html=True)
+        # 2. Obtener VENTAS_DETALLE para los IDs del mes
+        res_det = db.table("VENTAS_DETALLE").select("*") \
+            .in_("ID_Venta", ids_ventas) \
+            .execute()
+        df_detalle = pd.DataFrame(res_det.data)
 
-    with col_b2:
-        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
-        st.markdown('<div class="kpi-title">PERÍODO</div>', unsafe_allow_html=True)
-        opcion_mes = st.selectbox(
-            "Seleccionar Mes", 
-            ["Seleccionar Mes", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto"],
-            index=0,
-            label_visibility="collapsed",
-            key="sb_periodo_reportes"
+        # 3. Obtener VENTAS_PAGOS para los IDs del mes
+        res_pagos = db.table("VENTAS_PAGOS").select("*") \
+            .in_("ID_Venta", ids_ventas) \
+            .execute()
+        df_pagos = pd.DataFrame(res_pagos.data)
+
+        # 4. Obtener PRODUCTOS
+        res_prod = db.table("PRODUCTOS").select("ID_Producto, Nombre, Marca, Rubro").execute()
+        df_productos = pd.DataFrame(res_prod.data)
+
+        # 5. Obtener CLIENTES
+        res_cli = db.table("CLIENTES").select("ID_Cliente, Nombre, Apellido, Razón Social").execute()
+        df_clientes = pd.DataFrame(res_cli.data)
+
+        # 6. Obtener VENDEDORES
+        res_vend = db.table("VENDEDORES").select("ID_Vendedor, Nombre, Apellido").execute()
+        df_vendedores = pd.DataFrame(res_vend.data)
+
+        # --- ENSAMBLADO Y CRUCES DE DATOS ---
+
+        # Merge de Detalle con Productos para obtener Nombre, Marca y Rubro
+        if not df_detalle.empty and not df_productos.empty:
+            df_detalle = df_detalle.merge(df_productos, on="ID_Producto", how="left")
+            df_detalle["Nombre"] = df_detalle["Nombre"].fillna(df_detalle["ID_Producto"])
+            
+            # Calcular Ganancia Bruta por item: Subtotal - (Cantidad * Precio_Costo_Unitario)
+            df_detalle["Precio_Costo_Unitario"] = df_detalle["Precio_Costo_Unitario"].fillna(0)
+            df_detalle["Costo_Total"] = df_detalle["Cantidad"] * df_detalle["Precio_Costo_Unitario"]
+            df_detalle["Ganancia_Bruta"] = df_detalle["Subtotal"] - df_detalle["Costo_Total"]
+
+        # Merge Cabecera con Clientes
+        if not df_clientes.empty and "ID_Cliente" in df_cabecera.columns:
+            df_clientes["Cliente_Nombre"] = df_clientes.apply(
+                lambda r: r["Razón Social"] if pd.notnull(r["Razón Social"]) and str(r["Razón Social"]).strip() != ""
+                else f"{r['Nombre'] or ''} {r['Apellido'] or ''}".strip(), axis=1
+            )
+            df_cabecera = df_cabecera.merge(df_clientes[["ID_Cliente", "Cliente_Nombre"]], on="ID_Cliente", how="left")
+            df_cabecera["Cliente_Nombre"] = df_cabecera["Cliente_Nombre"].fillna("Cliente General")
+
+        # Merge Cabecera con Vendedores
+        if not df_vendedores.empty and "ID_Vendedor" in df_cabecera.columns:
+            df_vendedores["Vendedor_Nombre"] = (df_vendedores["Nombre"].fillna('') + " " + df_vendedores["Apellido"].fillna('')).str.strip()
+            df_cabecera = df_cabecera.merge(df_vendedores[["ID_Vendedor", "Vendedor_Nombre"]], on="ID_Vendedor", how="left")
+            df_cabecera["Vendedor_Nombre"] = df_cabecera["Vendedor_Nombre"].fillna(df_cabecera["ID_Vendedor"])
+
+        return {
+            "cabecera": df_cabecera,
+            "detalle": df_detalle,
+            "pagos": df_pagos
+        }
+
+    except Exception as e:
+        st.error(f"Error cargando datos de Supabase: {e}")
+        return None
+
+
+def render_reportes(db=None):
+    """
+    Función principal de renderizado del módulo de Reportes.
+    Si no se pasa 'db', intenta obtenerlo de st.session_state.db.
+    """
+    if db is None:
+        if "db" in st.session_state:
+            db = st.session_state.db
+        else:
+            from panaleramoldesprueba import db as db_global
+            db = db_global
+
+    st.title("📊 Panel de Reportes e Inteligencia de Ventas")
+
+    # --- FILTROS DE FECHA ---
+    meses_dict = {
+        "Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4,
+        "Mayo": 5, "Junio": 6, "Julio": 7, "Agosto": 8,
+        "Septiembre": 9, "Octubre": 10, "Noviembre": 11, "Diciembre": 12
+    }
+    
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        mes_sel = st.selectbox("Mes", list(meses_dict.keys()), index=datetime.now().month - 1)
+    with col_f2:
+        anio_sel = st.selectbox("Año", [2024, 2025, 2026, 2027], index=2)
+
+    mes_num = meses_dict[mes_sel]
+
+    # --- CARGA DE DATOS ---
+    with st.spinner("Consultando base de datos..."):
+        datos = cargar_datos_reportes(db, mes_num, anio_sel)
+
+    if datos is None or datos["cabecera"].empty:
+        st.warning(f"No hay registros de ventas para el período seleccionado ({mes_sel} {anio_sel}).")
+        return
+
+    df_cab = datos["cabecera"]
+    df_det = datos["detalle"]
+    df_pag = datos["pagos"]
+
+    # --- METRICAS PRINCIPALES (KPIs) ---
+    ventas_totales = df_cab["Total"].sum()
+    total_operaciones = len(df_cab)
+    ticket_promedio = ventas_totales / total_operaciones if total_operaciones > 0 else 0
+    
+    # Ganancia total acumulada en los detalles
+    utilidad_total = df_det["Ganancia_Bruta"].sum() if not df_det.empty else 0
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("💰 Ventas Totales", f"${ventas_totales:,.2f}")
+    col2.metric("📈 Utilidad Bruta Est.", f"${utilidad_total:,.2f}")
+    col3.metric("🧾 Total Operaciones", f"{total_operaciones}")
+    col4.metric("🎯 Ticket Promedio", f"${ticket_promedio:,.2f}")
+
+    st.divider()
+
+    # --- SECCIÓN 1: PRODUCTOS MÁS VENDIDOS Y FORMAS DE PAGO ---
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.subheader("🔥 Top 10 Productos Más Vendidos")
+        if not df_det.empty and "Nombre" in df_det.columns:
+            top_prod = df_det.groupby("Nombre")["Cantidad"].sum().reset_index()
+            top_prod = top_prod.sort_values(by="Cantidad", ascending=True).tail(10)
+            
+            fig_prod = px.bar(
+                top_prod,
+                x="Cantidad",
+                y="Nombre",
+                orientation="h",
+                text="Cantidad",
+                color_discrete_sequence=["#2E86C1"]
+            )
+            fig_prod.update_layout(xaxis_title="Unidades Vendidas", yaxis_title="")
+            st.plotly_chart(fig_prod, use_container_state=True)
+        else:
+            st.info("Sin detalle de productos disponible.")
+
+    with c2:
+        st.subheader("💳 Distribución por Formas de Pago")
+        if not df_pag.empty and "Metodo_Pago" in df_pag.columns:
+            pagos_sum = df_pag.groupby("Metodo_Pago")["Monto"].sum().reset_index()
+            fig_pago = px.pie(
+                pagos_sum,
+                names="Metodo_Pago",
+                values="Monto",
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            st.plotly_chart(fig_pago, use_container_state=True)
+        else:
+            st.info("Sin datos de formas de pago.")
+
+    st.divider()
+
+    # --- SECCIÓN 2: MARCAS, CLIENTES Y REPARTOS ---
+    c3, c4 = st.columns(2)
+
+    with c3:
+        st.subheader("🏷️ Top Marcas por Facturación")
+        if not df_det.empty and "Marca" in df_det.columns:
+            df_det_marca = df_det.dropna(subset=["Marca"])
+            top_marcas = df_det_marca.groupby("Marca")["Subtotal"].sum().reset_index()
+            top_marcas = top_marcas.sort_values(by="Subtotal", ascending=False).head(5)
+            
+            fig_marcas = px.bar(
+                top_marcas,
+                x="Marca",
+                y="Subtotal",
+                text_auto="$.2s",
+                color_discrete_sequence=["#28B463"]
+            )
+            fig_marcas.update_layout(yaxis_title="Total Facturado ($)", xaxis_title="")
+            st.plotly_chart(fig_marcas, use_container_state=True)
+        else:
+            st.info("Sin información de marcas.")
+
+    with c4:
+        st.subheader("🚚 Ventas: Mostrador vs Reparto")
+        if "Forma_Entrega" in df_cab.columns:
+            entrega_df = df_cab["Forma_Entrega"].value_counts().reset_index()
+            entrega_df.columns = ["Forma_Entrega", "Cantidad"]
+            fig_entrega = px.pie(
+                entrega_df,
+                names="Forma_Entrega",
+                values="Cantidad",
+                color_discrete_sequence=["#F39C12", "#8E44AD"]
+            )
+            st.plotly_chart(fig_entrega, use_container_state=True)
+        else:
+            st.info("Sin datos sobre forma de entrega.")
+
+    st.divider()
+
+    # --- SECCIÓN 3: RANKING DE VENDEDORES Y TOP CLIENTES ---
+    c5, c6 = st.columns(2)
+
+    with c5:
+        st.subheader("👥 Ranking de Vendedores")
+        if "Vendedor_Nombre" in df_cab.columns:
+            vend_df = df_cab.groupby("Vendedor_Nombre")["Total"].sum().reset_index()
+            vend_df = vend_df.sort_values(by="Total", ascending=False)
+            
+            fig_vend = px.bar(
+                vend_df,
+                x="Vendedor_Nombre",
+                y="Total",
+                text_auto="$.2s",
+                color_discrete_sequence=["#16A085"]
+            )
+            fig_vend.update_layout(xaxis_title="", yaxis_title="Total Vendido ($)")
+            st.plotly_chart(fig_vend, use_container_state=True)
+
+    with c6:
+        st.subheader("⭐ Top 10 Clientes del Mes")
+        if "Cliente_Nombre" in df_cab.columns:
+            # Excluimos cliente genérico para ver a los clientes fidelizados/identificados
+            cli_df = df_cab[df_cab["Cliente_Nombre"] != "Cliente General"]
+            if not cli_df.empty:
+                top_cli = cli_df.groupby("Cliente_Nombre")["Total"].sum().reset_index()
+                top_cli = top_cli.sort_values(by="Total", ascending=False).head(10)
+                st.dataframe(
+                    top_cli.rename(columns={"Cliente_Nombre": "Cliente", "Total": "Total Comprado ($)"}),
+                    use_container_state=True,
+                    hide_index=True
+                )
+            else:
+                st.info("Todas las ventas del mes fueron registradas a Cliente General / Mostrador.")
+
+    st.divider()
+
+    # --- SECCIÓN 4: MATRIZ DE MARGEN Y RENTABILIDAD POR PRODUCTO ---
+    st.subheader("📊 Matriz de Rentabilidad por Producto")
+    if not df_det.empty and "Ganancia_Bruta" in df_det.columns:
+        rent_df = df_det.groupby("Nombre").agg(
+            Unidades_Vendidas=("Cantidad", "sum"),
+            Facturacion_Total=("Subtotal", "sum"),
+            Ganancia_Total=("Ganancia_Bruta", "sum")
+        ).reset_index()
+
+        rent_df["Margen_%"] = (rent_df["Ganancia_Total"] / rent_df["Facturacion_Total"] * 100).round(2)
+        rent_df = rent_df.sort_values(by="Ganancia_Total", ascending=False)
+
+        st.dataframe(
+            rent_df.style.format({
+                "Facturacion_Total": "${:,.2f}",
+                "Ganancia_Total": "${:,.2f}",
+                "Margen_%": "{:.2f}%"
+            }),
+            use_container_state=True,
+            hide_index=True
         )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_b3:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div class="kpi-title">VENTAS TOTALES</div>
-                        <div class="kpi-value">$1,250,000</div>
-                    </div>
-                    <span class="badge-positive">▲ +12.5%</span>
-                </div>
-                <div class="kpi-subtext">Variación % mes anterior</div>
-                <hr style="margin: 8px 0; border: 0; border-top: 1px solid #e9ecef;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div class="kpi-title">UTILIDAD</div>
-                        <div class="kpi-value">$1,900,000</div>
-                    </div>
-                    <span class="badge-negative">▼ -2.1%</span>
-                </div>
-                <div class="kpi-subtext">Variación % mes anterior</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # -----------------------------------------------------------------------------
-    # SECCIÓN C: SEGUNDA FILA (BARRAS TOP 10 Y DONUT FORMAS DE PAGO)
-    # -----------------------------------------------------------------------------
-    col_c1, col_c2 = st.columns([2.2, 1.3])
-    color_palette = ['#2b5c8f', '#4682b4', '#5c9ce6', '#4fa8d1', '#38b6ff', '#20c997', '#48c774', '#5cd65c', '#7ada7a', '#9ae69a']
-
-    with col_c1:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="panel-header">
-                    <span class="panel-title">TOP 10 ARTÍCULOS VENDIDOS</span>
-                    <span style="font-size: 12px; color: #6c757d;">⬇️ exportar &nbsp; ⚙️</span>
-                </div>
-        """, unsafe_allow_html=True)
-        
-        df_top10 = pd.DataFrame({
-            'Producto': [f'Producto {i}' for i in range(1, 10)] + ['Fardos'],
-            'Cantidad': [10342, 7288, 6958, 5534, 4477, 4485, 2276, 2013, 1500, 1278]
-        })
-
-        fig_bar = px.bar(
-            df_top10, x='Producto', y='Cantidad', text='Cantidad',
-            color='Producto', color_discrete_sequence=color_palette
-        )
-        fig_bar.update_traces(texttemplate='%{text:,}', textposition='outside', cliponaxis=False)
-        fig_bar.update_layout(
-            showlegend=False, plot_bgcolor='white', paper_bgcolor='white',
-            margin=dict(l=10, r=10, t=30, b=10), height=280,
-            xaxis=dict(title="", tickangle=-35),
-            yaxis=dict(title="", showgrid=True, gridcolor='#f0f0f0')
-        )
-        st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_c2:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="panel-header">
-                    <span class="panel-title">FORMAS DE PAGO</span>
-                    <span class="panel-dots">⋮</span>
-                </div>
-        """, unsafe_allow_html=True)
-
-        df_pago = pd.DataFrame({
-            'Forma': ['Efectivo', 'Transferencia', 'Tarjeta Débito', 'Tarjeta Crédito', 'Otros'],
-            'Porcentaje': [55.0, 27.0, 18.0, 3.0, 1.0]
-        })
-
-        fig_donut = px.pie(
-            df_pago, values='Porcentaje', names='Forma', hole=0.6,
-            color_discrete_sequence=['#2b5c8f', '#4682b4', '#20c997', '#495057', '#adb5bd']
-        )
-        fig_donut.update_traces(textinfo='none')
-        fig_donut.update_layout(
-            showlegend=False, margin=dict(l=10, r=10, t=10, b=10),
-            height=280, paper_bgcolor='white'
-        )
-        st.plotly_chart(fig_donut, use_container_width=True, config={'displayModeBar': False})
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # -----------------------------------------------------------------------------
-    # SECCIÓN D: TERCERA FILA
-    # -----------------------------------------------------------------------------
-    col_d1, col_d2, col_d3 = st.columns([1, 1, 1.5])
-
-    with col_d1:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="panel-header">
-                    <span class="panel-title">TOP 3 MARCAS</span>
-                    <span class="panel-dots">⋮</span>
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <div style="display:flex; justify-content:space-between; font-weight:600; font-size:12px;">Pampers</div>
-                    <div class="progress-bg"><div class="progress-bar-fill" style="width: 85%; background-color: #2b5c8f;"></div></div>
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <div style="display:flex; justify-content:space-between; font-weight:600; font-size:12px;">Huggies</div>
-                    <div class="progress-bg"><div class="progress-bar-fill" style="width: 65%; background-color: #4682b4;"></div></div>
-                </div>
-                <div style="margin-bottom: 12px;">
-                    <div style="display:flex; justify-content:space-between; font-weight:600; font-size:12px;">Babysec</div>
-                    <div class="progress-bg"><div class="progress-bar-fill" style="width: 35%; background-color: #495057;"></div></div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with col_d2:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="panel-header">
-                    <span class="panel-title">FORMAS DE PAGO</span>
-                    <span class="panel-dots">⋮</span>
-                </div>
-                <table class="custom-table">
-                    <tr><td><span style="color:#2b5c8f;">■</span> Efectivo</td><td style="text-align:right; font-weight:bold;">55.0%</td></tr>
-                    <tr><td><span style="color:#4682b4;">■</span> Transferencia</td><td style="text-align:right; font-weight:bold;">27.0%</td></tr>
-                    <tr><td><span style="color:#20c997;">■</span> Tarjeta Débito</td><td style="text-align:right; font-weight:bold;">18.0%</td></tr>
-                    <tr><td><span style="color:#495057;">■</span> Tarjeta Crédito</td><td style="text-align:right; font-weight:bold;">3.0%</td></tr>
-                    <tr><td><span style="color:#adb5bd;">■</span> Otros</td><td style="text-align:right; font-weight:bold;">1.0%</td></tr>
-                </table>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with col_d3:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="panel-header">
-                    <span class="panel-title">TOP 10 CLIENTES</span>
-                    <span class="panel-dots">⋮</span>
-                </div>
-                <table class="custom-table">
-                    <thead>
-                        <tr><th>Cliente</th><th style="text-align:right;">Ventas</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>Farmacia San Martin</td><td style="text-align:right;">$20,000</td></tr>
-                        <tr><td>Distribuidora Norte</td><td style="text-align:right;">$20,000</td></tr>
-                        <tr><td>Pérez María</td><td style="text-align:right;">$13,000</td></tr>
-                        <tr><td>Gómez Roberto</td><td style="text-align:right;">$10,500</td></tr>
-                        <tr><td>Minimarket Italia</td><td style="text-align:right;">$8,100</td></tr>
-                        <tr><td>Pañalera Belgrano</td><td style="text-align:right;">$5,500</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # -----------------------------------------------------------------------------
-    # SECCIÓN E: CUARTA FILA
-    # -----------------------------------------------------------------------------
-    col_e1, col_e2 = st.columns([1.3, 2.2])
-
-    with col_e1:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="panel-header">
-                    <span class="panel-title">RANKING VENDEDORES</span>
-                    <span class="panel-dots">⋮</span>
-                </div>
-        """, unsafe_allow_html=True)
-
-        vendedores = ['1', '2', '3', '4', '5', '6']
-        fig_vend = go.Figure(data=[
-            go.Bar(name='Meta', x=vendedores, y=[60000, 40000, 35000, 45000, 40000, 35000], marker_color='#495057'),
-            go.Bar(name='Venta Directa', x=vendedores, y=[30000, 25000, 18000, 20000, 25000, 20000], marker_color='#4682b4'),
-            go.Bar(name='Comisión', x=vendedores, y=[30000, 40000, 40000, 45000, 45000, 35000], marker_color='#20c997')
-        ])
-        fig_vend.update_layout(
-            barmode='stack', showlegend=False, plot_bgcolor='white', paper_bgcolor='white',
-            margin=dict(l=10, r=10, t=10, b=10), height=260,
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0')
-        )
-        st.plotly_chart(fig_vend, use_container_width=True, config={'displayModeBar': False})
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_e2:
-        st.markdown("""
-            <div class="dashboard-card">
-                <div class="panel-header">
-                    <span class="panel-title">TOP 10 ART. + RENTABILIDAD</span>
-                    <span class="panel-dots">⋮</span>
-                </div>
-                <div style="overflow-x: auto;">
-                    <table class="custom-table" style="text-align: center;">
-                        <thead>
-                            <tr>
-                                <th style="text-align:left;">Producto</th>
-                                <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style="text-align:left; font-weight:600;">Ventas ($)</td>
-                                <td>130.000</td><td>122.000</td><td>67.000</td><td>26.000</td><td>16.000</td><td>12.000</td>
-                            </tr>
-                            <tr>
-                                <td style="text-align:left; font-weight:600;">Rentabilidad %</td>
-                                <td style="background-color:#d4edda; color:#155724;">+12.5%</td>
-                                <td style="background-color:#d4edda; color:#155724;">+38.6%</td>
-                                <td>12.6%</td><td>18.7%</td><td>17.4%</td><td>7.9%</td>
-                            </tr>
-                            <tr>
-                                <td style="text-align:left; font-weight:600;">Margen %</td>
-                                <td style="background-color:#d4edda; color:#155724;">+2.1%</td>
-                                <td style="background-color:#d4edda; color:#155724;">+2.6%</td>
-                                <td>+6.6%</td><td>12.2%</td><td>12.9%</td><td>0.0%</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
