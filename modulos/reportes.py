@@ -13,7 +13,7 @@ def cargar_datos_reportes(db, mes_num, anio_num):
         if mes_num == 12:
             fecha_fin = f"{anio_num + 1}-01-01"
         else:
-            fecha_fin = f"{anio_num}-{mes_num + 1:02d}-01"
+            fecha_fin = f"{anio_num + 1:02d}-01" if mes_num == 12 else f"{anio_num}-{mes_num + 1:02d}-01"
 
         # 1. Obtener VENTAS_CABECERA del mes
         res_cab = db.table("VENTAS_CABECERA").select("*") \
@@ -44,8 +44,8 @@ def cargar_datos_reportes(db, mes_num, anio_num):
         res_prod = db.table("PRODUCTOS").select("ID_Producto, Nombre, Marca, Rubro").execute()
         df_productos = pd.DataFrame(res_prod.data)
 
-        # 5. Obtener CLIENTES
-        res_cli = db.table("CLIENTES").select("ID_Cliente, Nombre, Apellido, Razón Social").execute()
+        # 5. Obtener CLIENTES (Se consulta sin especificar la columna con espacio para evitar conflictos)
+        res_cli = db.table("CLIENTES").select("*").execute()
         df_clientes = pd.DataFrame(res_cli.data)
 
         # 6. Obtener VENDEDORES
@@ -54,21 +54,22 @@ def cargar_datos_reportes(db, mes_num, anio_num):
 
         # --- ENSAMBLADO Y CRUCES DE DATOS ---
 
-        # Merge de Detalle con Productos para obtener Nombre, Marca y Rubro
+        # Merge de Detalle con Productos
         if not df_detalle.empty and not df_productos.empty:
             df_detalle = df_detalle.merge(df_productos, on="ID_Producto", how="left")
             df_detalle["Nombre"] = df_detalle["Nombre"].fillna(df_detalle["ID_Producto"])
             
-            # Calcular Ganancia Bruta por item: Subtotal - (Cantidad * Precio_Costo_Unitario)
             df_detalle["Precio_Costo_Unitario"] = df_detalle["Precio_Costo_Unitario"].fillna(0)
             df_detalle["Costo_Total"] = df_detalle["Cantidad"] * df_detalle["Precio_Costo_Unitario"]
             df_detalle["Ganancia_Bruta"] = df_detalle["Subtotal"] - df_detalle["Costo_Total"]
 
         # Merge Cabecera con Clientes
         if not df_clientes.empty and "ID_Cliente" in df_cabecera.columns:
+            col_razon = "Razón Social" if "Razón Social" in df_clientes.columns else "RazónSocial"
+            
             df_clientes["Cliente_Nombre"] = df_clientes.apply(
-                lambda r: r["Razón Social"] if pd.notnull(r["Razón Social"]) and str(r["Razón Social"]).strip() != ""
-                else f"{r['Nombre'] or ''} {r['Apellido'] or ''}".strip(), axis=1
+                lambda r: r[col_razon] if col_razon in r and pd.notnull(r[col_razon]) and str(r[col_razon]).strip() != ""
+                else f"{r.get('Nombre', '') or ''} {r.get('Apellido', '') or ''}".strip(), axis=1
             )
             df_cabecera = df_cabecera.merge(df_clientes[["ID_Cliente", "Cliente_Nombre"]], on="ID_Cliente", how="left")
             df_cabecera["Cliente_Nombre"] = df_cabecera["Cliente_Nombre"].fillna("Cliente General")
