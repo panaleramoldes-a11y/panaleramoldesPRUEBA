@@ -90,17 +90,14 @@ def cargar_datos_reportes(db, mes_num, anio_num):
         return None
 
 
-def render_reportes(db=None):
+def render_reportes(db):
     """
     Función principal de renderizado del módulo de Reportes.
-    Si no se pasa 'db', intenta obtenerlo de st.session_state.db.
+    Recibe la conexión 'db' desde la aplicación principal.
     """
     if db is None:
-        if "db" in st.session_state:
-            db = st.session_state.db
-        else:
-            from panaleramoldesprueba import db as db_global
-            db = db_global
+        st.error("No se pudo establecer la conexión con la base de datos.")
+        return
 
     st.title("📊 Panel de Reportes e Inteligencia de Ventas")
 
@@ -247,7 +244,6 @@ def render_reportes(db=None):
     with c6:
         st.subheader("⭐ Top 10 Clientes del Mes")
         if "Cliente_Nombre" in df_cab.columns:
-            # Excluimos cliente genérico para ver a los clientes fidelizados/identificados
             cli_df = df_cab[df_cab["Cliente_Nombre"] != "Cliente General"]
             if not cli_df.empty:
                 top_cli = cli_df.groupby("Cliente_Nombre")["Total"].sum().reset_index()
