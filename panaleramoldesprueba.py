@@ -4860,4 +4860,4 @@ else:
     # MODULO: 📊 REPORTES
     # =====================================================================
     elif menu == "📊 Reportes":
-        reportes.render_reportes()
+        reportes.render_reportes(db)
