@@ -4860,5 +4860,5 @@ else:
     # MODULO: 📊 REPORTES
     # =====================================================================
     elif opcion == "📊 Reportes":
-    # 🚀 Invocamos la función principal del módulo de reportes
-    reportes.render_reportes()
+        # 🚀 Invocamos la función principal del módulo de reportes
+        reportes.render_reportes()
