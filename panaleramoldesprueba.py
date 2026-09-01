@@ -1,11 +1,20 @@
 """
 panaleramoldesprueba.py
-Punto de entrada principal con los nombres exactos de tus vistas en ui/views/
+Punto de entrada principal con ajuste de rutas para las capas ui/ y services/.
 """
+
+import sys
+from pathlib import Path
+
+# --- CONFIGURACIÓN DE RUTAS DEL PROYECTO ---
+# Agrega la raíz del repositorio al path de Python para evitar ImportError en las vistas
+ROOT_DIR = Path(__file__).resolve().parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 import streamlit as st
 
-# Configuración de página
+# Configuración inicial de la página
 st.set_page_config(
     page_title="Pañalera Moldes - Sistema de Gestión",
     page_icon="👶",
@@ -32,16 +41,16 @@ from ui.views.v_utilidades import render_utilidades_view
 from ui.views.v_vendedores import render_vendedores_view
 
 # -----------------------------------------------------------------------------
-# 2. CONTROL DE SESIÓN
+# 2. CONTROL DE SESIÓN Y LOGIN
 # -----------------------------------------------------------------------------
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = True
 
-usuario_actual = st.session_state.get("usuario", "Usuario")
+usuario_actual = st.session_state.get("usuario", "Martin")
 rol_actual = st.session_state.get("rol", "Administrador")
 
 # -----------------------------------------------------------------------------
-# 3. NAVEGACIÓN Y MENÚ
+# 3. BARRA LATERAL Y NAVEGACIÓN
 # -----------------------------------------------------------------------------
 st.sidebar.title("Pañalera Moldes")
 st.sidebar.caption(f"👤 **{usuario_actual}** ({rol_actual})")
