@@ -1,6 +1,6 @@
 from datetime import datetime
 import pandas as pd
-from utils.supabase_client import db
+from config.database import db
 from utils.audit_logger import log_auditoria
 
 
