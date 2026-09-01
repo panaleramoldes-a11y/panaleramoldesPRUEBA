@@ -1,28 +1,32 @@
 import streamlit as st
 import services.venta_service as venta_service
+# Importar la conexión a BD definida en la configuración global
+from config.database import db 
 
-def render_punto_venta(db, total_final_vta, vendedor_id_final, cliente_nombre_final, id_cliente_final):
+def render_punto_venta_view():
     """
-    Vista del Punto de Venta.
-    Recibe la conexión a la base de datos y las variables calculadas en las Secciones 1 a 5.
+    Punto de entrada invocado dinámicamente por ejecutar_vista(v_punto_venta)
     """
+    # 1. Obtención de datos de sesión y cálculo de variables locales
+    vendedor_id_final = st.session_state.get("usuario_id")
+    cliente_nombre_final = st.session_state.get("cliente_actual_nombre", "Consumidor Final")
+    id_cliente_final = st.session_state.get("cliente_actual_id", 1)
     
-    # --- [SECCIONES 1 A 5 DENTRO DE LA VISTA] ---
-    # Aquí va el renderizado de selección de productos, carrito, totales, etc.
+    # Renderizado de UI, tablas, selectores...
     
-    # --- 6. BOTONES DE CIERRE (Solo visibles si hay productos en el carrito) ---
+    total_final_vta = sum(art['subtotal'] for art in st.session_state.get("carrito_vta", []))
+
+    # --- BOTONES DE CIERRE Y PROCESAMIENTO ---
     if st.session_state.carrito_vta:
         st.divider()
         col_f1, col_f2 = st.columns(2)
 
         with col_f1:
             if st.button("🏁 FINALIZAR Y REGISTRAR VENTA", width='stretch', type="primary"):
-                # 0. Verificación de sumas de pago
                 suma_pagos = sum(float(p["monto"]) for p in st.session_state.pagos_split)
                 if abs(suma_pagos - total_final_vta) > 0.01:
                     st.error(f"¡Error! La suma de los pagos (${suma_pagos:.2f}) no coincide con el total (${total_final_vta:.2f})")
                 else:
-                    # Validaciones en BD a través del servicio
                     ok_stock, msg_stock = venta_service.verificar_stock_suficiente(db, st.session_state.carrito_vta)
                     if not ok_stock:
                         st.error(msg_stock)
@@ -35,7 +39,6 @@ def render_punto_venta(db, total_final_vta, vendedor_id_final, cliente_nombre_fi
                         if not ok_gc:
                             st.error(msg_gc)
                         else:
-                            # Procesar Venta
                             try:
                                 venta_service.registrar_venta_completa(
                                     db, 
@@ -45,15 +48,12 @@ def render_punto_venta(db, total_final_vta, vendedor_id_final, cliente_nombre_fi
                                     total_final_vta
                                 )
                                 st.success("✅ Venta registrada correctamente!")
-                                
-                                # Limpieza del Estado
                                 st.session_state.carrito_vta = []
                                 st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
                                 st.session_state.observaciones_entrega = ""
                                 if 'id_pendiente_cargado' in st.session_state:
                                     del st.session_state.id_pendiente_cargado
                                 st.rerun()
-
                             except Exception as e:
                                 st.error(f"Error al registrar: {e}")
 
@@ -73,7 +73,6 @@ def render_punto_venta(db, total_final_vta, vendedor_id_final, cliente_nombre_fi
                     else:
                         st.toast("Venta guardada como nuevo pendiente", icon="⏳")
 
-                    # Limpieza del Estado
                     st.session_state.carrito_vta = []
                     st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
                     st.session_state.observaciones_entrega = ""
