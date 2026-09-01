@@ -20,6 +20,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# --- INICIALIZACIÓN DE ESTADO Y CONEXIÓN ---
+from config.session import init_session_state
+init_session_state()
+
 # --- IMPORTACIÓN DE VISTAS Y COMPONENTES ---
 from ui.views.v_login import render_login
 from ui.components.sidebar import render_sidebar
@@ -47,8 +51,8 @@ def ejecutar_vista(modulo):
     """
     Busca y ejecuta dinámicamente la función principal dentro de cada módulo de vista.
     """
-    nombre_modulo = modulo.__name__.split(".")[-1]   # ej: v_caja
-    nombre_limpio = nombre_modulo.replace("v_", "") # ej: caja
+    nombre_modulo = modulo.__name__.split(".")[-1]
+    nombre_limpio = nombre_modulo.replace("v_", "")
 
     nombres_posibles = [
         f"mostrar_vista_{nombre_limpio}",
@@ -66,22 +70,15 @@ def ejecutar_vista(modulo):
     st.error(f"No se encontró una función de renderizado válida en `{nombre_modulo}.py`.")
 
 # -----------------------------------------------------------------------------
-# 2. INICIALIZACIÓN Y CONTROL DE SESIÓN
+# 2. CONTROL DE ACCESO
 # -----------------------------------------------------------------------------
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
-
-# Si NO está autenticado, detiene la ejecución mostrando solo la vista de Login
 if not st.session_state.autenticado:
     render_login()
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 3. RENDERIZADO DEL SIDEBAR
+# 3. NAVEGACIÓN
 # -----------------------------------------------------------------------------
-if 'lista_global_vta' not in st.session_state:
-    st.session_state.lista_global_vta = "Automática (P1/P2)"
-
 menu_seleccionado = render_sidebar()
 
 # -----------------------------------------------------------------------------
