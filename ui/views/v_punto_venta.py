@@ -19,7 +19,7 @@ def render_botones_cierre(
             use_container_width=True,
             type="primary",
         ):
-            # 0. Verificación de sumas de pago
+            # Verificación de sumas de pago
             suma_pagos = sum(
                 float(p["monto"])
                 for p in st.session_state.get("pagos_split", [])
@@ -105,7 +105,7 @@ def render_botones_cierre(
                         "Venta guardada como nuevo pendiente", icon="⏳"
                     )
 
-                # Reset de carrito y variables asociadas
+                # Reset de carrito
                 st.session_state.carrito_vta = []
                 st.session_state.pagos_split = [
                     {"metodo": "Efectivo", "monto": 0.0}
@@ -121,3 +121,37 @@ def render_botones_cierre(
 
             except Exception as e:
                 st.error(f"Error al guardar pendiente: {e}")
+
+
+def render(db):
+    """Punto de entrada invocado por ejecutar_vista."""
+    st.title("🛒 Punto de Venta")
+
+    # Inicialización de estado si no existe
+    if "carrito_vta" not in st.session_state:
+        st.session_state.carrito_vta = []
+    if "pagos_split" not in st.session_state:
+        st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
+
+    # Aquí va el flujo de selección de clientes, buscador de productos y tabla del carrito
+    # ...
+
+    # Ejemplo de cálculo de total e invocación de botones
+    total_venta = sum(
+        item.get("subtotal", 0.0) for item in st.session_state.carrito_vta
+    )
+    id_cliente = st.session_state.get("id_cliente", "CLI-000")
+    nombre_cliente = st.session_state.get("nombre_cliente", "Consumidor Final")
+    id_vendedor = st.session_state.get("id_usuario", "USER-001")
+
+    render_botones_cierre(
+        db=db,
+        total_final_vta=total_venta,
+        id_cliente_final=id_cliente,
+        cliente_nombre_final=nombre_cliente,
+        vendedor_id_final=id_vendedor,
+    )
+
+
+# Alias por si ejecutar_vista busca 'main' en lugar de 'render'
+main = render
