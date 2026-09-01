@@ -18,7 +18,6 @@ def obtener_historial_ventas():
         df_ventas['Total'] = (df_ventas['Total']
                             .astype(str)
                             .str.replace(',', '', regex=False)
-                            .str.replace(',', '.', regex=False)
                             .apply(pd.to_numeric, errors='coerce')
                             .fillna(0))
 
@@ -27,7 +26,7 @@ def obtener_historial_ventas():
         df_prod = pd.DataFrame(db.table("PRODUCTOS").select("ID_Producto, Nombre").execute().data)
         df_vend = pd.DataFrame(db.table("VENDEDORES").select("ID_Vendedor, Nombre, Apellido").execute().data)
 
-        # Normalización de claves foráneas para merges precisos
+        # Normalización de claves foráneas
         df_ventas['ID_Cliente'] = df_ventas['ID_Cliente'].astype(str)
         df_ventas['ID_Vendedor'] = df_ventas['ID_Vendedor'].astype(str)
 
@@ -45,7 +44,7 @@ def obtener_historial_ventas():
         else:
             df_ventas['Vendedor_Full'] = "Sin Vendedor"
 
-        # Conversión de fechas a formato date de Python
+        # Conversión de fechas
         df_ventas['Fecha'] = pd.to_datetime(df_ventas['Fecha']).dt.date
 
         return df_ventas, df_prod
@@ -53,20 +52,18 @@ def obtener_historial_ventas():
     except Exception as e:
         raise Exception(f"Error al obtener el historial de ventas: {e}")
 
-
 def anular_venta(id_venta, usuario_logueado):
     try:
-        # 1. Obtener detalles de la venta para reversar stock si aplica
         venta_resp = db.table("VENTAS_CABECERA").select("*, VENTAS_DETALLE(*)").eq("ID_Venta", int(id_venta)).execute()
         if not venta_resp.data:
             raise Exception("Venta no encontrada.")
         
         datos_venta = venta_resp.data[0]
 
-        # 2. Revertir el estado de la venta
+        # Marcar como anulada
         db.table("VENTAS_CABECERA").update({"Estado": "ANULADA"}).eq("ID_Venta", int(id_venta)).execute()
 
-        # 3. Log de Auditoría
+        # Log de Auditoría
         log_auditoria(
             tabla="VENTAS_CABECERA",
             accion="UPDATE",
