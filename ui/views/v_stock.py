@@ -3,7 +3,9 @@ import io
 import pandas as pd
 import streamlit as st
 from services.stock_service import (
+    actualizar_estados_productos,
     calcular_ranking_abc,
+    calcular_y_actualizar_stock_automatico,
     obtener_datos_stock_base,
     obtener_detalle_ventas,
 )
@@ -194,9 +196,7 @@ def render_modulo_stock(db):
                 )
 
         st.divider()
-        if st.button(
-            "🔄 RECALCULAR STOCK MÍNIMO/MÁXIMO", key="btn_recalc_p1"
-        ):
+        if st.button("🔄 RECALCULAR STOCK MÍNIMO/MÁXIMO", key="btn_recalc_p1"):
             ids_a_recalcular = (
                 df_f["ID_Producto"].astype(str).tolist()
                 if "ID_Producto" in df_f.columns
@@ -206,15 +206,13 @@ def render_modulo_stock(db):
             with st.spinner(
                 f"Calculando rotación de 60 días para {cant_prods} producto(s)..."
             ):
-                if "calcular_y_actualizar_stock_automatico" in globals():
-                    calcular_y_actualizar_stock_automatico(
-                        ids_filtrados=ids_a_recalcular
-                    )
+                actualizados = calcular_y_actualizar_stock_automatico(
+                    db=db, ids_filtrados=ids_a_recalcular
+                )
+                if actualizados:
                     st.success(
-                        f"¡Stock mínimo y máximo actualizado para {cant_prods} productos!"
+                        f"¡Stock mínimo y máximo actualizado para {actualizados} productos!"
                     )
-                    if "df_prod" in st.session_state:
-                        del st.session_state["df_prod"]
                     st.rerun()
 
     # -----------------------------------------------------------------
