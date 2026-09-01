@@ -12,7 +12,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-# Configuración inicial de la página (DEBE ir antes de renderizar cualquier vista)
+# Configuración inicial de la página
 st.set_page_config(
     page_title="Pañalera Moldes - Sistema de Gestión",
     page_icon="👶",
@@ -20,8 +20,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --- IMPORTACIÓN DE VISTAS Y SERVICIOS ---
+# --- IMPORTACIÓN DE VISTAS Y COMPONENTES ---
 from ui.views.v_login import render_login
+from ui.components.sidebar import render_sidebar
 from ui.views import (
     v_auditoria,
     v_caja,
@@ -45,15 +46,14 @@ from ui.views import (
 def ejecutar_vista(modulo):
     """
     Busca y ejecuta dinámicamente la función principal dentro de cada módulo de vista.
-    Soporta patrones: mostrar_vista_X, render_X_view, render, main, etc.
     """
     nombre_modulo = modulo.__name__.split(".")[-1]   # ej: v_caja
     nombre_limpio = nombre_modulo.replace("v_", "") # ej: caja
 
     nombres_posibles = [
-        f"mostrar_vista_{nombre_limpio}",  # mostrar_vista_caja
-        f"render_{nombre_modulo}_view",    # render_v_caja_view
-        f"render_{nombre_limpio}_view",    # render_caja_view
+        f"mostrar_vista_{nombre_limpio}",
+        f"render_{nombre_modulo}_view",
+        f"render_{nombre_limpio}_view",
         "render",
         "main",
     ]
@@ -111,7 +111,7 @@ elif menu_seleccionado == "🛍️ Compras":
 elif menu_seleccionado == "👔 Vendedores":
     ejecutar_vista(v_vendedores)
 
-elif menu_seleccionado == "💵 Caja":
+elif menu_seleccionado == "💰 Caja":
     ejecutar_vista(v_caja)
 
 elif menu_seleccionado == "🚚 Repartos":
