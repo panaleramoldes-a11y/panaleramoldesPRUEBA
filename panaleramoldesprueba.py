@@ -27,6 +27,8 @@ init_session_state()
 # --- IMPORTACIÓN DE VISTAS Y COMPONENTES ---
 from ui.views.v_login import render_login
 from ui.components.sidebar import render_sidebar
+
+# Importación limpia de módulos de vistas
 from ui.views import (
     v_auditoria,
     v_caja,
@@ -58,6 +60,7 @@ def ejecutar_vista(modulo):
         f"mostrar_vista_{nombre_limpio}",
         f"render_{nombre_modulo}_view",
         f"render_{nombre_limpio}_view",
+        "render_punto_venta_view", # Añadido por compatibilidad
         "render",
         "main",
     ]
