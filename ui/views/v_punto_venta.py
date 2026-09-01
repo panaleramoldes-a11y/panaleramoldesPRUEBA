@@ -120,11 +120,14 @@ def render_botones_cierre(
                 st.error(f"Error al guardar pendiente: {e}")
 
 
-def render(db=None):
-    """Punto de entrada compatible con invocación sin argumentos desde 'ejecutar_vista'."""
-    # Recuperar conexión db de la sesión si no se pasó como parámetro
+def render(db=None, *args, **kwargs):
+    """Punto de entrada universal para ejecutar_vista."""
     if db is None:
-        db = st.session_state.get("db") or st.session_state.get("supabase")
+        db = (
+            st.session_state.get("db")
+            or st.session_state.get("supabase")
+            or st.session_state.get("client")
+        )
 
     st.title("🛒 Punto de Venta")
 
@@ -149,5 +152,4 @@ def render(db=None):
     )
 
 
-# Alias de soporte
 main = render
