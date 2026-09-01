@@ -1,19 +1,18 @@
 """
-panaleramoldesprueba.py
-Punto de entrada principal con enrutamiento dinámico y compatibilidad de nombres de vista.
+app.py
+Punto de entrada principal con enrutamiento dinámico y control de acceso.
 """
 
 import sys
 from pathlib import Path
+import streamlit as st
 
 # --- CONFIGURACIÓN DE RUTAS DEL PROYECTO ---
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-import streamlit as st
-
-# Configuración inicial de la página
+# Configuración inicial de la página (DEBE ir antes de renderizar cualquier vista)
 st.set_page_config(
     page_title="Pañalera Moldes - Sistema de Gestión",
     page_icon="👶",
@@ -21,9 +20,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# -----------------------------------------------------------------------------
-# 1. IMPORTACIÓN DE MÓDULOS DE VISTAS (ui/views/)
-# -----------------------------------------------------------------------------
+# --- IMPORTACIÓN DE VISTAS Y SERVICIOS ---
+from ui.views.v_login import render_login
 from ui.views import (
     v_auditoria,
     v_caja,
@@ -42,14 +40,14 @@ from ui.views import (
 )
 
 # -----------------------------------------------------------------------------
-# 2. EJECUTOR FLEXIBLE DE VISTAS
+# 1. EJECUTOR FLEXIBLE DE VISTAS
 # -----------------------------------------------------------------------------
 def ejecutar_vista(modulo):
     """
     Busca y ejecuta dinámicamente la función principal dentro de cada módulo de vista.
     Soporta patrones: mostrar_vista_X, render_X_view, render, main, etc.
     """
-    nombre_modulo = modulo.__name__.split(".")[-1]  # ej: v_caja
+    nombre_modulo = modulo.__name__.split(".")[-1]   # ej: v_caja
     nombre_limpio = nombre_modulo.replace("v_", "") # ej: caja
 
     nombres_posibles = [
@@ -65,16 +63,27 @@ def ejecutar_vista(modulo):
             getattr(modulo, fn)()
             return
 
-    st.error(f"No se encontró una función de renderizado en `{nombre_modulo}.py`.")
+    st.error(f"No se encontró una función de renderizado válida en `{nombre_modulo}.py`.")
 
 # -----------------------------------------------------------------------------
-# 3. CONTROL DE SESIÓN Y NAVEGACIÓN
+# 2. INICIALIZACIÓN Y CONTROL DE SESIÓN
 # -----------------------------------------------------------------------------
 if "autenticado" not in st.session_state:
-    st.session_state["autenticado"] = True
+    st.session_state.autenticado = False
 
-usuario_actual = st.session_state.get("usuario_actual", "Martin")
-rol_actual = st.session_state.get("rol", "Administrador")
+# Si NO está autenticado, detiene la ejecución mostrando solo la vista de Login
+if not st.session_state.autenticado:
+    render_login()
+    st.stop()
+
+# -----------------------------------------------------------------------------
+# 3. NAVEGACIÓN Y MENÚ SIDEBAR (Solo accesible si está autenticado)
+# -----------------------------------------------------------------------------
+usuario_actual = st.session_state.get("usuario_actual", "Usuario")
+rol_actual = st.session_state.get("rol", "Vendedor")
+
+if 'lista_global_vta' not in st.session_state:
+    st.session_state.lista_global_vta = "Automática (P1/P2)"
 
 st.sidebar.title("Pañalera Moldes")
 st.sidebar.caption(f"👤 **{usuario_actual}** ({rol_actual})")
@@ -107,8 +116,11 @@ else:
 menu_seleccionado = st.sidebar.radio("Navegación", opciones_menu)
 
 st.sidebar.divider()
-if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
+
+# Botón de Cierre de Sesión Unificado
+if st.sidebar.button("🔴 Cerrar Sesión", use_container_width=True):
     st.session_state.clear()
+    st.session_state.autenticado = False
     st.rerun()
 
 # -----------------------------------------------------------------------------
