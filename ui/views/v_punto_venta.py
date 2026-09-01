@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
 from services.venta_service import VentaService
-from database import db
+from config.database import db
 
 def render_punto_venta():
     st.title("🛒 Punto de Venta")
