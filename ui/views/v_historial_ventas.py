@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
-from services import ventas_service
+from services.historial_ventas_service import obtener_historial_ventas, anular_venta
 
 def render():
     st.header("📋 Historial de Ventas")
 
     # 1. Cargar Datos
     try:
-        df_ventas, df_prod = ventas_service.obtener_historial_ventas()
+        df_ventas, df_prod = obtener_historial_ventas()
     except Exception as e:
         st.error(str(e))
         st.stop()
@@ -18,7 +18,7 @@ def render():
 
     st.caption(f"Filas totales cargadas: {len(df_ventas)}")
 
-    # 2. Filtros de búsqueda
+    # 2. Filtros
     c1, c2, c3, c4 = st.columns(4)
     min_fecha = df_ventas['Fecha'].min()
     max_fecha = df_ventas['Fecha'].max()
@@ -48,7 +48,7 @@ def render():
     if pago_filtro != "Todos":
         df_f = df_f[df_f['Forma_Pago'] == pago_filtro]
 
-    # Auditoría Visual de la Filtración
+    # Auditoría
     st.divider()
     st.subheader("🔍 Auditoría de Diferencias")
     col_a, col_b = st.columns(2)
@@ -58,10 +58,6 @@ def render():
         st.metric("Total Filtrado", f"${df_f['Total'].sum():,.2f}")
     
     st.caption(f"Filas totales: {len(df_ventas)} | Filas tras filtros: {len(df_f)}")
-
-    sin_nombre_count = df_f['Cliente_Full'].str.contains("Sin Nombre", na=False).sum()
-    if sin_nombre_count > 0:
-        st.warning(f"⚠️ Hay {sin_nombre_count} ventas asociadas a 'Sin Nombre' en la selección actual.")
 
     # 4. Tabla Principal
     columnas_visibles = ['ID_Venta', 'Fecha', 'Cliente_Full', 'Vendedor_Full', 'Total', 'Forma_Pago', 'Estado']
@@ -81,7 +77,6 @@ def render():
             
             if detalles:
                 df_det = pd.DataFrame(detalles)
-                
                 if not df_prod.empty and 'ID_Producto' in df_det.columns:
                     df_det = df_det.merge(df_prod, on="ID_Producto", how="left")
                 
@@ -90,18 +85,15 @@ def render():
 
                 total_detalle = df_det['Subtotal'].sum() if 'Subtotal' in df_det.columns else 0.0
                 st.markdown(f"### **Total de la Venta {id_sel}: ${total_detalle:,.2f}**")
-            else:
-                st.info("La venta seleccionada no tiene renglones de detalle registrados.")
 
-            # Gestión de Anulación
+            # Botón de Anulación
             estado_actual = fila_venta.get('Estado', 'ACTIVA')
-            
             if estado_actual != "ANULADA":
                 if st.button("🚫 ANULAR ESTA VENTA", type="primary"):
                     usuario_actual = st.session_state.get('usuario_actual', 'Desconocido')
                     try:
-                        ventas_service.anular_venta(id_sel, usuario_actual)
-                        st.success("✅ Venta anulada, stock devuelto y caja ajustada correctamente.")
+                        anular_venta(id_sel, usuario_actual)
+                        st.success("✅ Venta anulada con éxito.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al anular: {e}")
@@ -110,6 +102,6 @@ def render():
         else:
             st.error("Venta no encontrada.")
 
-# Aliases para integración con el orquestador ejecutar_vista
+# Aliases de compatibilidad para ejecutar_vista
 mostrar_ventas = render
 main = render
