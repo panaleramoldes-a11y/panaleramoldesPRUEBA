@@ -202,3 +202,5 @@ class ProductosService:
         )
 
         return nombre_cajita
+
+obtener_productos = ProductosService.obtener_productos
