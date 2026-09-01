@@ -1,58 +1,48 @@
-# ui/views/v_proveedores.py
 import pandas as pd
 import streamlit as st
-from services.proveedores_service import (
-    actualizar_proveedor,
-    generar_siguiente_id_proveedor,
-    guardar_proveedor,
-    obtener_proveedores,
-)
+from config.constants import LISTA_RUBROS
+from services import proveedores_service
 
-
-def render_modulo_proveedores(db, lista_rubros: list = None):
+def render():
     st.title("🚚 Gestión de Proveedores")
 
-    if lista_rubros is None:
-        lista_rubros = []
+    # Carga de datos desde la capa de servicio
+    try:
+        df_prov = proveedores_service.obtener_proveedores()
+    except Exception as e:
+        st.error(f"Error al cargar proveedores: {e}")
+        return
 
-    df_prov = obtener_proveedores(db)
-
-    tab1, tab2, tab3 = st.tabs(
-        ["🔍 Explorador", "➕ Nuevo Proveedor", "✏️ Modificar"]
-    )
+    tab1, tab2, tab3 = st.tabs(["🔍 Explorador", "➕ Nuevo Proveedor", "✏️ Modificar"])
 
     # -----------------------------------------------------------------
-    # PESTAÑA 1: EXPLORADOR Y LISTADO
+    # TAB 1: EXPLORADOR
     # -----------------------------------------------------------------
     with tab1:
         st.subheader("Lista de Proveedores")
-        busqueda_prov = st.text_input(
-            "🔍 Filtrar por Nombre, CUIT o Rubro:", key="txt_buscar_prov"
-        )
+        busqueda_prov = st.text_input("🔍 Filtrar por Nombre, CUIT o Rubro:")
 
         df_filtrado = df_prov.copy()
         if busqueda_prov and not df_prov.empty:
             b_txt = busqueda_prov.lower()
-            df_filtrado = df_prov[
-                df_prov.apply(
-                    lambda row: b_txt
-                    in str(row.get("Razon_Social", "")).lower()
-                    or b_txt in str(row.get("CUIT", "")).lower()
-                    or b_txt in str(row.get("Rubros_Asociados", "")).lower(),
-                    axis=1,
-                )
-            ]
+            mask = df_prov.apply(
+                lambda row: b_txt in str(row.get('Razon_Social', '')).lower() or
+                            b_txt in str(row.get('CUIT', '')).lower() or
+                            b_txt in str(row.get('Rubros_Asociados', '')).lower(),
+                axis=1
+            )
+            df_filtrado = df_prov[mask]
 
-        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+        st.dataframe(df_filtrado, use_container_width=True)
 
     # -----------------------------------------------------------------
-    # PESTAÑA 2: NUEVO PROVEEDOR
+    # TAB 2: NUEVO PROVEEDOR
     # -----------------------------------------------------------------
     with tab2:
-        nuevo_id = generar_siguiente_id_proveedor(df_prov)
-        st.info(f"ID Sugerido: {nuevo_id}")
+        with st.form("nuevo_prov", clear_on_submit=True):
+            nuevo_id = str(len(df_prov) + 1).zfill(4)
+            st.info(f"ID Sugerido: {nuevo_id}")
 
-        with st.form("form_nuevo_prov", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
                 razon_social = st.text_input("Razón Social")
@@ -60,116 +50,83 @@ def render_modulo_proveedores(db, lista_rubros: list = None):
                 direccion = st.text_input("Dirección")
             with col2:
                 telefono = st.text_input("Teléfono")
-                condicion = st.selectbox(
-                    "Condición Fiscal",
-                    ["Responsable Inscripto", "Monotributo", "Exento"],
-                )
+                condicion = st.selectbox("Condición Fiscal", ["Responsable Inscripto", "Monotributo", "Exento"])
 
-            rubros_seleccionados = st.multiselect(
-                "Asociar Rubros", lista_rubros
-            )
+            rubros_seleccionados = st.multiselect("Asociar Rubros", LISTA_RUBROS)
 
             btn_guardar = st.form_submit_button("Guardar Proveedor")
 
             if btn_guardar:
-                datos_nuevo = {
+                data_nuevo = {
                     "ID_Proveedor": nuevo_id,
                     "Razon_Social": razon_social,
                     "Rubros_Asociados": ", ".join(rubros_seleccionados),
                     "CUIT": cuit,
                     "Condicion_Fiscal": condicion,
                     "Direccion": direccion,
-                    "Telefono": telefono,
+                    "Telefono": telefono
                 }
-
-                exito, msj = guardar_proveedor(db, datos_nuevo, df_prov)
-                if exito:
-                    st.success(msj)
+                
+                try:
+                    proveedores_service.crear_proveedor(data_nuevo, df_prov)
+                    st.success("¡Proveedor cargado exitosamente!")
                     st.rerun()
-                else:
-                    st.error(msj)
+                except ValueError as ve:
+                    st.error(f"Error de validación: {ve}")
+                except Exception as e:
+                    st.error(f"Error al guardar: {e}")
 
     # -----------------------------------------------------------------
-    # PESTAÑA 3: MODIFICAR PROVEEDOR
+    # TAB 3: MODIFICAR
     # -----------------------------------------------------------------
     with tab3:
-        if not df_prov.empty and "Razon_Social" in df_prov.columns:
-            lista_razones = df_prov["Razon_Social"].dropna().tolist()
-            prov_seleccionado = st.selectbox(
-                "Seleccionar proveedor a editar",
-                lista_razones,
-                key="sb_mod_prov",
-            )
+        if not df_prov.empty and 'Razon_Social' in df_prov.columns:
+            lista_opciones = df_prov['Razon_Social'].dropna().tolist()
+            prov_seleccionado = st.selectbox("Seleccionar proveedor a editar", lista_opciones)
 
-            datos = df_prov[
-                df_prov["Razon_Social"] == prov_seleccionado
-            ].iloc[0]
+            if prov_seleccionado:
+                datos = df_prov[df_prov['Razon_Social'] == prov_seleccionado].iloc[0]
 
-            with st.form("form_modificar_prov"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    razon_social_mod = st.text_input(
-                        "Razón Social", value=str(datos.get("Razon_Social", ""))
-                    )
-                    cuit_mod = st.text_input(
-                        "CUIT", value=str(datos.get("CUIT", ""))
-                    )
-                    direccion_mod = st.text_input(
-                        "Dirección", value=str(datos.get("Direccion", ""))
-                    )
-                with col2:
-                    telefono_mod = st.text_input(
-                        "Teléfono", value=str(datos.get("Telefono", ""))
-                    )
+                with st.form("modificar_prov"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        razon_social_mod = st.text_input("Razón Social", value=datos.get('Razon_Social', ''))
+                        cuit_mod = st.text_input("CUIT", value=datos.get('CUIT', ''))
+                        direccion_mod = st.text_input("Dirección", value=datos.get('Direccion', ''))
+                    with col2:
+                        telefono_mod = st.text_input("Teléfono", value=datos.get('Telefono', ''))
+                        
+                        cond_actual = datos.get('Condicion_Fiscal', 'Responsable Inscripto')
+                        opciones_cond = ["Responsable Inscripto", "Monotributo", "Exento"]
+                        idx_cond = opciones_cond.index(cond_actual) if cond_actual in opciones_cond else 0
+                        condicion_mod = st.selectbox("Condición Fiscal", opciones_cond, index=idx_cond)
 
-                    cond_actual = datos.get(
-                        "Condicion_Fiscal", "Responsable Inscripto"
-                    )
-                    opciones_cond = [
-                        "Responsable Inscripto",
-                        "Monotributo",
-                        "Exento",
-                    ]
-                    idx_cond = (
-                        opciones_cond.index(cond_actual)
-                        if cond_actual in opciones_cond
-                        else 0
-                    )
+                        # Recuperar rubros guardados asegurando coincidencia con LISTA_RUBROS
+                        raw_rubros = str(datos.get('Rubros_Asociados', '')) if pd.notna(datos.get('Rubros_Asociados')) else ""
+                        rubros_defecto = [r.strip() for r in raw_rubros.split(",") if r.strip() in LISTA_RUBROS]
+                        rubros_mod = st.multiselect("Rubros", LISTA_RUBROS, default=rubros_defecto)
 
-                    condicion_mod = st.selectbox(
-                        "Condición Fiscal", opciones_cond, index=idx_cond
-                    )
+                    btn_mod = st.form_submit_button("Actualizar Proveedor")
 
-                    # Recuperar rubros previamente guardados
-                    raw_rubros = str(datos.get("Rubros_Asociados", ""))
-                    rubros_defecto = [
-                        r.strip()
-                        for r in raw_rubros.split(",")
-                        if r.strip() in lista_rubros
-                    ]
-                    rubros_mod = st.multiselect(
-                        "Rubros", lista_rubros, default=rubros_defecto
-                    )
-
-                btn_mod = st.form_submit_button("Actualizar Proveedor")
-
-                if btn_mod:
-                    datos_actualizados = {
-                        "Razon_Social": razon_social_mod,
-                        "Rubros_Asociados": ", ".join(rubros_mod),
-                        "CUIT": cuit_mod,
-                        "Condicion_Fiscal": condicion_mod,
-                        "Direccion": direccion_mod,
-                        "Telefono": telefono_mod,
-                    }
-
-                    exito, msj = actualizar_proveedor(
-                        db, str(datos["ID_Proveedor"]), datos_actualizados
-                    )
-                    if exito:
-                        st.success(msj)
-                        st.rerun()
-                    else:
-                        st.error(msj)
+                    if btn_mod:
+                        data_update = {
+                            "Razon_Social": razon_social_mod,
+                            "Rubros_Asociados": ", ".join(rubros_mod),
+                            "CUIT": cuit_mod,
+                            "Condicion_Fiscal": condicion_mod,
+                            "Direccion": direccion_mod,
+                            "Telefono": telefono_mod
+                        }
+                        try:
+                            proveedores_service.actualizar_proveedor(datos['ID_Proveedor'], data_update)
+                            st.success("Datos actualizados correctamente.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al actualizar: {e}")
         else:
-            st.info("No hay proveedores disponibles para modificar.")
+            st.info("No hay proveedores registrados para modificar.")
+
+# Aliases de compatibilidad requeridos por ejecutar_vista
+mostrar_vista_proveedores = render
+render_proveedores_view = render
+main = render
