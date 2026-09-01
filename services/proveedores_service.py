@@ -1,58 +1,45 @@
-# services/proveedores_service.py
 import re
 import pandas as pd
+from config.database import db
 
-
-def obtener_proveedores(db):
-    """Consulta todos los registros de la tabla PROVEEDORES en Supabase."""
-    response = db.table("PROVEEDORES").select("*").execute()
-    return pd.DataFrame(response.data) if response.data else pd.DataFrame()
-
-
-def validar_cuit_formato(cuit: str) -> bool:
-    """Valida que el CUIT tenga el formato XX-XXXXXXXX-X."""
-    return bool(re.match(r"^\d{2}-\d{8}-\d{1}$", cuit.strip()))
-
-
-def generar_siguiente_id_proveedor(df_prov: pd.DataFrame) -> str:
-    """Genera un nuevo ID con formato '0001', '0002', etc."""
-    return str(len(df_prov) + 1).zfill(4)
-
-
-def guardar_proveedor(db, datos_prov: dict, df_prov: pd.DataFrame):
-    """Aplica validaciones de negocio e inserta un nuevo proveedor en Supabase.
-
-    Retorna tuple: (bool_exito, mensaje_resultado)
-    """
-    cuit = datos_prov.get("CUIT", "").strip()
-
-    # 1. Validación de formato de CUIT
-    if not validar_cuit_formato(cuit):
-        return False, "Error: El CUIT debe tener el formato XX-XXXXXXXX-X."
-
-    # 2. Validación de CUIT duplicado
-    if not df_prov.empty and "CUIT" in df_prov.columns:
-        cuits_existentes = df_prov["CUIT"].astype(str).str.strip().values
-        if cuit in cuits_existentes:
-            return False, "Error: Ya existe un proveedor registrado con ese CUIT."
-
-    # 3. Guardado en BD
+def obtener_proveedores():
+    """Obtiene todos los registros de la tabla PROVEEDORES."""
     try:
-        db.table("PROVEEDORES").insert(datos_prov).execute()
-        return True, "¡Proveedor cargado exitosamente!"
+        response = db.table("PROVEEDORES").select("*").execute()
+        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
     except Exception as e:
-        return False, f"Error al guardar el proveedor: {e}"
+        raise Exception(f"Error al obtener proveedores: {e}")
 
+def crear_proveedor(data_proveedor, df_prov_existente=None):
+    """
+    Valida e inserta un nuevo proveedor en la base de datos.
+    """
+    cuit = data_proveedor.get("CUIT", "")
 
-def actualizar_proveedor(db, id_proveedor: str, datos_actualizados: dict):
-    """Actualiza la información de un proveedor existente por su ID_Proveedor.
+    # Validaciones
+    if not re.match(r'^\d{2}-\d{8}-\d{1}$', cuit):
+        raise ValueError("El CUIT debe tener formato XX-XXXXXXXX-X")
 
-    Retorna tuple: (bool_exito, mensaje_resultado)
+    if df_prov_existente is None:
+        df_prov_existente = obtener_proveedores()
+
+    if not df_prov_existente.empty and cuit in df_prov_existente['CUIT'].astype(str).values:
+        raise ValueError("Ya existe un proveedor con ese CUIT.")
+
+    # Generación de ID sugerido si no viene explícito
+    if "ID_Proveedor" not in data_proveedor or not data_proveedor["ID_Proveedor"]:
+        data_proveedor["ID_Proveedor"] = str(len(df_prov_existente) + 1).zfill(4)
+
+    try:
+        return db.table("PROVEEDORES").insert(data_proveedor).execute()
+    except Exception as e:
+        raise Exception(f"Error al guardar proveedor: {e}")
+
+def actualizar_proveedor(id_proveedor, data_actualizada):
+    """
+    Actualiza la información de un proveedor según su ID_Proveedor.
     """
     try:
-        db.table("PROVEEDORES").update(datos_actualizados).eq(
-            "ID_Proveedor", id_proveedor
-        ).execute()
-        return True, "Datos actualizados correctamente."
+        return db.table("PROVEEDORES").update(data_actualizada).eq("ID_Proveedor", id_proveedor).execute()
     except Exception as e:
-        return False, f"Error al actualizar el proveedor: {e}"
+        raise Exception(f"Error al actualizar proveedor: {e}")
