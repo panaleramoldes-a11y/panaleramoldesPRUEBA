@@ -19,7 +19,6 @@ def render_botones_cierre(
             use_container_width=True,
             type="primary",
         ):
-            # Verificación de sumas de pago
             suma_pagos = sum(
                 float(p["monto"])
                 for p in st.session_state.get("pagos_split", [])
@@ -58,7 +57,6 @@ def render_botones_cierre(
                         f"✅ Venta {id_venta_registrada} registrada correctamente!"
                     )
 
-                    # Limpiar variables de sesión
                     st.session_state.carrito_vta = []
                     st.session_state.pagos_split = [
                         {"metodo": "Efectivo", "monto": 0.0}
@@ -105,7 +103,6 @@ def render_botones_cierre(
                         "Venta guardada como nuevo pendiente", icon="⏳"
                     )
 
-                # Reset de carrito
                 st.session_state.carrito_vta = []
                 st.session_state.pagos_split = [
                     {"metodo": "Efectivo", "monto": 0.0}
@@ -123,20 +120,19 @@ def render_botones_cierre(
                 st.error(f"Error al guardar pendiente: {e}")
 
 
-def render(db):
-    """Punto de entrada invocado por ejecutar_vista."""
+def render(db=None):
+    """Punto de entrada compatible con invocación sin argumentos desde 'ejecutar_vista'."""
+    # Recuperar conexión db de la sesión si no se pasó como parámetro
+    if db is None:
+        db = st.session_state.get("db") or st.session_state.get("supabase")
+
     st.title("🛒 Punto de Venta")
 
-    # Inicialización de estado si no existe
     if "carrito_vta" not in st.session_state:
         st.session_state.carrito_vta = []
     if "pagos_split" not in st.session_state:
         st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
 
-    # Aquí va el flujo de selección de clientes, buscador de productos y tabla del carrito
-    # ...
-
-    # Ejemplo de cálculo de total e invocación de botones
     total_venta = sum(
         item.get("subtotal", 0.0) for item in st.session_state.carrito_vta
     )
@@ -153,5 +149,5 @@ def render(db):
     )
 
 
-# Alias por si ejecutar_vista busca 'main' en lugar de 'render'
+# Alias de soporte
 main = render
