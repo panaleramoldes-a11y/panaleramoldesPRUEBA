@@ -19,7 +19,8 @@ from services.compras_service import (
     calcular_precios_sugeridos,
     generar_texto_whatsapp_precios
 )
-from services.catalogo_service import obtener_productos, obtener_proveedores
+from services.productos_service import obtener_productos
+from services.proveedores_service import obtener_proveedores
 
 
 # --- MODALES Y DIÁLOGOS ---
