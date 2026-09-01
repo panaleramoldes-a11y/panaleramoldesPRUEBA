@@ -42,23 +42,28 @@ def render_punto_venta_view():
         vendedor_id_final = dict_vendedores.get(vendedor_sel)
 
     with col_cli:
-        res_clientes = db.table("CLIENTES").select("ID_Cliente, Nombre, Telefono, Direccion, Link_GoogleMaps").execute()
-        dict_clientes = {c['Nombre']: c for c in res_clientes.data} if res_clientes.data else {}
+        try:
+            res_clientes = db.table("CLIENTES").select("ID_Cliente, Nombre, Direccion").execute()
+        except Exception:
+            res_clientes = db.table("CLIENTES").select("*").execute()
+
+        dict_clientes = {}
+        if res_clientes and res_clientes.data:
+            dict_clientes = {c['Nombre']: c for c in res_clientes.data if 'Nombre' in c}
         
-        lista_nombres_c = list(dict_clientes.keys())
+        lista_nombres_c = list(dict_clientes.keys()) if dict_clientes else ["Consumidor Final"]
         idx_cli_def = 0
         
         if 'id_cliente_recuperado' in st.session_state:
             for i, n in enumerate(lista_nombres_c):
-                if dict_clientes[n]['ID_Cliente'] == st.session_state.id_cliente_recuperado:
+                if dict_clientes.get(n, {}).get('ID_Cliente') == st.session_state.id_cliente_recuperado:
                     idx_cli_def = i
                     break
 
         cliente_sel = st.selectbox("👤 Cliente", options=lista_nombres_c, index=idx_cli_def)
         cliente_obj = dict_clientes.get(cliente_sel, {})
-        id_cliente_final = cliente_obj.get('ID_Cliente')
+        id_cliente_final = cliente_obj.get('ID_Cliente', 1)
         cliente_nombre_final = cliente_sel
-
     st.divider()
 
     # ==========================================
