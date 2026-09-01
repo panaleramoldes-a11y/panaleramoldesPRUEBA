@@ -20,7 +20,6 @@ from services.compras_service import (
     generar_texto_whatsapp_precios
 )
 from services.productos_service import ProductosService
-obtener_productos = ProductosService.obtener_productos
 from services.proveedores_service import obtener_proveedores
 
 
@@ -47,7 +46,7 @@ def render_compras_view():
         st.session_state.carrito_compra = []
 
     # Cargar datos base
-    df_prod = obtener_productos()
+    df_prod = ProductosService.obtener_productos()
     list_prov = obtener_proveedores()
 
     # --- 1. GABINETE DE HISTORIAL Y ÓRDENES ---
