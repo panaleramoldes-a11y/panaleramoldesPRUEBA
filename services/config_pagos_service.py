@@ -1,72 +1,30 @@
-import pandas as pd
-import streamlit as st
 from config.database import db
-from services.audit_service import log_auditoria
 
+def obtener_formas_pago():
+    """Obtiene todos los medios de pago registrados."""
+    try:
+        response = db.table("FORMAS_PAGO").select("*").execute()
+        return response.data if response.data else []
+    except Exception as e:
+        raise Exception(f"Error al obtener las formas de pago: {e}")
 
-class ConfigPagosService:
+def agregar_forma_pago(nombre_pago):
+    """Agrega un nuevo medio de pago activo."""
+    if not nombre_pago or not nombre_pago.strip():
+        raise ValueError("El nombre de la forma de pago no puede estar vacío.")
+    
+    try:
+        data = {
+            "Nombre_Pago": nombre_pago.strip().upper(),
+            "Activo": True
+        }
+        return db.table("FORMAS_PAGO").insert(data).execute()
+    except Exception as e:
+        raise Exception(f"Error al guardar la forma de pago: {e}")
 
-    @staticmethod
-    def obtener_formas_pago() -> list:
-        """Obtiene todas las formas de pago registradas."""
-        try:
-            response = db.table("FORMAS_PAGO").select("*").execute()
-            return response.data if response.data else []
-        except Exception as e:
-            st.error(f"Error al cargar las formas de pago: {e}")
-            return []
-
-    @staticmethod
-    def agregar_forma_pago(nombre_pago: str, usuario: str) -> bool:
-        """Inserta un nuevo medio de pago activo y registra auditoría."""
-        if not nombre_pago.strip():
-            st.warning("El nombre del medio de pago no puede estar vacío.")
-            return False
-
-        try:
-            res = (
-                db.table("FORMAS_PAGO")
-                .insert({"Nombre_Pago": nombre_pago.strip(), "Activo": True})
-                .execute()
-            )
-
-            if res.data:
-                id_creado = res.data[0].get("ID_Pago", "N/A")
-                log_auditoria(
-                    tabla="FORMAS_PAGO",
-                    accion="INSERT",
-                    id_entidad=str(id_creado),
-                    detalles={
-                        "operacion": "Agregar Forma de Pago",
-                        "nombre": nombre_pago.strip(),
-                    },
-                    usuario=usuario,
-                )
-                return True
-            return False
-        except Exception as e:
-            st.error(f"Error al agregar forma de pago: {e}")
-            return False
-
-    @staticmethod
-    def cambiar_estado_pago(id_pago: int, activo: bool, usuario: str) -> bool:
-        """Activa o desactiva un medio de pago según su ID."""
-        try:
-            db.table("FORMAS_PAGO").update({"Activo": activo}).eq(
-                "ID_Pago", id_pago
-            ).execute()
-
-            log_auditoria(
-                tabla="FORMAS_PAGO",
-                accion="UPDATE",
-                id_entidad=str(id_pago),
-                detalles={
-                    "operacion": "Cambio de Estado Pago",
-                    "nuevo_estado": activo,
-                },
-                usuario=usuario,
-            )
-            return True
-        except Exception as e:
-            st.error(f"Error al actualizar la forma de pago: {e}")
-            return False
+def cambiar_estado_pago(id_pago, nuevo_estado):
+    """Activa o desactiva un medio de pago según su ID."""
+    try:
+        return db.table("FORMAS_PAGO").update({"Activo": nuevo_estado}).eq("ID_Pago", id_pago).execute()
+    except Exception as e:
+        raise Exception(f"Error al actualizar el estado de la forma de pago: {e}")
