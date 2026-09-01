@@ -1,287 +1,305 @@
-import streamlit as st
-import pandas as pd
-from datetime import datetime
 import json
-import re
+import streamlit as st
+from datetime import datetime
+from services.venta_service import VentaService
 
-from config.database import db
-import services.venta_service as venta_service
-
-def render_punto_venta_view():
-    st.markdown("### 🛒 Punto de Venta")
-
-    # --- INICIALIZACIÓN DE VARIABLES DE SESIÓN ---
-    if "carrito_vta" not in st.session_state:
-        st.session_state.carrito_vta = []
-    if "pagos_split" not in st.session_state:
-        st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
-    if "tipo_entrega" not in st.session_state:
-        st.session_state.tipo_entrega = "Retira en Local"
-    if "direccion_entrega" not in st.session_state:
-        st.session_state.direccion_entrega = ""
-    if "link_maps_entrega" not in st.session_state:
-        st.session_state.link_maps_entrega = ""
-    if "fecha_reparto" not in st.session_state:
-        st.session_state.fecha_reparto = datetime.now().strftime("%Y-%m-%d")
-
-    # ==========================================
-    # 1. SECCIÓN VENDEDOR Y CLIENTE
-    # ==========================================
-    col_vended, col_cli = st.columns(2)
-
-    with col_vended:
-        res_vendedores = db.table("USUARIOS").select("ID_Usuario, Nombre").execute()
-        dict_vendedores = {v['Nombre']: v['ID_Usuario'] for v in res_vendedores.data} if res_vendedores.data else {}
-        
-        lista_nombres_v = list(dict_vendedores.keys())
-        idx_def_v = 0
-        if "usuario_nombre" in st.session_state and st.session_state.usuario_nombre in lista_nombres_v:
-            idx_def_v = lista_nombres_v.index(st.session_state.usuario_nombre)
-
-        vendedor_sel = st.selectbox("👔 Vendedor", options=lista_nombres_v, index=idx_def_v)
-        vendedor_id_final = dict_vendedores.get(vendedor_sel)
-
-    with col_cli:
-        try:
-            res_clientes = db.table("CLIENTES").select("ID_Cliente, Nombre, Direccion").execute()
-        except Exception:
-            res_clientes = db.table("CLIENTES").select("*").execute()
-
-        dict_clientes = {}
-        if res_clientes and res_clientes.data:
-            dict_clientes = {c['Nombre']: c for c in res_clientes.data if 'Nombre' in c}
-        
-        lista_nombres_c = list(dict_clientes.keys()) if dict_clientes else ["Consumidor Final"]
-        idx_cli_def = 0
-        
-        if 'id_cliente_recuperado' in st.session_state:
-            for i, n in enumerate(lista_nombres_c):
-                if dict_clientes.get(n, {}).get('ID_Cliente') == st.session_state.id_cliente_recuperado:
-                    idx_cli_def = i
-                    break
-
-        cliente_sel = st.selectbox("👤 Cliente", options=lista_nombres_c, index=idx_cli_def)
-        cliente_obj = dict_clientes.get(cliente_sel, {})
-        id_cliente_final = cliente_obj.get('ID_Cliente', 1)
-        cliente_nombre_final = cliente_sel
-    st.divider()
-
-    # ==========================================
-    # 2. BÚSQUEDA Y SELECCIÓN DE PRODUCTOS
-    # ==========================================
-    st.subheader("🔍 Seleccionar Productos")
+def render_punto_venta(db):
+    st.title("🛒 Punto de Venta (POS)")
     
-    col_busqueda, col_cant = st.columns([3, 1])
+    # Instancia de servicio
+    venta_service = VentaService(db)
 
-    with col_busqueda:
-        res_prods = db.table("PRODUCTOS").select("ID_Producto, Nombre, Precio_Venta, Stock_Actual, Es_Stockeable").execute()
-        
-        dict_prods = {}
-        opciones_prods = []
-        if res_prods.data:
-            for p in res_prods.data:
-                label = f"{p['ID_Producto']} - {p['Nombre']} (${p['Precio_Venta']:,.2f})"
-                dict_prods[label] = p
-                opciones_prods.append(label)
+    # -------------------------------------------------------------------------
+    # INITIALIZE SESSION STATES
+    # -------------------------------------------------------------------------
+    if 'carrito_vta' not in st.session_state:
+        st.session_state.carrito_vta = []
+    if 'pagos_split' not in st.session_state:
+        st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
+    if 'tipo_entrega' not in st.session_state:
+        st.session_state.tipo_entrega = "Retiro en Local"
+    if 'direccion_entrega' not in st.session_state:
+        st.session_state.direccion_entrega = ""
+    if 'link_maps_entrega' not in st.session_state:
+        st.session_state.link_maps_entrega = ""
+    if 'fecha_reparto' not in st.session_state:
+        st.session_state.fecha_reparto = datetime.now().date()
+    if 'observaciones_entrega' not in st.session_state:
+        st.session_state.observaciones_entrega = ""
 
-        prod_seleccionado_label = st.selectbox("Buscar por código o nombre:", options=[""] + opciones_prods, index=0)
+    # Cargar Catálogos
+    df_prod = venta_service.obtener_productos()
+    df_cli = venta_service.obtener_clientes()
+    df_vend = venta_service.obtener_vendedores()
+    df_metodos = venta_service.obtener_metodos_pago()
+    metodos_pago_base = [m.get("Nombre_Metodo") for m in df_metodos if m.get("Nombre_Metodo")] if df_metodos else ["Efectivo", "Transferencia", "Débito", "Crédito"]
 
-    with col_cant:
-        cantidad_ingresada = st.number_input("Cantidad:", min_value=1, value=1, step=1)
-
-    if st.button("➕ Agregar al Carrito", type="secondary", width='stretch'):
-        if prod_seleccionado_label and prod_seleccionado_label in dict_prods:
-            p_data = dict_prods[prod_seleccionado_label]
+    # -------------------------------------------------------------------------
+    # RECUPERAR VENTAS PENDIENTES (EXPANDER)
+    # -------------------------------------------------------------------------
+    with st.expander("⏳ Cargar o Recuperar Venta Pendiente", expanded=False):
+        pendientes = venta_service.obtener_ventas_pendientes()
+        if pendientes:
+            opciones_pend = {f"{p['ID_Pendiente']} - {p['Cliente']} (${p.get('Fecha')})": p for p in pendientes}
+            seleccion_pend = st.selectbox("Seleccionar Venta Pendiente", ["-- Seleccionar --"] + list(opciones_pend.keys()))
             
-            # Verificar si ya existe en el carrito
-            existe = False
-            for item in st.session_state.carrito_vta:
-                if item["id"] == p_data["ID_Producto"]:
-                    item["cantidad"] += cantidad_ingresada
-                    item["subtotal"] = item["cantidad"] * item["precio"]
-                    existe = True
+            if seleccion_pend != "-- Seleccionar --":
+                p_data = opciones_pend[seleccion_pend]
+                if st.button("📥 CARGAR ESTA VENTA AL CARRITO", type="primary"):
+                    try:
+                        st.session_state.carrito_vta = json.loads(p_data["Detalle_JSON"]) if p_data.get("Detalle_JSON") else []
+                        st.session_state.pagos_split = json.loads(p_data["Pagos_JSON"]) if p_data.get("Pagos_JSON") else [{"metodo": "Efectivo", "monto": 0.0}]
+                        st.session_state.tipo_entrega = p_data.get("Forma_Entrega", "Retiro en Local")
+                        st.session_state.direccion_entrega = p_data.get("Direccion_Entrega", "")
+                        st.session_state.link_maps_entrega = p_data.get("Link_Maps_Entrega", "")
+                        st.session_state.observaciones_entrega = p_data.get("Observaciones", "")
+                        
+                        f_ent = p_data.get("Fecha_Entrega")
+                        if f_ent:
+                            try:
+                                st.session_state.fecha_reparto = datetime.strptime(f_ent, '%Y-%m-%d').date()
+                            except:
+                                pass
+                                
+                        st.session_state.id_pendiente_cargado = p_data["ID_Pendiente"]
+                        st.session_state.id_cliente_recuperado = p_data.get("ID_Cliente_Pendiente")
+                        st.success(f"Venta {p_data['ID_Pendiente']} cargada correctamente.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al reconstruir el carrito: {e}")
+        else:
+            st.info("No hay ventas pendientes guardadas.")
+
+    st.divider()
+
+    # -------------------------------------------------------------------------
+    # SECCIÓN DE CLIENTE Y VENDEDOR
+    # -------------------------------------------------------------------------
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        dict_clientes = {f"{c.get('Nombre', '')} (ID: {c.get('ID_Cliente')})": c.get('ID_Cliente') for c in df_cli} if df_cli else {}
+        idx_cli = 0
+        if 'id_cliente_recuperado' in st.session_state:
+            for i, val in enumerate(dict_clientes.values()):
+                if val == st.session_state.id_cliente_recuperado:
+                    idx_cli = i
                     break
 
-            if not existe:
-                st.session_state.carrito_vta.append({
-                    "id": p_data["ID_Producto"],
-                    "nombre": p_data["Nombre"],
-                    "precio": float(p_data["Precio_Venta"]),
-                    "cantidad": int(cantidad_ingresada),
-                    "subtotal": float(p_data["Precio_Venta"]) * int(cantidad_ingresada)
-                })
-            st.toast(f"Agregado: {p_data['Nombre']}", icon="🛒")
-            st.rerun()
+        cliente_sel = st.selectbox("👤 Cliente", list(dict_clientes.keys()) if dict_clientes else ["Consumidor Final"], index=idx_cli)
+        id_cliente_final = dict_clientes.get(cliente_sel, "CF")
+        cliente_nombre_final = cliente_sel.split(" (ID:")[0] if " (ID:" in cliente_sel else cliente_sel
 
-    # ==========================================
-    # 3. DETALLE DEL CARRITO
-    # ==========================================
-    st.divider()
-    st.subheader("🛒 Carrito de Compras")
+    with col_c2:
+        dict_vend = {f"{v.get('Nombre', '')}": v.get('ID_Usuario') for v in df_vend} if df_vend else {}
+        vendedor_sel = st.selectbox("👨‍💼 Vendedor", list(dict_vend.keys()) if dict_vend else ["General"])
+        vendedor_id_final = dict_vend.get(vendedor_sel, "1")
 
-    if st.session_state.carrito_vta:
-        df_carrito = pd.DataFrame(st.session_state.carrito_vta)
-        
-        # Tabla interactiva con opción de eliminar
-        for idx, row in df_carrito.iterrows():
-            c1, c2, c3, c4, c5, c6 = st.columns([1, 3, 2, 2, 2, 1])
-            c1.write(f"**{row['id']}**")
-            c2.write(row['nombre'])
-            c3.write(f"${row['precio']:,.2f}")
-            c4.write(f"Cant: {row['cantidad']}")
-            c5.write(f"**${row['subtotal']:,.2f}**")
-            if c6.button("❌", key=f"del_{idx}"):
-                st.session_state.carrito_vta.pop(idx)
+    # -------------------------------------------------------------------------
+    # BÚSQUEDA Y SELECCIÓN DE PRODUCTOS
+    # -------------------------------------------------------------------------
+    st.subheader("🛍️ Agregar Productos")
+    dict_prod = {f"{p.get('Nombre')} - [${p.get('Precio_Venta', 0):,.0f}] (Stock: {p.get('Stock_Actual', 0)})": p for p in df_prod} if df_prod else {}
+    
+    col_p1, col_p2, col_p3 = st.columns([3, 1, 1])
+    with col_p1:
+        prod_seleccionado_str = st.selectbox("Buscar Producto", ["-- Seleccionar --"] + list(dict_prod.keys()))
+    with col_p2:
+        cant_agregar = st.number_input("Cantidad", min_value=1, value=1, step=1)
+    with col_p3:
+        st.write("")
+        st.write("")
+        if st.button("➕ Agregar", width='stretch'):
+            if prod_seleccionado_str != "-- Seleccionar --":
+                prod_obj = dict_prod[prod_seleccionado_str]
+                item_id = prod_obj.get("ID_Producto")
+                
+                # Revisar si ya está en el carrito
+                encontrado = False
+                for item in st.session_state.carrito_vta:
+                    if item["id"] == item_id:
+                        item["cantidad"] += cant_agregar
+                        item["subtotal"] = item["cantidad"] * item["precio"]
+                        encontrado = True
+                        break
+                
+                if not encontrado:
+                    precio = float(prod_obj.get("Precio_Venta", 0))
+                    st.session_state.carrito_vta.append({
+                        "id": item_id,
+                        "nombre": prod_obj.get("Nombre"),
+                        "cantidad": cant_agregar,
+                        "precio": precio,
+                        "subtotal": cant_agregar * precio
+                    })
                 st.rerun()
 
-        subtotal_vta = sum(item["subtotal"] for item in st.session_state.carrito_vta)
-        st.markdown(f"#### **Subtotal: ${subtotal_vta:,.2f}**")
+    # -------------------------------------------------------------------------
+    # VISUALIZACIÓN Y GESTIÓN DEL CARRITO
+    # -------------------------------------------------------------------------
+    st.subheader("🛒 Carrito de Compras")
+    subtotal_bruto = 0.0
+
+    if st.session_state.carrito_vta:
+        for idx, item in enumerate(st.session_state.carrito_vta):
+            col_i1, col_i2, col_i3, col_i4, col_i5 = st.columns([3, 1, 1, 1, 0.5])
+            with col_i1:
+                st.write(f"**{item['nombre']}**")
+            with col_i2:
+                nueva_cant = st.number_input(f"Cant", min_value=1, value=int(item['cantidad']), key=f"cant_{idx}")
+                if nueva_cant != item['cantidad']:
+                    item['cantidad'] = nueva_cant
+                    item['subtotal'] = nueva_cant * item['precio']
+                    st.rerun()
+            with col_i3:
+                st.write(f"${item['precio']:,.2f}")
+            with col_i4:
+                st.write(f"**${item['subtotal']:,.2f}**")
+            with col_i5:
+                if st.button("❌", key=f"del_{idx}"):
+                    st.session_state.carrito_vta.pop(idx)
+                    st.rerun()
+            subtotal_bruto += item['subtotal']
+            st.divider()
     else:
         st.info("El carrito está vacío.")
-        subtotal_vta = 0.0
 
-    # ==========================================
-    # 4. ENTREGA Y REPARTO
-    # ==========================================
-    st.divider()
-    st.subheader("🚚 Modulo de Entrega")
+    total_final_vta = subtotal_bruto
+
+    # -------------------------------------------------------------------------
+    # FORMA DE ENTREGA Y DETALLES
+    # -------------------------------------------------------------------------
+    st.subheader("🚚 Forma de Entrega")
+    col_e1, col_e2 = st.columns(2)
+    with col_e1:
+        st.session_state.tipo_entrega = st.radio("Tipo de Entrega", ["Retiro en Local", "Reparto"], index=0 if st.session_state.tipo_entrega == "Retiro en Local" else 1, horizontal=True)
     
-    col_ent1, col_ent2 = st.columns(2)
-    with col_ent1:
-        st.session_state.tipo_entrega = st.radio("Tipo de Entrega:", ["Retira en Local", "Reparto"], horizontal=True)
-
     if st.session_state.tipo_entrega == "Reparto":
-        with col_ent2:
-            st.session_state.fecha_reparto = st.date_input("Fecha de Reparto:", value=datetime.now()).strftime("%Y-%m-%d")
+        with col_e2:
+            st.session_state.fecha_reparto = st.date_input("Fecha de Reparto", value=st.session_state.fecha_reparto)
         
-        dir_def = cliente_obj.get("Direccion", "") if cliente_obj else ""
-        maps_def = cliente_obj.get("Link_GoogleMaps", "") if cliente_obj else ""
-
         col_dir1, col_dir2 = st.columns(2)
         with col_dir1:
-            st.session_state.direccion_entrega = st.text_input("Dirección de Entrega:", value=dir_def)
+            st.session_state.direccion_entrega = st.text_input("Dirección de Entrega", value=st.session_state.direccion_entrega)
         with col_dir2:
-            st.session_state.link_maps_entrega = st.text_input("Link de Google Maps:", value=maps_def)
+            st.session_state.link_maps_entrega = st.text_input("Link Google Maps", value=st.session_state.link_maps_entrega)
+            
+    st.session_state.observaciones_entrega = st.text_area("Observaciones de la Entrega", value=st.session_state.observaciones_entrega)
 
-        st.session_state.observaciones_entrega = st.text_area("Observaciones para la Entrega:", value=st.session_state.get('observaciones_entrega', ''))
-
-    # ==========================================
-    # 5. FORMA DE PAGO
-    # ==========================================
-    st.divider()
+    # -------------------------------------------------------------------------
+    # PAGOS DIVIDIDOS (SPLIT PAYMENTS)
+    # -------------------------------------------------------------------------
     st.subheader("💳 Formas de Pago")
+    
+    # Agregar método de Gift Card si se activa alguna
+    metodos_disponibles = list(metodos_pago_base)
+    if st.session_state.get('gc_activa_id'):
+        metodos_disponibles.append(f"Gift Card ({st.session_state.get('gc_activa_id')})")
 
-    res_metodos = db.table("CONFIG_PAGOS").select("Metodo, Recargo_Porcentaje").eq("Activo", True).execute()
-    dict_metodos = {m['Metodo']: float(m['Recargo_Porcentaje']) for m in res_metodos.data} if res_metodos.data else {"Efectivo": 0.0}
-
-    total_recargos = 0.0
-    nuevos_pagos = []
-
-    for i, pago in enumerate(st.session_state.pagos_split):
-        col_p1, col_p2, col_p3, col_p4 = st.columns([3, 2, 2, 1])
-        
-        with col_p1:
-            lista_m = list(dict_metodos.keys())
-            idx_m = lista_m.index(pago["metodo"]) if pago["metodo"] in lista_m else 0
-            metodo_sel = st.selectbox(f"Método #{i+1}", options=lista_m, index=idx_m, key=f"metodo_{i}")
-        
-        with col_p2:
-            monto_val = st.number_input(f"Monto #{i+1}", min_value=0.0, value=float(pago["monto"]), step=100.0, key=f"monto_{i}")
-
-        recargo_pct = dict_metodos.get(metodo_sel, 0.0)
-        recargo_monto = monto_val * (recargo_pct / 100.0)
-        total_recargos += recargo_monto
-
-        with col_p3:
-            st.write(f"Recargo ({recargo_pct}%): **${recargo_monto:,.2f}**")
-
-        with col_p4:
-            if len(st.session_state.pagos_split) > 1:
-                if st.button("🗑️", key=f"del_pago_{i}"):
-                    st.session_state.pagos_split.pop(i)
-                    st.rerun()
-
-        nuevos_pagos.append({"metodo": metodo_sel, "monto": monto_val})
-
-    st.session_state.pagos_split = nuevos_pagos
+    for idx, pago in enumerate(st.session_state.pagos_split):
+        col_m1, col_m2, col_m3 = st.columns([2, 2, 0.5])
+        with col_m1:
+            m_idx = metodos_disponibles.index(pago["metodo"]) if pago["metodo"] in metodos_disponibles else 0
+            pago["metodo"] = st.selectbox(f"Método #{idx+1}", metodos_disponibles, index=m_idx, key=f"metodo_{idx}")
+        with col_m2:
+            pago["monto"] = st.number_input(f"Monto #{idx+1}", min_value=0.0, value=float(pago["monto"]), step=100.0, key=f"monto_{idx}")
+        with col_m3:
+            st.write("")
+            st.write("")
+            if len(st.session_state.pagos_split) > 1 and st.button("❌", key=f"del_pago_{idx}"):
+                st.session_state.pagos_split.pop(idx)
+                st.rerun()
 
     if st.button("➕ Agregar otro método de pago"):
         st.session_state.pagos_split.append({"metodo": "Efectivo", "monto": 0.0})
         st.rerun()
 
-    # Manejo de Gift Card activa
-    has_gc = any("Gift Card" in p["metodo"] for p in st.session_state.pagos_split)
-    if has_gc:
-        gc_input = st.text_input("🔑 Ingrese el ID de la Gift Card:")
-        if gc_input:
-            st.session_state.gc_activa_id = gc_input
+    # Resumen de Totales
+    suma_pagos = sum(float(p["monto"]) for p in st.session_state.pagos_split)
+    diferencia = total_final_vta - suma_pagos
 
-    total_final_vta = subtotal_vta + total_recargos
-    st.markdown(f"### 💵 **TOTAL A PAGAR: ${total_final_vta:,.2f}**")
+    st.markdown(f"### **TOTAL VENTA: ${total_final_vta:,.2f}**")
+    if abs(diferencia) > 0.01:
+        st.warning(f"Falta cubrir / Excedente: **${diferencia:,.2f}** (Suma cargada: ${suma_pagos:,.2f})")
+    else:
+        st.success("✅ El total coincide perfectamente con la suma de los pagos.")
 
-    # ==========================================
-    # 6. BOTONES DE CIERRE DE LA VENTA
-    # ==========================================
+    # -------------------------------------------------------------------------
+    # 6. BOTONES DE CIERRE (Solo visibles si hay productos en el carrito)
+    # -------------------------------------------------------------------------
     if st.session_state.carrito_vta:
         st.divider()
         col_f1, col_f2 = st.columns(2)
-
+        
         with col_f1:
             if st.button("🏁 FINALIZAR Y REGISTRAR VENTA", width='stretch', type="primary"):
-                suma_pagos = sum(float(p["monto"]) for p in st.session_state.pagos_split)
+                # 0. Verificación de sumas de pago
                 if abs(suma_pagos - total_final_vta) > 0.01:
-                    st.error(f"¡Error! La suma de los pagos (${suma_pagos:,.2f}) no coincide con el total (${total_final_vta:,.2f})")
+                    st.error(f"¡Error! La suma de los pagos (${suma_pagos:.2f}) no coincide con el total (${total_final_vta:.2f})")
                 else:
-                    ok_stock, msg_stock = venta_service.verificar_stock_suficiente(db, st.session_state.carrito_vta)
+                    # 1. Validación de stock real
+                    ok_stock, err_stock = venta_service.validar_stock_carrito(st.session_state.carrito_vta)
                     if not ok_stock:
-                        st.error(msg_stock)
+                        st.error(err_stock)
                     else:
-                        ok_gc, msg_gc = venta_service.verificar_saldo_giftcards(
-                            db, 
-                            st.session_state.pagos_split, 
-                            st.session_state.get('gc_activa_id')
-                        )
+                        # 2. Validación de Gift Card
+                        gc_id_activa = st.session_state.get('gc_activa_id')
+                        ok_gc, err_gc = venta_service.validar_saldo_giftcard(st.session_state.pagos_split, gc_id_activa)
                         if not ok_gc:
-                            st.error(msg_gc)
+                            st.error(err_gc)
                         else:
+                            # 3. Procesar venta sin errores
                             try:
-                                venta_service.registrar_venta_completa(
-                                    db, 
-                                    st.session_state, 
-                                    id_cliente_final, 
-                                    vendedor_id_final, 
-                                    total_final_vta
-                                )
-                                st.success("✅ Venta registrada correctamente!")
+                                id_pend = st.session_state.get('id_pendiente_cargado')
+                                usr_nom = st.session_state.get('usuario_nombre')
                                 
-                                # Limpieza completa del estado
+                                venta_service.registrar_venta(
+                                    carrito=st.session_state.carrito_vta,
+                                    pagos_split=st.session_state.pagos_split,
+                                    total_final=total_final_vta,
+                                    tipo_entrega=st.session_state.tipo_entrega,
+                                    direccion_entrega=st.session_state.direccion_entrega,
+                                    observaciones_entrega=st.session_state.get('observaciones_entrega', ''),
+                                    id_cliente=id_cliente_final,
+                                    id_vendedor=vendedor_id_final,
+                                    usuario_nombre=usr_nom,
+                                    gc_activa_id=gc_id_activa,
+                                    id_pendiente=id_pend
+                                )
+
+                                # Limpieza del Estado de Sesión tras éxito
+                                if 'id_pendiente_cargado' in st.session_state:
+                                    del st.session_state.id_pendiente_cargado
+
+                                st.success("✅ Venta registrada correctamente!")
                                 st.session_state.carrito_vta = []
                                 st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
                                 st.session_state.observaciones_entrega = ""
-                                if 'id_pendiente_cargado' in st.session_state:
-                                    del st.session_state.id_pendiente_cargado
                                 st.rerun()
 
                             except Exception as e:
-                                st.error(f"Error al registrar venta: {e}")
+                                st.error(f"Error al registrar: {e}")
 
         with col_f2:
             if st.button("⏳ GUARDAR COMO PENDIENTE", width='stretch'):
                 try:
-                    res = venta_service.guardar_venta_pendiente(
-                        db, 
-                        st.session_state, 
-                        cliente_nombre_final, 
-                        id_cliente_final, 
-                        vendedor_id_final
+                    id_pend_cargado = st.session_state.get('id_pendiente_cargado')
+                    es_nuevo, msg = venta_service.guardar_pendiente(
+                        carrito=st.session_state.carrito_vta,
+                        pagos_split=st.session_state.pagos_split,
+                        cliente_nombre=cliente_nombre_final,
+                        id_cliente=id_cliente_final,
+                        vendedor_id=vendedor_id_final,
+                        tipo_entrega=st.session_state.tipo_entrega,
+                        direccion_entrega=st.session_state.direccion_entrega,
+                        link_maps=st.session_state.link_maps_entrega,
+                        fecha_reparto=st.session_state.fecha_reparto,
+                        observaciones=st.session_state.get('observaciones_entrega', ''),
+                        id_pendiente_cargado=id_pend_cargado
                     )
-                    
-                    if res == "actualizado":
-                        st.toast("Venta pendiente actualizada", icon="🔄")
-                    else:
-                        st.toast("Venta guardada como nuevo pendiente", icon="⏳")
 
-                    # Limpieza del estado
+                    st.toast(msg, icon="🔄" if not es_nuevo else "⏳")
+
+                    # Limpieza tras guardar pendiente
                     st.session_state.carrito_vta = []
                     st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
                     st.session_state.observaciones_entrega = ""
@@ -289,7 +307,10 @@ def render_punto_venta_view():
                         del st.session_state.id_pendiente_cargado
                     if 'id_cliente_recuperado' in st.session_state:
                         del st.session_state.id_cliente_recuperado
-
+                        
                     st.rerun()
+
                 except Exception as e:
-                    st.error(f"Error al guardar venta pendiente: {e}")
+                    st.error(f"Error al guardar pendiente: {e}")
+    else:
+        st.info("El carrito está vacío.")
