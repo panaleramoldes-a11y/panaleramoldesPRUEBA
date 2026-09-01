@@ -2,49 +2,53 @@ import streamlit as st
 
 def render_sidebar():
     """
-    Renderiza el menú lateral de navegación y gestiona las restricciones de acceso por rol.
-    Retorna el nombre del módulo seleccionado.
+    Renderiza la barra lateral con el diseño clásico (selectbox) y retorna la vista seleccionada.
     """
-    st.sidebar.title("🛡️ Pañalera Moldes ERP")
-    
-    # Información del Usuario Logueado
-    usuario = st.session_state.get("usuario_actual", "Usuario")
-    rol = st.session_state.get("rol", "Vendedor")
-    
-    st.sidebar.markdown(f"👤 **{usuario}**  \n🏷️ *Rol: {rol}*")
-    
-    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
-        st.session_state.logeado = False
-        st.session_state.usuario_actual = None
-        st.session_state.rol = None
-        st.rerun()
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Navegación")
-
-    # Definición de Módulos según Rol
-    if rol == "Administrador":
-        opciones = [
-            "🛒 Punto de Venta",
-            "📜 Historial de Ventas",
-            "📊 Reporte de Rentabilidad",
-            "📦 Compras y Stock",
-            "👥 Clientes y Gift Cards",
-            "🚚 Optimización de Rutas",
-            "⚙️ Configuración y Pagos"
-        ]
-    else:
-        # Rol Vendedor: Acceso restringido a tareas operativas del día
-        opciones = [
-            "🛒 Punto de Venta",
-            "📜 Historial de Ventas",
-            "📦 Compras y Stock",
-            "👥 Clientes y Gift Cards"
-        ]
-
-    opcion_seleccionada = st.sidebar.radio("Ir a:", opciones)
-    
-    st.sidebar.markdown("---")
-    st.sidebar.caption("ERP Pañalera Moldes v2.0")
-    
-    return opcion_seleccionada
+    with st.sidebar:
+        st.title("🛡️ Pañalera Moldes")
+        
+        usuario = st.session_state.get("usuario_actual", "Usuario")
+        rol = st.session_state.get("rol", "Vendedor")
+        
+        st.write(f"👤 Usuario: {usuario}")
+        st.write(f"💼 Rol: {rol}")
+        
+        # Definición de opciones según el rol
+        opciones_disponibles = ["💰 Caja"]
+        
+        if rol == "Administrador":
+            opciones_disponibles.extend([
+                "🛒 Punto de Venta", 
+                "👥 Clientes", 
+                "📜 Historial de Ventas", 
+                "⚙️ Config. Pagos", 
+                "📦 Productos",
+                "📊 Control de Stock", 
+                "🏢 Proveedores", 
+                "🛍️ Compras", 
+                "👔 Vendedores", 
+                "📋 Auditoría", 
+                "💰 Utilidades", 
+                "🚚 Repartos", 
+                "📈 Reportes"
+            ])
+        elif rol == "Vendedor":
+            opciones_disponibles.extend([
+                "🛒 Punto de Venta", 
+                "🚚 Repartos", 
+                "📦 Productos", 
+                "👥 Clientes"
+            ])
+        
+        # Desplegable del menú principal
+        menu_seleccionado = st.selectbox("Menú Principal", opciones_disponibles)
+        
+        st.divider()
+        
+        # Botón para cerrar sesión
+        if st.button("🚪 Cerrar Sesión"):
+            st.session_state.clear()
+            st.session_state.autenticado = False
+            st.rerun()
+            
+    return menu_seleccionado
