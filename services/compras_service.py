@@ -5,7 +5,7 @@ Capa de lógica de negocio y persistencia para el módulo de Compras.
 
 from datetime import datetime
 import pandas as pd
-from config.database import get_db
+from config.database import db
 
 MARGENES_RUBROS = {
             "ACEITE": [0.35, 0.35, 0.25, 0.15, 0.0], "ACONDICIONADOR": [0.35, 0.35, 0.25, 0.15, 0.0],
