@@ -77,51 +77,12 @@ if not st.session_state.autenticado:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 3. NAVEGACIÓN Y MENÚ SIDEBAR (Solo accesible si está autenticado)
+# 3. RENDERIZADO DEL SIDEBAR
 # -----------------------------------------------------------------------------
-usuario_actual = st.session_state.get("usuario_actual", "Usuario")
-rol_actual = st.session_state.get("rol", "Vendedor")
-
 if 'lista_global_vta' not in st.session_state:
     st.session_state.lista_global_vta = "Automática (P1/P2)"
 
-st.sidebar.title("Pañalera Moldes")
-st.sidebar.caption(f"👤 **{usuario_actual}** ({rol_actual})")
-
-if rol_actual == "Administrador":
-    opciones_menu = [
-        "🛒 Punto de Venta",
-        "📜 Historial de Ventas",
-        "📦 Productos",
-        "📊 Control de Stock",
-        "👥 Clientes",
-        "🏢 Proveedores",
-        "🛍️ Compras",
-        "👔 Vendedores",
-        "💵 Caja",
-        "🚚 Repartos",
-        "📈 Reportes",
-        "💰 Utilidades",
-        "⚙️ Config. Pagos",
-        "📋 Auditoría",
-    ]
-else:
-    opciones_menu = [
-        "🛒 Punto de Venta",
-        "📜 Historial de Ventas",
-        "📦 Productos",
-        "🚚 Repartos",
-    ]
-
-menu_seleccionado = st.sidebar.radio("Navegación", opciones_menu)
-
-st.sidebar.divider()
-
-# Botón de Cierre de Sesión Unificado
-if st.sidebar.button("🔴 Cerrar Sesión", use_container_width=True):
-    st.session_state.clear()
-    st.session_state.autenticado = False
-    st.rerun()
+menu_seleccionado = render_sidebar()
 
 # -----------------------------------------------------------------------------
 # 4. ENRUTADOR PRINCIPAL
