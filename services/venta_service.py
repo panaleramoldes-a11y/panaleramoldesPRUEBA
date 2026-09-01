@@ -4,8 +4,8 @@ from datetime import datetime
 
 def verificar_stock_suficiente(db, carrito):
     """
-    Valida si hay stock suficiente en la BD antes de confirmar.
-    Retorna (True, None) o (False, mensaje_error).
+    Valida si hay stock suficiente en la BD para cada ítem del carrito antes de confirmar.
+    Retorna (True, None) si está OK o (False, mensaje_error) si falta stock.
     """
     for item in carrito:
         p_check = db.table("PRODUCTOS").select("Nombre", "Stock_Actual", "Es_Stockeable").eq("ID_Producto", str(item["id"])).single().execute()
@@ -21,7 +21,7 @@ def verificar_stock_suficiente(db, carrito):
 
 def verificar_saldo_giftcards(db, pagos_split, gc_activa_id):
     """
-    Valida que el saldo real en BD cubra los pagos hechos con Gift Card.
+    Valida que el saldo real en BD cubra los pagos realizados con Gift Card.
     Retorna (True, None) o (False, mensaje_error).
     """
     for pago in pagos_split:
@@ -35,12 +35,12 @@ def verificar_saldo_giftcards(db, pagos_split, gc_activa_id):
 
 def registrar_venta_completa(db, session_state, id_cliente_final, vendedor_id_final, total_final_vta):
     """
-    Procesa el registro completo de la venta en las tablas correspondientes.
+    Procesa el registro completo de la venta en todas las tablas correspondientes de Supabase.
     """
     id_v = datetime.now().strftime("%Y%m%d%H%M%S")
     f = datetime.now().strftime("%Y-%m-%d")
 
-    # 1. Obtener Turno y Nombre de Usuario
+    # 1. Obtener Turno Activo y Nombre de Usuario
     turno_res = db.table("CONTROL_TURNOS").select("ID_Turno").eq("Estado", "Abierto").maybe_single().execute()
     id_turno_val = turno_res.data['ID_Turno'] if (turno_res and turno_res.data) else "SIN_TURNO"
 
@@ -49,7 +49,7 @@ def registrar_venta_completa(db, session_state, id_cliente_final, vendedor_id_fi
         u_res = db.table("USUARIOS").select("Nombre").eq("ID_Usuario", vendedor_id_final).single().execute()
         nombre_usuario_actual = u_res.data.get('Nombre') if (u_res and u_res.data) else str(vendedor_id_final)
 
-    # 2. Registrar Cabecera
+    # 2. Registrar en VENTAS_CABECERA
     desglose_pagos = " | ".join([f"{p['metodo']}: ${p['monto']:,.0f}" for p in session_state.pagos_split])
     db.table("VENTAS_CABECERA").insert({
         "ID_Venta": id_v,
@@ -63,7 +63,7 @@ def registrar_venta_completa(db, session_state, id_cliente_final, vendedor_id_fi
         "Observaciones": session_state.get('observaciones_entrega', '')
     }).execute()
 
-    # 3. Registrar Detalle y Actualizar Stock
+    # 3. Registrar VENTAS_DETALLE y actualizar stock/movimientos
     for art in session_state.carrito_vta:
         prod_data = db.table("PRODUCTOS").select("Precio_Costo", "Nombre", "Stock_Actual", "Es_Stockeable").eq("ID_Producto", str(art['id'])).single().execute()
         
@@ -106,7 +106,7 @@ def registrar_venta_completa(db, session_state, id_cliente_final, vendedor_id_fi
             "Monto": float(pago["monto"])
         }).execute()
 
-    # 5. Registrar en Caja y procesar Gift Cards
+    # 5. Registrar en CAJA y procesar Gift Cards
     for pago in session_state.pagos_split:
         metodo = pago["metodo"]
         monto = float(pago["monto"])
@@ -143,13 +143,13 @@ def registrar_venta_completa(db, session_state, id_cliente_final, vendedor_id_fi
                 "Forma_Pago": metodo
             }).execute()
 
-    # 6. Si provenía de pendientes, eliminar registro previo
+    # 6. Si se cargó desde pendientes, eliminar el registro pendiente original
     if 'id_pendiente_cargado' in session_state:
         db.table("VENTAS_PENDIENTES").delete().eq("ID_Pendiente", session_state.id_pendiente_cargado).execute()
 
 def guardar_venta_pendiente(db, session_state, cliente_nombre_final, id_cliente_final, vendedor_id_final):
     """
-    Serializa y guarda la venta actual en la tabla VENTAS_PENDIENTES.
+    Guarda o actualiza la venta en la tabla VENTAS_PENDIENTES.
     """
     lat, lng = None, None
     link = session_state.link_maps_entrega
