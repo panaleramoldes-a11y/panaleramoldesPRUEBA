@@ -112,3 +112,7 @@ def render_punto_venta():
 
                 except Exception as e:
                     st.error(f"Error al guardar la venta pendiente: {e}")
+
+def render():
+    """Alias para que el enrutador principal reconozca la vista."""
+    return render_punto_venta()
