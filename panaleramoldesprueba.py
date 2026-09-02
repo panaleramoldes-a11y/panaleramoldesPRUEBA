@@ -319,7 +319,7 @@ else:
                     "stock_anterior": stock_actual,
                     "stock_nuevo": stock_nuevo,
                     "origen_referencia": f"Anulación Venta ID: {id_vta_a_anular}",
-                    "usuario": str(nombre_usuario_actual),
+                    "usuario": str(usuario_actual),
                     "fecha": datetime.now().isoformat()
                 }).execute()
     
