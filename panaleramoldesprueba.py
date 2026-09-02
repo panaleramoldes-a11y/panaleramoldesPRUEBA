@@ -245,8 +245,8 @@ else:
             else:
                 st.error("Venta no encontrada.")
 
-    def anular_venta(id_vta_a_anular):
-        # 0. VALIDACIÓN DE SEGURIDAD CRÍTICA (Evita ejecuciones dobles/concurrencia)
+    def anular_venta(id_vta_a_anular, usuario_actual="Martin"):
+        # 0. VALIDACIÓN DE SEGURIDAD CRÍTICA (Evita doble ejecución/clics)
         vta_check = db.table("VENTAS_CABECERA").select("Estado").eq("ID_Venta", id_vta_a_anular).single().execute()
         
         if not vta_check.data:
@@ -256,10 +256,10 @@ else:
             return False, "⚠️ Esta venta ya fue anulada previamente. No se realizaron cambios."
     
         # 1. MARCAR COMO ANULADA INMEDIATAMENTE
-        # Actualizamos el estado primero para "bloquear" futuras llamadas concurrentes antes de tocar Caja/Stock
+        # Se actualiza primero para bloquear segundas llamadas
         db.table("VENTAS_CABECERA").update({"Estado": "Anulada"}).eq("ID_Venta", id_vta_a_anular).execute()
     
-        # 2. Buscamos el turno abierto
+        # 2. BUSCAR TURNO ABIERTO
         turno_res = db.table("CONTROL_TURNOS").select("ID_Turno").eq("Estado", "Abierto").maybe_single().execute()
         id_turno_actual = turno_res.data['ID_Turno'] if (turno_res and turno_res.data) else "SIN_TURNO"
         
@@ -291,23 +291,39 @@ else:
                     "Forma_Pago": metodo
                 }).execute()
     
-        # 4. DEVOLUCIÓN DE STOCK
+        # 4. DEVOLUCIÓN DE STOCK Y REGISTRO EN KARDEX (MOVIMIENTOS_STOCK)
         detalle_venta = db.table("VENTAS_DETALLE").select("*").eq("ID_Venta", id_vta_a_anular).execute().data or []
         
         for item in detalle_venta:
-            id_prod = item['ID_Producto']
-            cant_vendida = item['Cantidad']
+            id_prod = str(item['ID_Producto'])
+            cant_vendida = int(item['Cantidad'])
             
-            # Obtener stock actual
-            prod_res = db.table("PRODUCTOS").select("Stock_Actual").eq("ID_Producto", id_prod).single().execute()
+            # Obtener stock actual y nombre del producto desde la BD
+            prod_res = db.table("PRODUCTOS").select("Nombre", "Stock_Actual").eq("ID_Producto", id_prod).single().execute()
+            
             if prod_res.data:
+                nombre_prod = prod_res.data.get("Nombre", "Producto")
                 stock_actual = int(prod_res.data.get('Stock_Actual', 0))
                 stock_nuevo = stock_actual + cant_vendida
                 
-                # Sumamos la cantidad vendida al stock actual
+                # A. Actualizar el stock disponible en la tabla PRODUCTOS
                 db.table("PRODUCTOS").update({"Stock_Actual": stock_nuevo}).eq("ID_Producto", id_prod).execute()
     
-        return True, "✅ Venta anulada, stock devuelto y caja ajustada correctamente."        
+                # B. Insertar movimiento en MOVIMIENTOS_STOCK (Kardex)
+                # La cantidad va positiva (+) porque reingresa mercadería
+                db.table("MOVIMIENTOS_STOCK").insert({
+                    "id_producto": id_prod,
+                    "nombre_producto": nombre_prod,
+                    "tipo_movimiento": "ANULACION_VENTA",
+                    "cantidad": cant_vendida,
+                    "stock_anterior": stock_actual,
+                    "stock_nuevo": stock_nuevo,
+                    "origen_referencia": f"Anulación Venta ID: {id_vta_a_anular}",
+                    "usuario": str(usuario_actual),
+                    "fecha": datetime.now().isoformat()
+                }).execute()
+    
+        return True, "✅ Venta anulada, stock devuelto, caja ajustada y Kardex actualizado correctamente."        
 
     def procesar_seleccion_manual():
         seleccion = st.session_state.prod_manual_key
