@@ -2843,7 +2843,7 @@ else:
                 # ---------------------------------------------------------
                 with st.expander("📅 Ver Cronograma de Inventario Semanal", expanded=False):
                     try:
-                        st.image("cronograma_inventario.png", use_container_width=True)
+                        st.image("cronograma_inventario.jpg", use_container_width=True)
                     except Exception:
                         st.warning("⚠️ No se encontró la imagen 'cronograma_inventario.png' en el directorio del proyecto.")
             
