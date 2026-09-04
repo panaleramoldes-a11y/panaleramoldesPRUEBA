@@ -2838,6 +2838,15 @@ else:
             # VISTA 1: VENDEDOR (TOMA DE RECUENTO)
             # =============================================================
             with tab_vendedor:
+                # ---------------------------------------------------------
+                # CRONOGRAMA DE INVENTARIO SEMANAL (Ubicación solicitada)
+                # ---------------------------------------------------------
+                with st.expander("📅 Ver Cronograma de Inventario Semanal", expanded=False):
+                    try:
+                        st.image("cronograma_inventario.png", use_container_width=True)
+                    except Exception:
+                        st.warning("⚠️ No se encontró la imagen 'cronograma_inventario.png' en el directorio del proyecto.")
+            
                 st.caption("Efectúe el recuento físico de la mercadería.")
                 
                 # Filtrar solo productos activos
