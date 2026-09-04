@@ -2839,13 +2839,16 @@ else:
             # =============================================================
             with tab_vendedor:
                 # ---------------------------------------------------------
-                # CRONOGRAMA DE INVENTARIO SEMANAL (Ubicación solicitada)
+                # CRONOGRAMA DE INVENTARIO SEMANAL (Ancho ajustado)
                 # ---------------------------------------------------------
                 with st.expander("📅 Ver Cronograma de Inventario Semanal", expanded=False):
                     try:
-                        st.image("cronograma_inventario.jpg", use_container_width=True)
+                        # Creamos 2 columnas: 60% para la imagen, 40% vacío a la derecha
+                        col_img, col_vacia = st.columns([0.6, 0.4])
+                        with col_img:
+                            st.image("cronograma_inventario.jpg", use_container_width=True)
                     except Exception:
-                        st.warning("⚠️ No se encontró la imagen 'cronograma_inventario.png' en el directorio del proyecto.")
+                        st.warning("⚠️ No se encontró la imagen 'cronograma_inventario.jpg' en el directorio del proyecto.")
             
                 st.caption("Efectúe el recuento físico de la mercadería.")
                 
