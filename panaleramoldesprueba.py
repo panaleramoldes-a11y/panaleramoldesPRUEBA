@@ -2401,147 +2401,147 @@ else:
             tab_alta, tab_modificar, tab_importar, tab_historico = None, None, None, None
     
         # --- PESTAÑA BUSCAR ---
-with tab_buscar:
-    st.subheader("🔍 Buscador de Productos")
-    
-    # -------------------------------------------------------------
-    # 0️⃣ CÁLCULO EN TIEMPO REAL DEL STOCK RESERVADO EN PENDIENTES
-    # -------------------------------------------------------------
-    reservas_map = {}
-    try:
-        import json
-        # Traemos solo el Detalle_JSON de los pendientes vigentes
-        res_pend = db.table("VENTAS_PENDIENTES").select("Detalle_JSON").execute().data
-        if res_pend:
-            for pend in res_pend:
-                raw_detail = pend.get("Detalle_JSON")
-                if raw_detail:
-                    try:
-                        items = json.loads(raw_detail) if isinstance(raw_detail, str) else raw_detail
-                        for it in items:
-                            # Soporta 'ID_Producto', 'id_producto' o 'id'
-                            p_id = str(it.get("ID_Producto") or it.get("id_producto") or it.get("id") or "").strip()
-                            cant = float(it.get("cantidad") or it.get("Cantidad") or it.get("cant") or 0)
-                            if p_id and cant > 0:
-                                reservas_map[p_id] = reservas_map.get(p_id, 0.0) + cant
-                    except Exception:
-                        pass
-    except Exception as e:
-        st.warning(f"⚠️ No se pudo sincronizar el stock reservado de pendientes: {e}")
-
-    # --- CONTROLES Y FILTROS RÁPIDOS ---
-    c_chk1, c_chk2 = st.columns(2)
-    
-    # 1. Filtro de Stock Disponible > 0 (Tildado por defecto)
-    solo_con_stock = c_chk1.checkbox("📦 Solo productos con Stock DISPONIBLE > 0", value=True, key="chk_solo_con_stock")
-    
-    # 2. Mostrar Inactivos (Solo disponible para Administradores)
-    mostrar_inactivos = False
-    if st.session_state.rol == "Administrador":
-        mostrar_inactivos = c_chk2.checkbox("👁️ Mostrar productos INACTIVOS", value=False, key="chk_inactivos")
-    
-    busqueda_texto = st.text_input(
-        "Escriba para filtrar por nombre o código:", 
-        placeholder="Ej: pampers, toallitas, 779...",
-        key="busqueda_tab_buscar"
-    )
-    
-    c1, c2 = st.columns(2)
-    rubros = ["Todos"] + [r for r in st.session_state.df_prod['Rubro'].dropna().unique().tolist() if r]
-    marcas = ["Todos"] + [m for m in st.session_state.df_prod['Marca'].dropna().unique().tolist() if m]
-    
-    filtro_rubro = c1.selectbox("Filtrar por Rubro", rubros, key="filtro_rubro_tab")
-    filtro_marca = c2.selectbox("Filtrar por Marca", marcas, key="filtro_marca_tab")
-    
-    df_filtrado = st.session_state.df_prod.copy()
-    
-    # Calculamos la columna Stock_Disponible en el DataFrame
-    if 'Stock_Actual' in df_filtrado.columns and 'ID_Producto' in df_filtrado.columns:
-        df_filtrado['Stock_Actual'] = pd.to_numeric(df_filtrado['Stock_Actual'], errors='coerce').fillna(0)
-        df_filtrado['Stock_Reservado'] = df_filtrado['ID_Producto'].astype(str).str.strip().map(reservas_map).fillna(0)
-        df_filtrado['Stock_Disponible'] = df_filtrado['Stock_Actual'] - df_filtrado['Stock_Reservado']
-    else:
-        df_filtrado['Stock_Disponible'] = 0
-    
-    # -------------------------------------------------------------
-    # 1️⃣ FILTRO DE PRODUCTOS INACTIVOS
-    # -------------------------------------------------------------
-    if 'Estado' in df_filtrado.columns and not mostrar_inactivos:
-        df_filtrado = df_filtrado[df_filtrado['Estado'] != 'INACTIVO']
-    
-    # -------------------------------------------------------------
-    # 2️⃣ FILTRO DE STOCK DISPONIBLE (Stock_Disponible > 0)
-    # -------------------------------------------------------------
-    if solo_con_stock:
-        df_filtrado = df_filtrado[df_filtrado['Stock_Disponible'] > 0]
-    
-    # -------------------------------------------------------------
-    # 3️⃣ FILTROS DE BÚSQUEDA POR TEXTO, RUBRO Y MARCA
-    # -------------------------------------------------------------
-    if busqueda_texto:
-        busqueda_texto = busqueda_texto.lower()
-        mask = df_filtrado['Nombre'].str.lower().str.contains(busqueda_texto, na=False) | \
-               df_filtrado['ID_Producto'].astype(str).str.lower().str.contains(busqueda_texto, na=False)
-        df_filtrado = df_filtrado[mask]
-    
-    if filtro_rubro != "Todos": 
-        df_filtrado = df_filtrado[df_filtrado['Rubro'] == filtro_rubro]
-    if filtro_marca != "Todos": 
-        df_filtrado = df_filtrado[df_filtrado['Marca'] == filtro_marca]
-    
-    # -------------------------------------------------------------
-    # 🔤 ORDENAR ALFABÉTICAMENTE POR NOMBRE
-    # -------------------------------------------------------------
-    if 'Nombre' in df_filtrado.columns:
-        df_filtrado = df_filtrado.sort_values(by='Nombre', key=lambda col: col.str.lower(), ascending=True)
-    
-    # Guardamos una referencia para el generador antes de recortar columnas por rol
-    df_para_wsp = df_filtrado.copy()
-    
-    # Ajuste de columnas visibles según el rol
-    if st.session_state.rol != "Administrador":
-        cols_vendedor = ['Nombre', 'Precio_1', 'Precio_2', 'Precio_3']
-        df_filtrado = df_filtrado[[c for c in cols_vendedor if c in df_filtrado.columns]]
-    else:
-        # Para administradores eliminamos las columnas auxiliares internas
-        df_filtrado = df_filtrado.drop(columns=['Stock_Reservado', 'Stock_Disponible'], errors='ignore')
-    
-    st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
-    
-    # -------------------------------------------------------------
-    # 4️⃣ GENERADOR DE RESPUESTA PARA WHATSAPP
-    # -------------------------------------------------------------
-    st.markdown("---")
-    if st.button("💬 Generar Respuesta para WhatsApp", type="primary", key="btn_wsp_precios_prod"):
-        if df_para_wsp.empty:
-            st.warning("⚠️ No hay productos con los criterios seleccionados para generar la respuesta.")
-        else:
-            lineas_mensaje = []
+        with tab_buscar:
+            st.subheader("🔍 Buscador de Productos")
             
-            for _, prod in df_para_wsp.iterrows():
-                nombre = str(prod.get('Nombre', '')).strip()
-                
-                try:
-                    p1 = int(float(prod.get('Precio_1', 0)))
-                    p2 = int(float(prod.get('Precio_2', 0)))
-                    p3 = int(float(prod.get('Precio_3', 0)))
-                except (ValueError, TypeError):
-                    p1, p2, p3 = 0, 0, 0
-                
-                # Reglas de precios
-                if p1 == p2:
-                    linea = f"• *{nombre}* ${p1}"
-                elif p1 != p2 and p2 == p3:
-                    linea = f"• *{nombre}* ${p1} x1 o ${p2} cada uno llevando 2"
-                elif p2 != p3:
-                    linea = f"• *{nombre}* ${p1} x1 o ${p3} cada uno llevando 3"
+            # -------------------------------------------------------------
+            # 0️⃣ CÁLCULO EN TIEMPO REAL DEL STOCK RESERVADO EN PENDIENTES
+            # -------------------------------------------------------------
+            reservas_map = {}
+            try:
+                import json
+                # Traemos solo el Detalle_JSON de los pendientes vigentes
+                res_pend = db.table("VENTAS_PENDIENTES").select("Detalle_JSON").execute().data
+                if res_pend:
+                    for pend in res_pend:
+                        raw_detail = pend.get("Detalle_JSON")
+                        if raw_detail:
+                            try:
+                                items = json.loads(raw_detail) if isinstance(raw_detail, str) else raw_detail
+                                for it in items:
+                                    # Soporta 'ID_Producto', 'id_producto' o 'id'
+                                    p_id = str(it.get("ID_Producto") or it.get("id_producto") or it.get("id") or "").strip()
+                                    cant = float(it.get("cantidad") or it.get("Cantidad") or it.get("cant") or 0)
+                                    if p_id and cant > 0:
+                                        reservas_map[p_id] = reservas_map.get(p_id, 0.0) + cant
+                            except Exception:
+                                pass
+            except Exception as e:
+                st.warning(f"⚠️ No se pudo sincronizar el stock reservado de pendientes: {e}")
+        
+            # --- CONTROLES Y FILTROS RÁPIDOS ---
+            c_chk1, c_chk2 = st.columns(2)
+            
+            # 1. Filtro de Stock Disponible > 0 (Tildado por defecto)
+            solo_con_stock = c_chk1.checkbox("📦 Solo productos con Stock DISPONIBLE > 0", value=True, key="chk_solo_con_stock")
+            
+            # 2. Mostrar Inactivos (Solo disponible para Administradores)
+            mostrar_inactivos = False
+            if st.session_state.rol == "Administrador":
+                mostrar_inactivos = c_chk2.checkbox("👁️ Mostrar productos INACTIVOS", value=False, key="chk_inactivos")
+            
+            busqueda_texto = st.text_input(
+                "Escriba para filtrar por nombre o código:", 
+                placeholder="Ej: pampers, toallitas, 779...",
+                key="busqueda_tab_buscar"
+            )
+            
+            c1, c2 = st.columns(2)
+            rubros = ["Todos"] + [r for r in st.session_state.df_prod['Rubro'].dropna().unique().tolist() if r]
+            marcas = ["Todos"] + [m for m in st.session_state.df_prod['Marca'].dropna().unique().tolist() if m]
+            
+            filtro_rubro = c1.selectbox("Filtrar por Rubro", rubros, key="filtro_rubro_tab")
+            filtro_marca = c2.selectbox("Filtrar por Marca", marcas, key="filtro_marca_tab")
+            
+            df_filtrado = st.session_state.df_prod.copy()
+            
+            # Calculamos la columna Stock_Disponible en el DataFrame
+            if 'Stock_Actual' in df_filtrado.columns and 'ID_Producto' in df_filtrado.columns:
+                df_filtrado['Stock_Actual'] = pd.to_numeric(df_filtrado['Stock_Actual'], errors='coerce').fillna(0)
+                df_filtrado['Stock_Reservado'] = df_filtrado['ID_Producto'].astype(str).str.strip().map(reservas_map).fillna(0)
+                df_filtrado['Stock_Disponible'] = df_filtrado['Stock_Actual'] - df_filtrado['Stock_Reservado']
+            else:
+                df_filtrado['Stock_Disponible'] = 0
+            
+            # -------------------------------------------------------------
+            # 1️⃣ FILTRO DE PRODUCTOS INACTIVOS
+            # -------------------------------------------------------------
+            if 'Estado' in df_filtrado.columns and not mostrar_inactivos:
+                df_filtrado = df_filtrado[df_filtrado['Estado'] != 'INACTIVO']
+            
+            # -------------------------------------------------------------
+            # 2️⃣ FILTRO DE STOCK DISPONIBLE (Stock_Disponible > 0)
+            # -------------------------------------------------------------
+            if solo_con_stock:
+                df_filtrado = df_filtrado[df_filtrado['Stock_Disponible'] > 0]
+            
+            # -------------------------------------------------------------
+            # 3️⃣ FILTROS DE BÚSQUEDA POR TEXTO, RUBRO Y MARCA
+            # -------------------------------------------------------------
+            if busqueda_texto:
+                busqueda_texto = busqueda_texto.lower()
+                mask = df_filtrado['Nombre'].str.lower().str.contains(busqueda_texto, na=False) | \
+                       df_filtrado['ID_Producto'].astype(str).str.lower().str.contains(busqueda_texto, na=False)
+                df_filtrado = df_filtrado[mask]
+            
+            if filtro_rubro != "Todos": 
+                df_filtrado = df_filtrado[df_filtrado['Rubro'] == filtro_rubro]
+            if filtro_marca != "Todos": 
+                df_filtrado = df_filtrado[df_filtrado['Marca'] == filtro_marca]
+            
+            # -------------------------------------------------------------
+            # 🔤 ORDENAR ALFABÉTICAMENTE POR NOMBRE
+            # -------------------------------------------------------------
+            if 'Nombre' in df_filtrado.columns:
+                df_filtrado = df_filtrado.sort_values(by='Nombre', key=lambda col: col.str.lower(), ascending=True)
+            
+            # Guardamos una referencia para el generador antes de recortar columnas por rol
+            df_para_wsp = df_filtrado.copy()
+            
+            # Ajuste de columnas visibles según el rol
+            if st.session_state.rol != "Administrador":
+                cols_vendedor = ['Nombre', 'Precio_1', 'Precio_2', 'Precio_3']
+                df_filtrado = df_filtrado[[c for c in cols_vendedor if c in df_filtrado.columns]]
+            else:
+                # Para administradores eliminamos las columnas auxiliares internas
+                df_filtrado = df_filtrado.drop(columns=['Stock_Reservado', 'Stock_Disponible'], errors='ignore')
+            
+            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+            
+            # -------------------------------------------------------------
+            # 4️⃣ GENERADOR DE RESPUESTA PARA WHATSAPP
+            # -------------------------------------------------------------
+            st.markdown("---")
+            if st.button("💬 Generar Respuesta para WhatsApp", type="primary", key="btn_wsp_precios_prod"):
+                if df_para_wsp.empty:
+                    st.warning("⚠️ No hay productos con los criterios seleccionados para generar la respuesta.")
                 else:
-                    linea = f"• *{nombre}* ${p1}"
+                    lineas_mensaje = []
                     
-                lineas_mensaje.append(linea)
-            
-            msg_precios_wsp = "\n".join(lineas_mensaje)
-            st.text_area("Copiar respuesta para WhatsApp:", value=msg_precios_wsp, height=250, key="txt_area_wsp_precios")
+                    for _, prod in df_para_wsp.iterrows():
+                        nombre = str(prod.get('Nombre', '')).strip()
+                        
+                        try:
+                            p1 = int(float(prod.get('Precio_1', 0)))
+                            p2 = int(float(prod.get('Precio_2', 0)))
+                            p3 = int(float(prod.get('Precio_3', 0)))
+                        except (ValueError, TypeError):
+                            p1, p2, p3 = 0, 0, 0
+                        
+                        # Reglas de precios
+                        if p1 == p2:
+                            linea = f"• *{nombre}* ${p1}"
+                        elif p1 != p2 and p2 == p3:
+                            linea = f"• *{nombre}* ${p1} x1 o ${p2} cada uno llevando 2"
+                        elif p2 != p3:
+                            linea = f"• *{nombre}* ${p1} x1 o ${p3} cada uno llevando 3"
+                        else:
+                            linea = f"• *{nombre}* ${p1}"
+                            
+                        lineas_mensaje.append(linea)
+                    
+                    msg_precios_wsp = "\n".join(lineas_mensaje)
+                    st.text_area("Copiar respuesta para WhatsApp:", value=msg_precios_wsp, height=250, key="txt_area_wsp_precios")
     
         # --- PESTAÑA CAMBIOS ---
         with tab_cambios:
