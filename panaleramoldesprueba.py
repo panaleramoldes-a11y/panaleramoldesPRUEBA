@@ -3972,6 +3972,8 @@ else:
                 st.divider()
     
                 # --- GRAFICOS INTERACTIVOS ---
+                import plotly.express as px
+    
                 g_col1, g_col2 = st.columns(2)
     
                 with g_col1:
