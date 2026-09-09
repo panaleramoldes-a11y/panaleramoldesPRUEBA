@@ -3550,35 +3550,31 @@ else:
             st.warning("⚠️ Esta acción actualizará la columna ID_Proveedor en Supabase para todos los productos con historial de compras.")
             if st.button("🔄 Migrar y Concatenar Proveedores Históricos en Supabase"):
                 with st.spinner("Analizando historial de compras y actualizando la base de datos..."):
-                    # 1. Traer datos necesarios de la base
-                    res_cc = db.table("COMPRAS_CABECERA").select("ID_Compra, ID_Proveedor").execute().data
+                    # 1. Traer datos de compras y detalle
+                    res_cc = db.table("COMPRAS_CABECERA").select("ID_Compra, Proveedor").execute().data
                     res_dc = db.table("DETALLE_COMPRAS").select("ID_Compra, ID_Producto").execute().data
-                    res_prov = db.table("PROVEEDORES").select("ID_Proveedor, Razon_Social").execute().data
                     
                     df_cc = pd.DataFrame(res_cc) if res_cc else pd.DataFrame()
                     df_dc = pd.DataFrame(res_dc) if res_dc else pd.DataFrame()
-                    df_prov = pd.DataFrame(res_prov) if res_prov else pd.DataFrame()
     
-                    if not df_cc.empty and not df_dc.empty and not df_prov.empty:
-                        # Mapeo de ID_Proveedor a Razon_Social
-                        dict_prov_nombre = dict(zip(df_prov['ID_Proveedor'].astype(str), df_prov['Razon_Social'].astype(str)))
-    
-                        # Cruzar DETALLE con CABECERA
+                    if not df_cc.empty and not df_dc.empty:
+                        # Normalizar tipos para el cruce
                         df_cc['ID_Compra'] = df_cc['ID_Compra'].astype(str)
                         df_dc['ID_Compra'] = df_dc['ID_Compra'].astype(str)
-                        df_cc['ID_Proveedor'] = df_cc['ID_Proveedor'].astype(str)
                         df_dc['ID_Producto'] = df_dc['ID_Producto'].astype(str)
+                        df_cc['Proveedor'] = df_cc['Proveedor'].astype(str)
     
-                        df_rel = pd.merge(df_dc, df_cc, on='ID_Compra', how='inner')
-                        df_rel['Nombre_Proveedor'] = df_rel['ID_Proveedor'].map(dict_prov_nombre).fillna(df_rel['ID_Proveedor'])
+                        # Cruzar Detalle con Cabecera
+                        df_rel = pd.merge(df_dc, df_cc[['ID_Compra', 'Proveedor']], on='ID_Compra', how='inner')
     
-                        # Agrupar nombres únicos por ID_Producto
-                        agrupado_provs = df_rel.groupby('ID_Producto')['Nombre_Proveedor'].unique()
+                        # Agrupar nombres de proveedores únicos por ID_Producto
+                        agrupado_provs = df_rel.groupby('ID_Producto')['Proveedor'].unique()
     
-                        # 2. Actualizar cada producto en la tabla PRODUCTOS en Supabase
+                        # Actualizar cada producto en la tabla PRODUCTOS en Supabase
                         actualizados = 0
                         for id_prod, lista_provs in agrupado_provs.items():
-                            cadena_provs = ", ".join(sorted([p for p in lista_provs if p]))
+                            provs_limpios = sorted(list(set([str(p).strip() for p in lista_provs if str(p).strip() and str(p).strip().lower() != 'none'])))
+                            cadena_provs = ", ".join(provs_limpios)
     
                             if cadena_provs:
                                 db.table("PRODUCTOS").update({"ID_Proveedor": cadena_provs}).eq("ID_Producto", id_prod).execute()
