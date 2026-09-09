@@ -3547,7 +3547,7 @@ else:
         df_prod = pd.DataFrame(db.table("PRODUCTOS").select("*").execute().data)
         df_prov = pd.DataFrame(db.table("PROVEEDORES").select("*").execute().data)
     
-        # Definición de pestañas (Agregada la pestaña 3: Tablero Visual)
+        # Definición de pestañas
         tab_listado, tab_priorizacion, tab_tablero_compras = st.tabs([
             "📋 Listado y Buscador General", 
             "🎯 Priorización de Compras (ABC + Urgencia)",
@@ -3559,8 +3559,16 @@ else:
         marcas = ["Todos"] + [m for m in df_prod['Marca'].dropna().unique().tolist() if m] if 'Marca' in df_prod.columns else ["Todos"]
         provs = ["Todos"] + [p for p in df_prov['Razon_Social'].dropna().unique().tolist() if p] if 'Razon_Social' in df_prov.columns else ["Todos"]
     
+        # Normalize precio costo en df_prod
+        if 'Precio_Costo' in df_prod.columns:
+            df_prod['Precio_Costo_Unitario'] = pd.to_numeric(df_prod['Precio_Costo'], errors='coerce').fillna(0)
+        elif 'Precio_Costo_Unitario' in df_prod.columns:
+            df_prod['Precio_Costo_Unitario'] = pd.to_numeric(df_prod['Precio_Costo_Unitario'], errors='coerce').fillna(0)
+        else:
+            df_prod['Precio_Costo_Unitario'] = 0.0
+    
         # -----------------------------------------------------------------
-        # PESTAÑA 1: LISTADO Y BUSCADOR GENERAL (CÓDIGO ORIGINAL)
+        # PESTAÑA 1: LISTADO Y BUSCADOR GENERAL
         # -----------------------------------------------------------------
         with tab_listado:
             st.subheader("🔍 Buscar Artículos")
@@ -3690,7 +3698,7 @@ else:
             
             dias_analisis = st.slider("Días de historia de ventas para scoring:", min_value=15, max_value=90, value=60, step=15, key="slider_dias_abc")
     
-            res_vd = db.table("VENTAS_DETALLE").select("ID_Producto, Cantidad, Subtotal, Precio_Costo_Unitario").execute().data
+            res_vd = db.table("VENTAS_DETALLE").select("ID_Producto, Cantidad, Subtotal, Precio_Costo, Precio_Costo_Unitario").execute().data
             df_vd = pd.DataFrame(res_vd) if res_vd else pd.DataFrame()
     
             df_ranking = df_prod.copy()
@@ -3735,7 +3743,15 @@ else:
                 if not df_vd.empty:
                     df_vd['Cantidad'] = pd.to_numeric(df_vd['Cantidad'], errors='coerce').fillna(0)
                     df_vd['Subtotal'] = pd.to_numeric(df_vd['Subtotal'], errors='coerce').fillna(0)
-                    df_vd['Precio_Costo_Unitario'] = pd.to_numeric(df_vd['Precio_Costo_Unitario'], errors='coerce').fillna(0)
+                    
+                    # Manejo de costo en VENTAS_DETALLE
+                    if 'Precio_Costo' in df_vd.columns:
+                        df_vd['Precio_Costo_Unitario'] = pd.to_numeric(df_vd['Precio_Costo'], errors='coerce').fillna(0)
+                    elif 'Precio_Costo_Unitario' in df_vd.columns:
+                        df_vd['Precio_Costo_Unitario'] = pd.to_numeric(df_vd['Precio_Costo_Unitario'], errors='coerce').fillna(0)
+                    else:
+                        df_vd['Precio_Costo_Unitario'] = 0.0
+    
                     df_vd['Ganancia_Real'] = df_vd['Subtotal'] - (df_vd['Cantidad'] * df_vd['Precio_Costo_Unitario'])
     
                     agrupado = df_vd.groupby('ID_Producto').agg({
@@ -3870,43 +3886,44 @@ else:
                     col_abc_exp.info("🟢 No hay productos con urgencia mayor al 0% para exportar.")
     
         # -----------------------------------------------------------------
-        # PESTAÑA 3: TABLERO VISUAL DE DECISIONES DE COMPRA (NUEVA MEJORA)
+        # PESTAÑA 3: TABLERO VISUAL DE DECISIONES DE COMPRA
         # -----------------------------------------------------------------
         with tab_tablero_compras:
             st.subheader("📊 Tablero de Inteligencia para Decisiones de Compra")
             st.caption("Analizá de forma rápida y visual los faltantes, el impacto en la inversión y la urgencia de reponer.")
     
-            # Calculamos ranking base si no existía antes
-            df_dash = df_prod.copy()
-            
-            if 'Estado' in df_dash.columns:
-                df_dash = df_dash[df_dash['Estado'] != 'INACTIVO']
-            if 'Es_Stockeable' in df_dash.columns:
-                df_dash = df_dash[df_dash['Es_Stockeable'] == True]
-    
-            if 'Rubro' in df_dash.columns and 'Nombre' in df_dash.columns:
-                es_leche = df_dash['Rubro'].astype(str).str.upper() == 'LECHE'
-                contiene_bulto = df_dash['Nombre'].astype(str).str.contains(' x12| x24| x30| x400| x800| x1000| x1200', case=False, na=False)
-                df_dash = df_dash[~es_leche | contiene_bulto]
-    
-            df_dash['Stock_Actual'] = pd.to_numeric(df_dash['Stock_Actual'], errors='coerce').fillna(0)
-            df_dash['Stock_Min'] = pd.to_numeric(df_dash['Stock_Min'], errors='coerce').fillna(0)
-            df_dash['Precio_Costo_Unitario'] = pd.to_numeric(df_dash.get('Precio_Costo_Unitario', 0), errors='coerce').fillna(0)
-            df_dash['Faltante_Min'] = (df_dash['Stock_Min'] - df_dash['Stock_Actual']).clip(lower=0)
-    
-            def calc_urg_dash(row):
-                if row['Stock_Min'] > 0 and row['Faltante_Min'] > 0:
-                    return (row['Faltante_Min'] / row['Stock_Min']) * 100
-                return 0.0
-    
-            df_dash['Urgencia_%'] = df_dash.apply(calc_urg_dash, axis=1)
-    
-            # Integrar Score/Categoría
+            # Tomar ranking si se procesó en pestaña 2 o armar copia limpia de df_prod
             if 'df_ranking' in locals() and not df_ranking.empty:
                 df_dash = df_ranking.copy()
             else:
+                df_dash = df_prod.copy()
+                if 'Estado' in df_dash.columns:
+                    df_dash = df_dash[df_dash['Estado'] != 'INACTIVO']
+                if 'Es_Stockeable' in df_dash.columns:
+                    df_dash = df_dash[df_dash['Es_Stockeable'] == True]
+    
+                df_dash['Stock_Actual'] = pd.to_numeric(df_dash.get('Stock_Actual', 0), errors='coerce').fillna(0)
+                df_dash['Stock_Min'] = pd.to_numeric(df_dash.get('Stock_Min', 0), errors='coerce').fillna(0)
+                df_dash['Faltante_Min'] = (df_dash['Stock_Min'] - df_dash['Stock_Actual']).clip(lower=0)
+                
                 df_dash['Categoria_ABC'] = "🟡 General"
                 df_dash['Score_Comercial'] = 0.0
+    
+                def calc_urg_dash(row):
+                    if row['Stock_Min'] > 0 and row['Faltante_Min'] > 0:
+                        return (row['Faltante_Min'] / row['Stock_Min']) * 100
+                    return 0.0
+    
+                df_dash['Urgencia_%'] = df_dash.apply(calc_urg_dash, axis=1)
+    
+            # Asegurar columna de Precio_Costo_Unitario
+            if 'Precio_Costo_Unitario' not in df_dash.columns:
+                if 'Precio_Costo' in df_dash.columns:
+                    df_dash['Precio_Costo_Unitario'] = pd.to_numeric(df_dash['Precio_Costo'], errors='coerce').fillna(0)
+                else:
+                    df_dash['Precio_Costo_Unitario'] = 0.0
+            else:
+                df_dash['Precio_Costo_Unitario'] = pd.to_numeric(df_dash['Precio_Costo_Unitario'], errors='coerce').fillna(0)
     
             df_dash['Inversion_Estimada'] = df_dash['Faltante_Min'] * df_dash['Precio_Costo_Unitario']
     
@@ -4001,7 +4018,10 @@ else:
     
                 # --- TABLA RESUMIDA PARA COMPRAS DIRECTAS ---
                 st.subheader("📋 Resumen para Gestión Directa de Pedido")
-                df_tabla_dash = df_vis[['Categoria_ABC', 'Marca', 'Nombre', 'Stock_Actual', 'Stock_Min', 'Faltante_Min', 'Precio_Costo_Unitario', 'Inversion_Estimada', 'Urgencia_%']]
+                cols_finales = ['Categoria_ABC', 'Marca', 'Nombre', 'Stock_Actual', 'Stock_Min', 'Faltante_Min', 'Precio_Costo_Unitario', 'Inversion_Estimada', 'Urgencia_%']
+                cols_existentes_tabla = [c for c in cols_finales if c in df_vis.columns]
+                
+                df_tabla_dash = df_vis[cols_existentes_tabla]
                 
                 st.dataframe(
                     df_tabla_dash.style.format({
@@ -4011,10 +4031,9 @@ else:
                         "Precio_Costo_Unitario": "${:,.2f}",
                         "Inversion_Estimada": "${:,.2f}",
                         "Urgencia_%": "{:.0f}%"
-                    }),
+                    }, na_rep="-"),
                     use_container_width=True, hide_index=True
                 )
-
     # =====================================================================
     # MODULO: 🚚 PROVEEDORES
     # =====================================================================
