@@ -3698,7 +3698,8 @@ else:
             
             dias_analisis = st.slider("Días de historia de ventas para scoring:", min_value=15, max_value=90, value=60, step=15, key="slider_dias_abc")
     
-            res_vd = db.table("VENTAS_DETALLE").select("ID_Producto, Cantidad, Subtotal, Precio_Costo, Precio_Costo_Unitario").execute().data
+            # Traemos solo los campos estándar de VENTAS_DETALLE (evita errores si no existe la columna de costo en la tabla de ventas)
+            res_vd = db.table("VENTAS_DETALLE").select("ID_Producto, Cantidad, Subtotal").execute().data
             df_vd = pd.DataFrame(res_vd) if res_vd else pd.DataFrame()
     
             df_ranking = df_prod.copy()
@@ -3712,7 +3713,7 @@ else:
             if 'Rubro' in df_ranking.columns and 'Nombre' in df_ranking.columns:
                 es_leche = df_ranking['Rubro'].astype(str).str.upper() == 'LECHE'
                 contiene_bulto = df_ranking['Nombre'].astype(str).str.contains(' x12| x24| x30| x400| x800| x1000| x1200', case=False, na=False)
-                df_ranking = df_ranking[~es_leche | contiene_bulto]
+                df_ranking = df_ranking[~es_leche | continente_bulto]
     
             df_ranking['Stock_Actual'] = pd.to_numeric(df_ranking['Stock_Actual'], errors='coerce').fillna(0)
             df_ranking['Stock_Min'] = pd.to_numeric(df_ranking['Stock_Min'], errors='coerce').fillna(0)
@@ -3744,13 +3745,14 @@ else:
                     df_vd['Cantidad'] = pd.to_numeric(df_vd['Cantidad'], errors='coerce').fillna(0)
                     df_vd['Subtotal'] = pd.to_numeric(df_vd['Subtotal'], errors='coerce').fillna(0)
                     
-                    # Manejo de costo en VENTAS_DETALLE
-                    if 'Precio_Costo' in df_vd.columns:
-                        df_vd['Precio_Costo_Unitario'] = pd.to_numeric(df_vd['Precio_Costo'], errors='coerce').fillna(0)
-                    elif 'Precio_Costo_Unitario' in df_vd.columns:
-                        df_vd['Precio_Costo_Unitario'] = pd.to_numeric(df_vd['Precio_Costo_Unitario'], errors='coerce').fillna(0)
-                    else:
-                        df_vd['Precio_Costo_Unitario'] = 0.0
+                    # Unimos con df_prod para tomar el costo real actualizado de la ficha del producto
+                    df_vd['ID_Producto'] = df_vd['ID_Producto'].astype(str)
+                    
+                    df_costos = df_prod[['ID_Producto', 'Precio_Costo_Unitario']].copy()
+                    df_costos['ID_Producto'] = df_costos['ID_Producto'].astype(str)
+                    
+                    df_vd = pd.merge(df_vd, df_costos, on='ID_Producto', how='left')
+                    df_vd['Precio_Costo_Unitario'] = df_vd['Precio_Costo_Unitario'].fillna(0)
     
                     df_vd['Ganancia_Real'] = df_vd['Subtotal'] - (df_vd['Cantidad'] * df_vd['Precio_Costo_Unitario'])
     
@@ -3765,7 +3767,6 @@ else:
                     })
                     
                     df_ranking['ID_Producto'] = df_ranking['ID_Producto'].astype(str)
-                    agrupado['ID_Producto'] = agrupado['ID_Producto'].astype(str)
                     
                     df_ranking = pd.merge(df_ranking, agrupado, on='ID_Producto', how='left')
                 else:
