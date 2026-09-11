@@ -4052,6 +4052,69 @@ else:
 
                 st.divider()
 
+                # --- NUEVA SECCIÓN: RANKING Y VOLUMEN DE COMPRA POR PROVEEDOR ---
+                st.subheader("🚚 Oportunidades y Volumen de Compra por Proveedor")
+                st.caption("Muestra la inversión total potencial que podrías realizar a cada proveedor sumando todos los artículos faltantes que pueden proveerte.")
+
+                # Preparar dataset desglosando/explotando proveedores concatenados
+                col_prov_dash = 'ID_Proveedor' if 'ID_Proveedor' in df_vis.columns else ('Proveedor' if 'Proveedor' in df_vis.columns else None)
+                
+                if col_prov_dash:
+                    df_prov_exp = df_vis.copy()
+                    
+                    # Convertir la columna de proveedores en lista separada por comas y 'explode'
+                    df_prov_exp['Proveedor_Unico'] = df_prov_exp[col_prov_dash].astype(str).apply(
+                        lambda x: [p.strip() for p in x.split(',') if p.strip() and p.strip().lower() != "none"]
+                    )
+                    df_prov_exp = df_prov_exp.explode('Proveedor_Unico')
+                    df_prov_exp = df_prov_exp[df_prov_exp['Proveedor_Unico'].notna() & (df_prov_exp['Proveedor_Unico'] != '')]
+
+                    if not df_prov_exp.empty:
+                        # Agrupación por Proveedor
+                        ranking_prov = df_prov_exp.groupby('Proveedor_Unico').agg(
+                            Inversion_Total=('Inversion_Estimada', 'sum'),
+                            Cant_Articulos=('ID_Producto' if 'ID_Producto' in df_prov_exp.columns else 'Nombre', 'nunique'),
+                            Articulos_Criticos=('Urgencia_%', lambda x: (x >= 100).sum())
+                        ).reset_index()
+
+                        ranking_prov = ranking_prov.sort_values(by='Inversion_Total', ascending=False)
+
+                        col_g_prov, col_t_prov = st.columns([1.2, 1])
+
+                        with col_g_prov:
+                            fig_p = px.bar(
+                                ranking_prov.head(10).sort_values(by='Inversion_Total', ascending=True),
+                                x='Inversion_Total',
+                                y='Proveedor_Unico',
+                                orientation='h',
+                                text_auto='$.2s',
+                                title="Top 10 Proveedores por Potencial de Compra ($)",
+                                color_discrete_sequence=['#2980B9']
+                            )
+                            fig_p.update_layout(xaxis_title="Inversión Potencial ($)", yaxis_title="Proveedor")
+                            st.plotly_chart(fig_p, use_container_width=True)
+
+                        with col_t_prov:
+                            st.markdown("**Ranking Completo de Proveedores**")
+                            st.dataframe(
+                                ranking_prov.rename(columns={
+                                    'Proveedor_Unico': 'Proveedor',
+                                    'Inversion_Total': 'Inversión Est.',
+                                    'Cant_Articulos': 'Artículos Faltantes',
+                                    'Articulos_Criticos': 'En Quiebre'
+                                }).style.format({
+                                    "Inversión Est.": "${:,.2f}",
+                                    "Artículos Faltantes": "{:.0f}",
+                                    "En Quiebre": "{:.0f}"
+                                }),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                    else:
+                        st.info("No hay proveedores asignados a los productos filtrados.")
+
+                st.divider()
+
                 # --- MATRIZ DE URGENCIA VS SCORE ---
                 st.subheader("📌 Matriz de Decisión: Score Comercial vs % Urgencia")
                 fig_scatter = px.scatter(
