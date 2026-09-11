@@ -3287,7 +3287,7 @@ else:
             # --- PESTAÑA MODIFICAR ---
             with tab_modificar:
                 st.subheader("✏️ Modificar Producto Completo")
-            
+                
                 # --- BOTÓN DE MANTENIMIENTO DE ESTADOS ---
                 with st.expander("⚙️ Herramientas de Mantenimiento"):
                     st.caption("Inactiva productos sin stock y con Stock Mínimo en 0/NULL. Reactiva los que recuperen stock.")
@@ -3315,9 +3315,23 @@ else:
                         val_max = get_safe('Stock_Max', fila, 0)
                         val_cos = get_safe('Precio_Costo', fila, 0.0, is_float=True)
                         
-                        prov_actual = fila.get('ID_Proveedor')
-                        if prov_actual is None or pd.isna(prov_actual):
-                            prov_actual = "" 
+                        # --- PARSEO DE PROVEEDORES ACTUALES (MÚLTIPLES) ---
+                        prov_actual_raw = fila.get('ID_Proveedor')
+                        if prov_actual_raw is None or pd.isna(prov_actual_raw):
+                            provs_actuales = []
+                        else:
+                            provs_actuales = [p.strip() for p in str(prov_actual_raw).split(',') if p.strip()]
+                        
+                        # Cargar lista de Razones Sociales desde la tabla PROVEEDORES
+                        if 'df_prov' in st.session_state and not st.session_state.df_prov.empty:
+                            opciones_prov_base = st.session_state.df_prov['Razon_Social'].dropna().astype(str).unique().tolist()
+                        elif 'lista_proveedores' in globals():
+                            opciones_prov_base = lista_proveedores
+                        else:
+                            opciones_prov_base = []
+            
+                        # Unir opciones base con las que ya tenga asignadas el producto
+                        todos_los_provs_opciones = sorted(list(set(opciones_prov_base + provs_actuales)))
                         
                         with st.form("form_mod_completo"):
                             c1, c2, c3 = st.columns(3)
@@ -3327,15 +3341,23 @@ else:
                                 idx_rubro = rubros_lista.index(fila.get('Rubro')) if fila.get('Rubro') in rubros_lista else 0
                                 n_rub = st.selectbox("Rubro", options=rubros_lista, index=idx_rubro)
                                 n_mar = st.text_input("Marca", value=str(fila.get('Marca', '')))
-                                idx_prov = lista_proveedores.index(prov_actual) if prov_actual in lista_proveedores else 0
-                                n_prov = st.selectbox("Proveedor", options=lista_proveedores, index=idx_prov)
+                                
+                                # --- MULTISELECT CON RAZONES SOCIALES ---
+                                n_prov_list = st.multiselect(
+                                    "Proveedores Asignados",
+                                    options=todos_los_provs_opciones,
+                                    default=[p for p in provs_actuales if p in todos_los_provs_opciones],
+                                    help="Podés agregar o quitar múltiples proveedores."
+                                )
+            
                             with c2:
                                 n_stk = st.number_input("Stock Actual", value=val_stk)
                                 n_min = st.number_input("Stock Min", value=val_min)
                                 n_max = st.number_input("Stock Max", value=val_max)
                                 n_img = st.text_input("URL Imagen", value=str(fila.get('Imagen', '')))
+            
                             with c3:
-                                n_cos = st.number_input("Costo", value=get_safe('Precio_Costo', fila, 0.0, True), format="%.2f")
+                                n_cos = st.number_input("Costo", value=val_cos, format="%.2f")
                                 n_p1 = st.number_input("Precio 1", value=get_safe('Precio_1', fila, 0.0, True), format="%.2f")
                                 n_p2 = st.number_input("Precio 2", value=get_safe('Precio_2', fila, 0.0, True), format="%.2f")
                                 n_p3 = st.number_input("Precio 3", value=get_safe('Precio_3', fila, 0.0, True), format="%.2f")
@@ -3347,22 +3369,25 @@ else:
                                     if val is None or val == "" or str(val).lower() == "none":
                                         return None
                                     return str(val)
-                    
+                                
                                 def clean_num(val, is_float=False):
                                     try:
                                         if val in [None, '', 'None']: return 0.0 if is_float else 0
                                         return float(val) if is_float else int(val)
                                     except:
                                         return 0.0 if is_float else 0
-                    
+                                
+                                # Construir cadena limpia separada por comas
+                                cadena_provs_final = ", ".join(sorted([p.strip() for p in n_prov_list if p.strip()])) if n_prov_list else None
+            
                                 stock_nuevo = clean_num(n_stk)
                                 nombre_producto_nuevo = str(n_nom) if n_nom else "Sin nombre"
-            
+                                
                                 datos_update = {
                                     "Nombre": nombre_producto_nuevo,
                                     "Rubro": clean_text(n_rub),
                                     "Marca": clean_text(n_mar),
-                                    "ID_Proveedor": clean_num(n_prov),
+                                    "ID_Proveedor": cadena_provs_final,  # Guarda texto con las Razones Sociales
                                     "Stock_Actual": stock_nuevo,
                                     "Stock_Min": clean_num(n_min),
                                     "Stock_Max": clean_num(n_max),
@@ -3376,13 +3401,13 @@ else:
                                 }
                                 
                                 try:
-                                    # 1. Actualización del producto
+                                    # 1. Actualización en Supabase
                                     db.table("PRODUCTOS").update(datos_update).eq("ID_Producto", id_sel).execute()
                                     
                                     # 2. Obtenemos el nombre del usuario activo
                                     usuario_activo = st.session_state.get('usuario_nombre') or st.session_state.get('usuario_actual', 'Martin')
-            
-                                    # 3. VERIFICAMOS Y REGISTRAMOS CAMBIO EN STOCK (KARDEX)
+                                    
+                                    # 3. Registrar ajuste en Kardex si hubo cambio de stock
                                     diferencia_stock = stock_nuevo - val_stk
                                     if diferencia_stock != 0:
                                         tipo_mov = "AJUSTE POSITIVO" if diferencia_stock > 0 else "AJUSTE NEGATIVO"
@@ -3390,14 +3415,14 @@ else:
                                             "id_producto": str(id_sel),
                                             "nombre_producto": nombre_producto_nuevo,
                                             "tipo_movimiento": tipo_mov,
-                                            "cantidad": diferencia_stock,  # Puede ser positivo o negativo
+                                            "cantidad": diferencia_stock,
                                             "stock_anterior": int(val_stk),
                                             "stock_nuevo": int(stock_nuevo),
                                             "origen_referencia": "Ajuste Manual en Edición de Producto",
                                             "usuario": str(usuario_activo)
                                         }).execute()
-            
-                                    # 4. Log de Auditoría
+                                    
+                                    # 4. Auditoría
                                     log_auditoria(
                                         tabla="PRODUCTOS",
                                         accion="UPDATE",
@@ -3408,7 +3433,7 @@ else:
                                         },
                                         usuario=usuario_activo
                                     )
-                    
+                                    
                                     st.success("¡Producto actualizado exitosamente!")
                                     if 'df_prod' in st.session_state: del st.session_state['df_prod']
                                     st.rerun()
