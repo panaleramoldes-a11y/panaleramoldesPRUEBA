@@ -3582,7 +3582,27 @@ else:
         # Opciones generales para selectboxes
         rubros = ["Todos"] + [r for r in df_prod['Rubro'].dropna().unique().tolist() if r] if 'Rubro' in df_prod.columns else ["Todos"]
         marcas = ["Todos"] + [m for m in df_prod['Marca'].dropna().unique().tolist() if m] if 'Marca' in df_prod.columns else ["Todos"]
-        provs = ["Todos"] + [p for p in df_prov['Razon_Social'].dropna().unique().tolist() if p] if 'Razon_Social' in df_prov.columns else ["Todos"]
+        
+        # --- CONSTRUCCIÓN DE LA LISTA DE PROVEEDORES (Extrae individuales de cadenas con comas) ---
+        provs_set = set()
+        
+        # 1. Extraer proveedores asignados a los productos
+        col_prov_prod = 'ID_Proveedor' if 'ID_Proveedor' in df_prod.columns else ('Proveedor' if 'Proveedor' in df_prod.columns else None)
+        if col_prov_prod:
+            for val in df_prod[col_prov_prod].dropna():
+                for p in str(val).split(','):
+                    p_clean = p.strip()
+                    if p_clean and p_clean.lower() != "none":
+                        provs_set.add(p_clean)
+                        
+        # 2. Sumar también las Razones Sociales de la tabla PROVEEDORES
+        if 'Razon_Social' in df_prov.columns:
+            for p in df_prov['Razon_Social'].dropna().unique():
+                p_clean = str(p).strip()
+                if p_clean:
+                    provs_set.add(p_clean)
+                    
+        provs = ["Todos"] + sorted(list(provs_set))
     
         # Normalize precio costo en df_prod
         if 'Precio_Costo' in df_prod.columns:
@@ -3628,15 +3648,13 @@ else:
             if filtro_marca != "Todos":
                 df_f = df_f[df_f['Marca'] == filtro_marca]
                 
+            # --- FILTRADO POR PROVEEDOR (Soporta múltiples proveedores por celda) ---
             if filtro_prov != "Todos":
-                if 'Proveedor' in df_f.columns:
-                    df_f = df_f[df_f['Proveedor'] == filtro_prov]
-                elif 'ID_Proveedor' in df_f.columns:
-                    prov_sel = df_prov[df_prov['Razon_Social'] == filtro_prov]
-                    if not prov_sel.empty:
-                        id_prov_buscado = prov_sel.iloc[0]['ID_Proveedor']
-                        df_f = df_f[df_f['ID_Proveedor'] == id_prov_buscado]
-            
+                if 'ID_Proveedor' in df_f.columns:
+                    df_f = df_f[df_f['ID_Proveedor'].astype(str).str.contains(filtro_prov, na=False, regex=False)]
+                elif 'Proveedor' in df_f.columns:
+                    df_f = df_f[df_f['Proveedor'].astype(str).str.contains(filtro_prov, na=False, regex=False)]
+    
             df_f['Stock_Actual'] = pd.to_numeric(df_f['Stock_Actual'], errors='coerce').fillna(0)
             df_f['Stock_Min'] = pd.to_numeric(df_f['Stock_Min'], errors='coerce').fillna(0)
             df_f['Stock_Max'] = pd.to_numeric(df_f['Stock_Max'], errors='coerce').fillna(0)
