@@ -4759,7 +4759,7 @@ else:
                         "Total_Compra": float(total_final)
                     }).execute()
                     
-                    # 2. Guardar Detalle, Actualizar Stock, Precios y registrar KARDEX
+                    # 2. Guardar Detalle, Actualizar Stock, Precios, PROVEEDORES y registrar KARDEX
                     for item in st.session_state.carrito_compra:
                         id_p_str = str(item['id'])
                         cant_comprada = int(item['cantidad'])
@@ -4780,21 +4780,36 @@ else:
                         stock_anterior = 0
                         stock_nuevo = 0
                         nombre_producto = item.get('nombre', '')
-            
+                        
                         if not prod_info.empty:
                             fila_p = prod_info.iloc[0]
                             es_stockeable = fila_p.get('Es_Stockeable', False) == True
                             stock_anterior = int(fila_p.get('Stock_Actual', 0) or 0)
                             if not nombre_producto:
                                 nombre_producto = str(fila_p.get('Nombre', ''))
-            
+                            
+                            # --- ACTUALIZACIÓN AUTOMÁTICA DE PROVEEDORES ---
+                            if prov_sel and str(prov_sel).strip():
+                                prov_compra_limpio = str(prov_sel).strip()
+                                prov_actual_raw = fila_p.get('ID_Proveedor')
+                                
+                                if prov_actual_raw is not None and not pd.isna(prov_actual_raw):
+                                    provs_existentes = [p.strip() for p in str(prov_actual_raw).split(',') if p.strip()]
+                                else:
+                                    provs_existentes = []
+                                
+                                if prov_compra_limpio not in provs_existentes:
+                                    provs_existentes.append(prov_compra_limpio)
+                                
+                                data_update["ID_Proveedor"] = ", ".join(sorted(provs_existentes))
+                        
                         if es_stockeable:
                             stock_nuevo = stock_anterior + cant_comprada
                             data_update["Stock_Actual"] = stock_nuevo
                         
                         # Ejecutamos el update en la tabla PRODUCTOS
                         db.table("PRODUCTOS").update(data_update).eq("ID_Producto", id_p_str).execute()
-            
+                        
                         # B. Guardar Detalle (en la tabla DETALLE_COMPRAS)
                         db.table("DETALLE_COMPRAS").insert({
                             "ID_Compra": id_c,
@@ -4803,9 +4818,8 @@ else:
                             "Precio_Costo_Unitario": float(item['costo']),
                             "Subtotal": float(item['subtotal'])
                         }).execute()
-            
+                        
                         # C. REGISTRO EN MOVIMIENTOS_STOCK (KARDEX - ENTRADA POR COMPRA)
-                        # Solo registramos el movimiento de stock si el producto incrementa inventario
                         if es_stockeable:
                             db.table("MOVIMIENTOS_STOCK").insert({
                                 "id_producto": id_p_str,
@@ -4817,13 +4831,17 @@ else:
                                 "origen_referencia": f"Ingreso por Compra (ID: {id_c} - Factura: {nro_fact})",
                                 "usuario": str(usuario_logueado)
                             }).execute()
-            
+                    
                     # --- Limpieza de Órdenes en Edición ---
                     if 'oc_en_edicion' in st.session_state:
                         id_a_borrar = st.session_state.oc_en_edicion
                         db.table("DETALLE_ORDENES").delete().eq("ID_Compra", id_a_borrar).execute()
                         db.table("ORDENES_COMPRA").delete().eq("ID_Compra", id_a_borrar).execute()
                         del st.session_state.oc_en_edicion
+                    
+                    # Limpiar caché de dataframe de productos para refrescar datos
+                    if 'df_prod' in st.session_state:
+                        del st.session_state['df_prod']
                     
                     st.success("¡Compra registrada, stock cargado y Kardex actualizado correctamente!")
                     st.session_state.carrito_compra = []
