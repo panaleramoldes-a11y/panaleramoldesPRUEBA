@@ -4056,24 +4056,34 @@ else:
                 st.subheader("🚚 Oportunidades y Volumen de Compra por Proveedor")
                 st.caption("Muestra la inversión total potencial que podrías realizar a cada proveedor sumando todos los artículos faltantes que pueden proveerte.")
 
-                # Preparar dataset desglosando/explotando proveedores concatenados
                 col_prov_dash = 'ID_Proveedor' if 'ID_Proveedor' in df_vis.columns else ('Proveedor' if 'Proveedor' in df_vis.columns else None)
                 
                 if col_prov_dash:
                     df_prov_exp = df_vis.copy()
                     
-                    # Convertir la columna de proveedores en lista separada por comas y 'explode'
-                    df_prov_exp['Proveedor_Unico'] = df_prov_exp[col_prov_dash].astype(str).apply(
-                        lambda x: [p.strip() for p in x.split(',') if p.strip() and p.strip().lower() != "none"]
-                    )
+                    # Función segura para extraer lista de proveedores sin importar el tipo de dato original
+                    def procesar_proveedores(val):
+                        if pd.isna(val) or val is None:
+                            return []
+                        if isinstance(val, (list, tuple, set)):
+                            return [str(p).strip() for p in val if str(p).strip() and str(p).strip().lower() != "none"]
+                        
+                        txt = str(val).strip()
+                        if not txt or txt.lower() == "none":
+                            return []
+                        return [p.strip() for p in txt.split(',') if p.strip() and p.strip().lower() != "none"]
+
+                    df_prov_exp['Proveedor_Unico'] = df_prov_exp[col_prov_dash].apply(procesar_proveedores)
                     df_prov_exp = df_prov_exp.explode('Proveedor_Unico')
                     df_prov_exp = df_prov_exp[df_prov_exp['Proveedor_Unico'].notna() & (df_prov_exp['Proveedor_Unico'] != '')]
 
                     if not df_prov_exp.empty:
                         # Agrupación por Proveedor
+                        col_id_prod = 'ID_Producto' if 'ID_Producto' in df_prov_exp.columns else 'Nombre'
+                        
                         ranking_prov = df_prov_exp.groupby('Proveedor_Unico').agg(
                             Inversion_Total=('Inversion_Estimada', 'sum'),
-                            Cant_Articulos=('ID_Producto' if 'ID_Producto' in df_prov_exp.columns else 'Nombre', 'nunique'),
+                            Cant_Articulos=(col_id_prod, 'nunique'),
                             Articulos_Criticos=('Urgencia_%', lambda x: (x >= 100).sum())
                         ).reset_index()
 
