@@ -5123,6 +5123,7 @@ else:
             st.divider()
             
             rol_usuario = st.session_state.get('rol', 'Vendedor')
+            es_admin = (rol_usuario == "Administrador")
             
             for fecha, grupo in df.groupby('Fecha_Entrega'):
                 st.subheader(f"📅 {fecha} ({len(grupo)} entregas)")
@@ -5132,7 +5133,8 @@ else:
                 if key_paradas not in st.session_state:
                     st.session_state[key_paradas] = []
 
-                if rol_usuario == "Administrador":
+                # --- CONFIGURACIÓN Y OPTIMIZACIÓN (SOLO ADMINISTRADOR) ---
+                if es_admin:
                     with st.expander(f"⚙️ Configuración de Ruta y Paradas Intermedias ({fecha})"):
                         c_origen, c_destino = st.columns(2)
                         
@@ -5219,7 +5221,6 @@ else:
                                         link_p = link_parada_custom
                                 else:
                                     coords_p = opciones_parada[sel_parada_p]
-                                    # Intentamos armar o tomar link si existe
                                     link_p = f"https://www.google.com/maps/search/?api=1&query={coords_p}" if coords_p else ""
                                 
                                 if coords_p or link_p:
@@ -5236,7 +5237,7 @@ else:
                                 else:
                                     st.error("No se pudieron determinar las coordenadas de la parada.")
 
-                        # Mostrar paradas agregadas para esta fecha
+                        # Mostrar paradas agregadas para esta fecha (Solo Administrador)
                         if st.session_state[key_paradas]:
                             st.write("**Paradas intermedias cargadas para el día:**")
                             for idx, p_inter in enumerate(st.session_state[key_paradas]):
@@ -5246,13 +5247,13 @@ else:
                                     st.session_state[key_paradas].pop(idx)
                                     st.rerun()
 
-                    # --- BOTÓN DE OPTIMIZACIÓN ---
+                    # --- BOTÓN DE OPTIMIZACIÓN (SOLO ADMIN) ---
                     if st.button(f"🚀 Generar Diagrama Optimizado para {fecha}", key=f"btn_{fecha}"):
                         st.session_state[f"mostrar_diagrama_{fecha}"] = True
                         st.session_state[f"p_partida_{fecha}"] = punto_partida
                         st.session_state[f"p_llegada_{fecha}"] = punto_llegada
 
-                    # Si la bandera es True, mostramos el mapa interactivo unificando Entregas + Paradas Intermedias
+                    # Mostrar diagrama interactivo
                     if st.session_state.get(f"mostrar_diagrama_{fecha}", False):
                         p_partida = st.session_state.get(f"p_partida_{fecha}", punto_partida)
                         p_llegada = st.session_state.get(f"p_llegada_{fecha}", punto_llegada)
@@ -5265,7 +5266,7 @@ else:
                         
                         generar_diagrama_optimizada(df_ruta_completa, p_partida, fecha, punto_destino=p_llegada)
 
-                # --- LISTADO VISUAL DE ENTREGAS Y PARADAS INTERMEDIAS ---
+                # --- LISTADO VISUAL DE ENTREGAS ---
                 st.markdown("#### 📋 Puntos de la Ruta")
                 
                 # Renderizar entregas a clientes
@@ -5284,8 +5285,8 @@ else:
                         
                         st.caption(f"💰 {v['Metodo_Pago']}")
 
-                # Renderizar paradas intermedias cargadas abajo
-                if st.session_state.get(key_paradas):
+                # Renderizar paradas intermedias ÚNICAMENTE si el usuario es Administrador
+                if es_admin and st.session_state.get(key_paradas):
                     for p_int in st.session_state[key_paradas]:
                         with st.container(border=True):
                             c1, c2, c3 = st.columns([2, 2, 1])
