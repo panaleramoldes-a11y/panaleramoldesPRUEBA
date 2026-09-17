@@ -5213,29 +5213,47 @@ else:
                             if not nombre_parada:
                                 st.warning("Por favor ingresá un nombre para la parada.")
                             else:
-                                coords_p = None
+                                lat, lon = None, None
                                 link_p = ""
+                                
                                 if sel_parada_p == "Otro (Link de Maps)":
                                     if link_parada_custom:
-                                        coords_p = extraer_coords_desde_link(link_parada_custom)
                                         link_p = link_parada_custom
+                                        coords_extraidas = extraer_coords_desde_link(link_parada_custom)
+                                        if coords_extraidas:
+                                            lat, lon = coords_extraidas
                                 else:
                                     coords_p = opciones_parada[sel_parada_p]
-                                    link_p = f"https://www.google.com/maps/search/?api=1&query={coords_p}" if coords_p else ""
-                                
-                                if coords_p or link_p:
+                                    if coords_p:
+                                        # Si coords_p es una tupla/lista (lat, lon)
+                                        if isinstance(coords_p, (tuple, list)) and len(coords_p) == 2:
+                                            lat, lon = coords_p[0], coords_p[1]
+                                        # Si coords_p es una cadena tipo "-24.123, -65.123"
+                                        elif isinstance(coords_p, str):
+                                            partes = coords_p.split(',')
+                                            if len(partes) == 2:
+                                                lat, lon = float(partes[0].strip()), float(partes[1].strip())
+                                        
+                                        link_p = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}" if lat and lon else ""
+
+                                if lat is not None and lon is not None:
                                     st.session_state[key_paradas].append({
+                                        "ID_Venta": f"PARADA-{datetime.now().strftime('%M%S')}",
                                         "Cliente": f"📦 RETIRO: {nombre_parada}",
                                         "Direccion_Entrega": f"Parada Intermedia ({sel_parada_p})",
                                         "Link_Maps_Entrega": link_p,
+                                        "Latitud": float(lat),
+                                        "Longitud": float(lon),
                                         "Metodo_Pago": "OPERACIÓN INTERMEDIA",
                                         "Observaciones": "Parada agregada manualmente en la ruta.",
-                                        "Coords": coords_p
+                                        "Forma_Entrega": "Reparto",
+                                        "Fecha_Entrega": fecha,
+                                        "Total": 0
                                     })
-                                    st.success(f"Parada '{nombre_parada}' agregada.")
+                                    st.success(f"Parada '{nombre_parada}' agregada con éxito.")
                                     st.rerun()
                                 else:
-                                    st.error("No se pudieron determinar las coordenadas de la parada.")
+                                    st.error("No se pudieron extraer las coordenadas (Latitud y Longitud) para esta parada.")
 
                         # Mostrar paradas agregadas para esta fecha (Solo Administrador)
                         if st.session_state[key_paradas]:
