@@ -2414,44 +2414,59 @@ else:
                     if st.button("🪄 Ejecutar Auto-clasificación Filtrada", type="secondary", key="btn_run_autoclass"):
                         import re
                         
-                        def clasificar_producto(nombre, rubro=""):
+                        def clasificar_producto(nombre, rubro="", marca=""):
                             nombre_str = str(nombre).upper().strip()
                             rubro_str = str(rubro).upper().strip()
+                            marca_str = str(marca).upper().strip()
                             
                             linea, talle, tamanio_paquete, tipo = None, None, None, None
                             etapa, formato_leche, presentacion = None, None, None
-        
-                            # Verificamos pertenecia estricta de rubro
+                        
+                            # Verificamos pertenencia estricta de rubro
                             rubros_validos_panal = ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
                             rubros_validos_leche = ["LECHE", "LECHES"]
-        
+                        
                             es_rubro_panal = any(r in rubro_str for r in rubros_validos_panal)
                             es_rubro_leche = any(r in rubro_str for r in rubros_validos_leche)
-        
-                            # Si NO pertenece a ninguno de los rubros indicados, retornamos dict vacío/None
+                        
                             if not (es_rubro_panal or es_rubro_leche):
                                 return {
                                     "Linea": None, "Talle": None, "Tamanio_Paquete": None, "Tipo": None,
                                     "Etapa": None, "Formato_Leche": None, "Presentacion": None
                                 }
-        
+                        
                             # --- PAÑALES (Bebé y Adulto) ---
                             if es_rubro_panal:
+                                # 1. Tipo
                                 tipo = "Pants" if ("PANTS" in nombre_str or "PANT" in nombre_str) else "Con Abrojo"
-        
-                                lineas_conocidas = [
-                                    "PREMIUM", "BABYDRY", "SUPERSEC", "BABYSAN", "CLASSIC", 
-                                    "ANATOMICO", "FLEXI COMFORT", "PROTECT SEC", "SUPERAFLEX"
-                                ]
-                                for l in lineas_conocidas:
-                                    if l in nombre_str:
-                                        linea = l.title()
-                                        break
-        
+                        
+                                # 2. Talle
                                 match_talle = re.search(r'\b(PR|RN|XXXG|XXG|XG|JUNIOR|EG|EEG|CH|P|M|G)\b', nombre_str)
                                 if match_talle:
                                     talle = match_talle.group(1)
-        
+                        
+                                # 3. Línea Posicional (Extrae lo que está entre la MARCA y el TALLE)
+                                # Si la marca no está en la columna Marca, intentamos tomar la primera palabra como marca
+                                marca_ref = marca_str if marca_str else nombre_str.split()[0]
+                                
+                                if marca_ref in nombre_str and talle:
+                                    # Buscamos el texto entre la Marca y el Talle
+                                    patron_linea = rf'{re.escape(marca_ref)}\s+(.*?)\s+{re.escape(talle)}'
+                                    match_linea = re.search(patron_linea, nombre_str)
+                                    if match_linea:
+                                        texto_intermedio = match_linea.group(1).strip()
+                                        # Limpiamos palabras que no son de la línea
+                                        texto_intermedio = re.sub(r'\b(PANTS|PANT|ANATOMICO|ANATOMICOS)\b', '', texto_intermedio).strip()
+                                        if texto_intermedio:
+                                            linea = texto_intermedio.title()
+                                        else:
+                                            linea = "Clasica"
+                                    else:
+                                        linea = "Clasica"
+                                else:
+                                    linea = "Clasica"
+                        
+                                # 4. Tamaño de Paquete
                                 match_cant = re.search(r'X(\d{1,3})\b', nombre_str)
                                 if match_cant:
                                     cant = int(match_cant.group(1))
@@ -2463,7 +2478,7 @@ else:
                                         tamanio_paquete = "Pack Ahorro"
                                     elif cant >= 88:
                                         tamanio_paquete = "Pack Mensual"
-        
+                        
                             # --- LECHES ---
                             if es_rubro_leche:
                                 match_etapa = re.search(r'\b(1|2|3|4)\b', nombre_str)
@@ -2473,12 +2488,12 @@ else:
                                     etapa = "Escolar"
                                 else:
                                     etapa = "Común / Toda la familia"
-        
+                        
                                 if any(w in nombre_str for w in ["X200", "X500", "X1LT", "LIQUIDA"]):
                                     formato_leche = "Líquida"
                                 else:
                                     formato_leche = "En Polvo"
-        
+                        
                                 if "X1LT" in nombre_str or "1LT" in nombre_str:
                                     presentacion = "1 Lt"
                                 else:
@@ -2486,7 +2501,7 @@ else:
                                     if match_pres:
                                         val = match_pres.group(1)
                                         presentacion = f"{val} ml" if formato_leche == "Líquida" else ("1.2 kg" if val == "1200" else ("1 kg" if val == "1000" else f"{val} grs"))
-        
+                        
                             return {
                                 "Linea": linea,
                                 "Talle": talle,
@@ -2498,13 +2513,13 @@ else:
                             }
         
                         with st.spinner("Actualizando únicamente rubros PAÑALES, PAÑALES ADULTOS y LECHE..."):
-                            res = db.table("PRODUCTOS").select("ID_Producto, Nombre, Rubro").execute()
+                            res = db.table("PRODUCTOS").select("ID_Producto, Nombre, Rubro, Marca").execute()
                             productos = res.data or []
                             
                             procesados = 0
                             for prod in productos:
                                 id_prod = prod["ID_Producto"]
-                                datos_nuevos = clasificar_producto(prod.get("Nombre", ""), prod.get("Rubro", ""))
+                                datos_nuevos = clasificar_producto(prod.get("Nombre", ""), prod.get("Rubro", ""), prod.get("Marca", ""))
                                 db.table("PRODUCTOS").update(datos_nuevos).eq("ID_Producto", id_prod).execute()
                                 procesados += 1
                             
