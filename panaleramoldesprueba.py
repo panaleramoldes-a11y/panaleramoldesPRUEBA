@@ -2469,6 +2469,7 @@ else:
         
                             # --- LECHES ---
                             if es_rubro_leche:
+                                # 1. Etapa (1, 2, 3, 4, Escolar, Común)
                                 match_etapa = re.search(r'\b(1|2|3|4)\b', nombre_str)
                                 if match_etapa:
                                     etapa = f"Etapa {match_etapa.group(1)}"
@@ -2477,18 +2478,30 @@ else:
                                 else:
                                     etapa = "Común / Toda la familia"
         
-                                if any(w in nombre_str for w in ["X200", "X500", "X1LT", "LIQUIDA"]):
-                                    formato_leche = "Líquida"
-                                else:
-                                    formato_leche = "En Polvo"
+                                # 2. Extraemos el volumen / peso del patrón X(número)
+                                match_pres = re.search(r'X(\d{3,4})\b', nombre_str)
+                                val_num = int(match_pres.group(1)) if match_pres else None
         
+                                # Regla de Formato y Presentación
                                 if "X1LT" in nombre_str or "1LT" in nombre_str:
+                                    formato_leche = "Líquida"
                                     presentacion = "1 Lt"
+                                elif val_num is not None:
+                                    # Si es <= 500 o tiene la palabra LIQUIDA es Líquida (ej: 190ml, 200ml, 500ml)
+                                    if val_num <= 500 or "LIQUIDA" in nombre_str:
+                                        formato_leche = "Líquida"
+                                        presentacion = f"{val_num} ml"
+                                    else:
+                                        formato_leche = "En Polvo"
+                                        if val_num == 1200:
+                                            presentacion = "1.2 kg"
+                                        elif val_num == 1000:
+                                            presentacion = "1 kg"
+                                        else:
+                                            presentacion = f"{val_num} grs"
                                 else:
-                                    match_pres = re.search(r'X(\d{3,4})\b', nombre_str)
-                                    if match_pres:
-                                        val = match_pres.group(1)
-                                        presentacion = f"{val} ml" if formato_leche == "Líquida" else ("1.2 kg" if val == "1200" else ("1 kg" if val == "1000" else f"{val} grs"))
+                                    formato_leche = "Líquida" if "LIQUIDA" in nombre_str else "En Polvo"
+                                    presentacion = None
         
                             return {
                                 "Linea": linea,
