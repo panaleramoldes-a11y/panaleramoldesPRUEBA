@@ -2408,10 +2408,10 @@ else:
             # 🪄 HERRAMIENTA TEMPORAL DE AUTO-CLASIFICACIÓN (SOLO ADMIN)
             # -------------------------------------------------------------
             if st.session_state.get('rol') == "Administrador":
-                with st.expander("🛠️ Herramienta de Mantenimiento BD: Auto-clasificar Atributos"):
-                    st.caption("Analiza el Nombre y Rubro de todos los productos y completa automáticamente: Línea, Talle, Tamaño Paquete, Tipo, Etapa, Formato y Presentación.")
+                with st.expander("🛠️ Herramienta de Mantenimiento BD: Auto-clasificar Atributos (Solo Pañales y Leches)"):
+                    st.caption("Aplica la auto-clasificación ÚNICAMENTE a los productos de los rubros: PAÑALES, PAÑALES ADULTOS y LECHE.")
                     
-                    if st.button("🪄 Auto-clasificar Catálogo Completo", type="secondary", key="btn_run_autoclass"):
+                    if st.button("🪄 Ejecutar Auto-clasificación Filtrada", type="secondary", key="btn_run_autoclass"):
                         import re
                         
                         def clasificar_producto(nombre, rubro=""):
@@ -2421,11 +2421,22 @@ else:
                             linea, talle, tamanio_paquete, tipo = None, None, None, None
                             etapa, formato_leche, presentacion = None, None, None
         
-                            es_leche = "LECHE" in rubro_str or any(w in nombre_str for w in ["NUTRILON", "SANCOR", "NAN", "NIDINA", "NESTUM", "LA LECHERA"])
-                            es_panal = "PAÑAL" in rubro_str or "PANAL" in rubro_str or any(w in nombre_str for w in ["BABYSEC", "HUGGIES", "PAMPERS", "COMODIN", "ESTRELLA", "PANTS", "ANATOMICO"])
+                            # Verificamos pertenecia estricta de rubro
+                            rubros_validos_panal = ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
+                            rubros_validos_leche = ["LECHE", "LECHES"]
         
-                            # --- PAÑALES ---
-                            if es_panal or not es_leche:
+                            es_rubro_panal = any(r in rubro_str for r in rubros_validos_panal)
+                            es_rubro_leche = any(r in rubro_str for r in rubros_validos_leche)
+        
+                            # Si NO pertenece a ninguno de los rubros indicados, retornamos dict vacío/None
+                            if not (es_rubro_panal or es_rubro_leche):
+                                return {
+                                    "Linea": None, "Talle": None, "Tamanio_Paquete": None, "Tipo": None,
+                                    "Etapa": None, "Formato_Leche": None, "Presentacion": None
+                                }
+        
+                            # --- PAÑALES (Bebé y Adulto) ---
+                            if es_rubro_panal:
                                 tipo = "Pants" if ("PANTS" in nombre_str or "PANT" in nombre_str) else "Con Abrojo"
         
                                 lineas_conocidas = [
@@ -2454,7 +2465,7 @@ else:
                                         tamanio_paquete = "Pack Mensual"
         
                             # --- LECHES ---
-                            if es_leche:
+                            if es_rubro_leche:
                                 match_etapa = re.search(r'\b(1|2|3|4)\b', nombre_str)
                                 if match_etapa:
                                     etapa = f"Etapa {match_etapa.group(1)}"
@@ -2486,7 +2497,7 @@ else:
                                 "Presentacion": presentacion
                             }
         
-                        with st.spinner("Procesando y clasificando productos en Supabase..."):
+                        with st.spinner("Actualizando únicamente rubros PAÑALES, PAÑALES ADULTOS y LECHE..."):
                             res = db.table("PRODUCTOS").select("ID_Producto, Nombre, Rubro").execute()
                             productos = res.data or []
                             
@@ -2497,7 +2508,7 @@ else:
                                 db.table("PRODUCTOS").update(datos_nuevos).eq("ID_Producto", id_prod).execute()
                                 procesados += 1
                             
-                            st.success(f"¡Se auto-clasificaron {procesados} productos con éxito!")
+                            st.success(f"¡Se actualizó el catálogo completando solo los 3 rubros seleccionados!")
                             if 'df_prod' in st.session_state:
                                 del st.session_state['df_prod']
                             st.rerun()
