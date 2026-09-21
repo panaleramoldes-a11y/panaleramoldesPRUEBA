@@ -2405,6 +2405,104 @@ else:
             st.subheader("🔍 Buscador de Productos")
             
             # -------------------------------------------------------------
+            # 🪄 HERRAMIENTA TEMPORAL DE AUTO-CLASIFICACIÓN (SOLO ADMIN)
+            # -------------------------------------------------------------
+            if st.session_state.get('rol') == "Administrador":
+                with st.expander("🛠️ Herramienta de Mantenimiento BD: Auto-clasificar Atributos"):
+                    st.caption("Analiza el Nombre y Rubro de todos los productos y completa automáticamente: Línea, Talle, Tamaño Paquete, Tipo, Etapa, Formato y Presentación.")
+                    
+                    if st.button("🪄 Auto-clasificar Catálogo Completo", type="secondary", key="btn_run_autoclass"):
+                        import re
+                        
+                        def clasificar_producto(nombre, rubro=""):
+                            nombre_str = str(nombre).upper().strip()
+                            rubro_str = str(rubro).upper().strip()
+                            
+                            linea, talle, tamanio_paquete, tipo = None, None, None, None
+                            etapa, formato_leche, presentacion = None, None, None
+        
+                            es_leche = "LECHE" in rubro_str or any(w in nombre_str for w in ["NUTRILON", "SANCOR", "NAN", "NIDINA", "NESTUM", "LA LECHERA"])
+                            es_panal = "PAÑAL" in rubro_str or "PANAL" in rubro_str or any(w in nombre_str for w in ["BABYSEC", "HUGGIES", "PAMPERS", "COMODIN", "ESTRELLA", "PANTS", "ANATOMICO"])
+        
+                            # --- PAÑALES ---
+                            if es_panal or not es_leche:
+                                tipo = "Pants" if ("PANTS" in nombre_str or "PANT" in nombre_str) else "Con Abrojo"
+        
+                                lineas_conocidas = [
+                                    "PREMIUM", "BABYDRY", "SUPERSEC", "BABYSAN", "CLASSIC", 
+                                    "ANATOMICO", "FLEXI COMFORT", "PROTECT SEC", "SUPERAFLEX"
+                                ]
+                                for l in lineas_conocidas:
+                                    if l in nombre_str:
+                                        linea = l.title()
+                                        break
+        
+                                match_talle = re.search(r'\b(PR|RN|XXXG|XXG|XG|JUNIOR|EG|EEG|CH|P|M|G)\b', nombre_str)
+                                if match_talle:
+                                    talle = match_talle.group(1)
+        
+                                match_cant = re.search(r'X(\d{1,3})\b', nombre_str)
+                                if match_cant:
+                                    cant = int(match_cant.group(1))
+                                    if cant <= 16:
+                                        tamanio_paquete = "Regular"
+                                    elif 20 <= cant <= 50:
+                                        tamanio_paquete = "Hiperpack"
+                                    elif 52 <= cant <= 80:
+                                        tamanio_paquete = "Pack Ahorro"
+                                    elif cant >= 88:
+                                        tamanio_paquete = "Pack Mensual"
+        
+                            # --- LECHES ---
+                            if es_leche:
+                                match_etapa = re.search(r'\b(1|2|3|4)\b', nombre_str)
+                                if match_etapa:
+                                    etapa = f"Etapa {match_etapa.group(1)}"
+                                elif "ESCOLAR" in nombre_str:
+                                    etapa = "Escolar"
+                                else:
+                                    etapa = "Común / Toda la familia"
+        
+                                if any(w in nombre_str for w in ["X200", "X500", "X1LT", "LIQUIDA"]):
+                                    formato_leche = "Líquida"
+                                else:
+                                    formato_leche = "En Polvo"
+        
+                                if "X1LT" in nombre_str or "1LT" in nombre_str:
+                                    presentacion = "1 Lt"
+                                else:
+                                    match_pres = re.search(r'X(\d{3,4})\b', nombre_str)
+                                    if match_pres:
+                                        val = match_pres.group(1)
+                                        presentacion = f"{val} ml" if formato_leche == "Líquida" else ("1.2 kg" if val == "1200" else ("1 kg" if val == "1000" else f"{val} grs"))
+        
+                            return {
+                                "Linea": linea,
+                                "Talle": talle,
+                                "Tamanio_Paquete": tamanio_paquete,
+                                "Tipo": tipo,
+                                "Etapa": etapa,
+                                "Formato_Leche": formato_leche,
+                                "Presentacion": presentacion
+                            }
+        
+                        with st.spinner("Procesando y clasificando productos en Supabase..."):
+                            res = db.table("PRODUCTOS").select("ID_Producto, Nombre, Rubro").execute()
+                            productos = res.data or []
+                            
+                            procesados = 0
+                            for prod in productos:
+                                id_prod = prod["ID_Producto"]
+                                datos_nuevos = clasificar_producto(prod.get("Nombre", ""), prod.get("Rubro", ""))
+                                db.table("PRODUCTOS").update(datos_nuevos).eq("ID_Producto", id_prod).execute()
+                                procesados += 1
+                            
+                            st.success(f"¡Se auto-clasificaron {procesados} productos con éxito!")
+                            if 'df_prod' in st.session_state:
+                                del st.session_state['df_prod']
+                            st.rerun()
+        
+            # -------------------------------------------------------------
             # 0️⃣ CÁLCULO EN TIEMPO REAL DEL STOCK RESERVADO EN PENDIENTES
             # -------------------------------------------------------------
             reservas_map = {}
