@@ -2519,7 +2519,6 @@ else:
             reservas_map = {}
             try:
                 import json
-                # Traemos solo el Detalle_JSON de los pendientes vigentes
                 res_pend = db.table("VENTAS_PENDIENTES").select("Detalle_JSON").execute().data
                 if res_pend:
                     for pend in res_pend:
@@ -2528,7 +2527,6 @@ else:
                             try:
                                 items = json.loads(raw_detail) if isinstance(raw_detail, str) else raw_detail
                                 for it in items:
-                                    # Soporta 'ID_Producto', 'id_producto' o 'id'
                                     p_id = str(it.get("ID_Producto") or it.get("id_producto") or it.get("id") or "").strip()
                                     cant = float(it.get("cantidad") or it.get("Cantidad") or it.get("cant") or 0)
                                     if p_id and cant > 0:
@@ -2540,11 +2538,8 @@ else:
         
             # --- CONTROLES Y FILTROS RÁPIDOS ---
             c_chk1, c_chk2 = st.columns(2)
-            
-            # 1. Filtro de Stock Disponible > 0 (Tildado por defecto)
             solo_con_stock = c_chk1.checkbox("📦 Solo productos con Stock DISPONIBLE > 0", value=True, key="chk_solo_con_stock")
             
-            # 2. Mostrar Inactivos (Solo disponible para Administradores)
             mostrar_inactivos = False
             if st.session_state.rol == "Administrador":
                 mostrar_inactivos = c_chk2.checkbox("👁️ Mostrar productos INACTIVOS", value=False, key="chk_inactivos")
@@ -2556,13 +2551,35 @@ else:
             )
             
             c1, c2 = st.columns(2)
-            rubros = ["Todos"] + [r for r in st.session_state.df_prod['Rubro'].dropna().unique().tolist() if r]
-            marcas = ["Todos"] + [m for m in st.session_state.df_prod['Marca'].dropna().unique().tolist() if m]
+            df_base = st.session_state.df_prod
+            
+            rubros = ["Todos"] + [r for r in df_base['Rubro'].dropna().unique().tolist() if r]
+            marcas = ["Todos"] + [m for m in df_base['Marca'].dropna().unique().tolist() if m]
             
             filtro_rubro = c1.selectbox("Filtrar por Rubro", rubros, key="filtro_rubro_tab")
             filtro_marca = c2.selectbox("Filtrar por Marca", marcas, key="filtro_marca_tab")
+        
+            # --- FILTROS ESPECÍFICOS / AVANZADOS (Atributos de Pañales y Leches) ---
+            st.markdown("##### ⚙️ Filtros Especiales")
+            fa1, fa2, fa3, fa4 = st.columns(4)
             
-            df_filtrado = st.session_state.df_prod.copy()
+            # 1. Filtro Talle
+            list_talles = ["Todos"] + [t for t in df_base.get('Talle', pd.Series()).dropna().unique().tolist() if str(t).strip()] if 'Talle' in df_base.columns else ["Todos"]
+            filtro_talle = fa1.selectbox("Talle", list_talles, key="f_talle_tab")
+        
+            # 2. Filtro Línea
+            list_lineas = ["Todos"] + [l for l in df_base.get('Linea', pd.Series()).dropna().unique().tolist() if str(l).strip()] if 'Linea' in df_base.columns else ["Todos"]
+            filtro_linea = fa2.selectbox("Línea", list_lineas, key="f_linea_tab")
+        
+            # 3. Filtro Tamaño Paquete / Presentación
+            list_tam_pk = ["Todos"] + [tp for tp in df_base.get('Tamanio_Paquete', pd.Series()).dropna().unique().tolist() if str(tp).strip()] if 'Tamanio_Paquete' in df_base.columns else ["Todos"]
+            filtro_tam_pk = fa3.selectbox("Tamaño Paquete", list_tam_pk, key="f_tam_pk_tab")
+        
+            # 4. Filtro Etapa (Leche) / Tipo (Pañal)
+            list_etapas = ["Todos"] + [e for e in df_base.get('Etapa', pd.Series()).dropna().unique().tolist() if str(e).strip()] if 'Etapa' in df_base.columns else ["Todos"]
+            filtro_etapa = fa4.selectbox("Etapa (Leche)", list_etapas, key="f_etapa_tab")
+            
+            df_filtrado = df_base.copy()
             
             # Calculamos la columna Stock_Disponible en el DataFrame
             if 'Stock_Actual' in df_filtrado.columns and 'ID_Producto' in df_filtrado.columns:
@@ -2572,21 +2589,13 @@ else:
             else:
                 df_filtrado['Stock_Disponible'] = 0
             
-            # -------------------------------------------------------------
-            # 1️⃣ FILTRO DE PRODUCTOS INACTIVOS
-            # -------------------------------------------------------------
+            # --- FILTRADO PROGRESIVO ---
             if 'Estado' in df_filtrado.columns and not mostrar_inactivos:
                 df_filtrado = df_filtrado[df_filtrado['Estado'] != 'INACTIVO']
             
-            # -------------------------------------------------------------
-            # 2️⃣ FILTRO DE STOCK DISPONIBLE (Stock_Disponible > 0)
-            # -------------------------------------------------------------
             if solo_con_stock:
                 df_filtrado = df_filtrado[df_filtrado['Stock_Disponible'] > 0]
             
-            # -------------------------------------------------------------
-            # 3️⃣ FILTROS DE BÚSQUEDA POR TEXTO, RUBRO Y MARCA
-            # -------------------------------------------------------------
             if busqueda_texto:
                 busqueda_texto = busqueda_texto.lower()
                 mask = df_filtrado['Nombre'].str.lower().str.contains(busqueda_texto, na=False) | \
@@ -2597,22 +2606,28 @@ else:
                 df_filtrado = df_filtrado[df_filtrado['Rubro'] == filtro_rubro]
             if filtro_marca != "Todos": 
                 df_filtrado = df_filtrado[df_filtrado['Marca'] == filtro_marca]
+        
+            # Aplicación de los nuevos filtros avanzados
+            if filtro_talle != "Todos" and 'Talle' in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado['Talle'] == filtro_talle]
+            if filtro_linea != "Todos" and 'Linea' in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado['Linea'] == filtro_linea]
+            if filtro_tam_pk != "Todos" and 'Tamanio_Paquete' in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado['Tamanio_Paquete'] == filtro_tam_pk]
+            if filtro_etapa != "Todos" and 'Etapa' in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado['Etapa'] == filtro_etapa]
             
-            # -------------------------------------------------------------
-            # 🔤 ORDENAR ALFABÉTICAMENTE POR NOMBRE
-            # -------------------------------------------------------------
+            # --- ORDENAR ALFABÉTICAMENTE POR NOMBRE ---
             if 'Nombre' in df_filtrado.columns:
                 df_filtrado = df_filtrado.sort_values(by='Nombre', key=lambda col: col.str.lower(), ascending=True)
             
-            # Guardamos una referencia para el generador antes de recortar columnas por rol
             df_para_wsp = df_filtrado.copy()
             
             # Ajuste de columnas visibles según el rol
             if st.session_state.rol != "Administrador":
-                cols_vendedor = ['Nombre', 'Precio_1', 'Precio_2', 'Precio_3']
+                cols_vendedor = ['Nombre', 'Precio_1', 'Precio_2', 'Precio_3', 'Talle', 'Linea', 'Etapa']
                 df_filtrado = df_filtrado[[c for c in cols_vendedor if c in df_filtrado.columns]]
             else:
-                # Para administradores eliminamos las columnas auxiliares internas
                 df_filtrado = df_filtrado.drop(columns=['Stock_Reservado', 'Stock_Disponible'], errors='ignore')
             
             st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
