@@ -2422,11 +2422,13 @@ else:
                             linea, talle, tamanio_paquete, tipo = None, None, None, None
                             etapa, formato_leche, presentacion = None, None, None
         
+                            # Verificamos pertenencia estricta de rubro
                             rubros_validos_panal = ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
                             rubros_validos_leche = ["LECHE", "LECHES"]
-        
-                            es_rubro_panal = any(r in rubro_str for r in rubros_validos_panal)
-                            es_rubro_leche = any(r in rubro_str for r in rubros_validos_leche)
+                            
+                            es_rubro_panal = any(rubro_str == r for r in rubros_validos_panal)
+                            # Excluimos expresamente "SACALECHES" o "SACALECHE"
+                            es_rubro_leche = any(rubro_str == r for r in rubros_validos_leche) and "SACALECHE" not in rubro_str
         
                             if not (es_rubro_panal or es_rubro_leche):
                                 return {
