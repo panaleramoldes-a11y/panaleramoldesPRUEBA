@@ -2489,8 +2489,12 @@ else:
                                     formato_leche = "Líquida"
                                     presentacion = "1 Lt"
                                 elif val_num is not None:
-                                    # Si es <= 500 o tiene la palabra LIQUIDA es Líquida (ej: 190ml, 200ml, 500ml)
-                                    if val_num <= 500 or "LIQUIDA" in nombre_str:
+                                    # Caso especial Nestum / Cereales x125
+                                    if val_num == 125:
+                                        formato_leche = "En Polvo"
+                                        presentacion = "125 grs"
+                                    # Presentaciones líquidas válidas (190ml, 200ml, 500ml)
+                                    elif val_num in [190, 200, 500] or "LIQUIDA" in nombre_str:
                                         formato_leche = "Líquida"
                                         presentacion = f"{val_num} ml"
                                     else:
@@ -2499,8 +2503,11 @@ else:
                                             presentacion = "1.2 kg"
                                         elif val_num == 1000:
                                             presentacion = "1 kg"
-                                        else:
+                                        elif val_num in [400, 800]:
                                             presentacion = f"{val_num} grs"
+                                        else:
+                                            # Filtra presentaciones no estandarizadas (100, 225, 350, 375, etc.)
+                                            presentacion = f"{val_num} grs" if val_num > 100 else None
                                 else:
                                     formato_leche = "Líquida" if "LIQUIDA" in nombre_str else "En Polvo"
                                     presentacion = None
