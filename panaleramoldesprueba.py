@@ -4138,15 +4138,38 @@ else:
             )
             
             if col_exp2.button("💬 Generar Resumen para WhatsApp", key="btn_wsp_p1"):
-                seleccionados = df_editado[df_editado['Pedir'] == True]
+                seleccionados = df_editado[df_editado['Pedir'] == True].copy()
                 
                 if seleccionados.empty:
                     st.warning("⚠️ No has tildado ningún producto en la columna '📱 Pedir'. Seleccioná al menos uno en la tabla.")
                 else:
+                    # --- ORDENAMIENTO PERSONALIZADO POR TALLE ---
+                    orden_talles = ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "Junior", "CH", "EG", "EEG"]
+                    
+                    # Verificamos si la columna 'Talle' está presente en el DataFrame
+                    if 'Talle' in df_f.columns:
+                        # Vinculamos los talles de df_f a seleccionados usando el índice
+                        seleccionados['Talle'] = df_f.loc[seleccionados.index, 'Talle'].astype(str).str.strip()
+                        
+                        # Convertimos la columna a tipo Categorical con el orden personalizado definido
+                        seleccionados['Talle_Cat'] = pd.Categorical(
+                            seleccionados['Talle'], 
+                            categories=orden_talles, 
+                            ordered=True
+                        )
+                        
+                        # Ordenamos por la categoría de Talle y secundariamente por Nombre
+                        seleccionados = seleccionados.sort_values(by=['Talle_Cat', 'Nombre'], na_position='last')
+        
+                    # --- CONSTRUCCIÓN DEL MENSAJE DE WHATSAPP ---
                     mensaje = "🛒 *Pedido Sugerido (Faltantes a Mínimo):*\n"
                     for _, item in seleccionados.iterrows():
                         cant_pedir = int(item['Faltante_Min']) if item['Faltante_Min'] > 0 else 1
-                        mensaje += f"- {item['Nombre']}: Faltan {cant_pedir}\n"
+                        
+                        # Si el producto tiene talle, se lo agregamos a la línea para mayor claridad
+                        talle_str = f" (Talle {item['Talle']})" if 'Talle' in item and pd.notna(item['Talle']) and item['Talle'] not in ["", "None", "nan"] else ""
+                        
+                        mensaje += f"- {item['Nombre']}{talle_str}: Faltan {cant_pedir}\n"
                     
                     st.text_area("Copia este mensaje para WhatsApp:", value=mensaje, height=200, key="txt_wsp_p1")
         
