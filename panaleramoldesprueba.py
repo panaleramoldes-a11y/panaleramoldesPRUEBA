@@ -4008,16 +4008,53 @@ else:
                 key="busqueda_stock"
             )
             
+            # --- FILTROS PRINCIPALES ---
             c1, c2, c3 = st.columns(3)
             filtro_rubro = c1.selectbox("Filtrar por Rubro", rubros, key="filtro_rubro_stock")
             filtro_marca = c2.selectbox("Filtrar por Marca", marcas, key="filtro_marca_stock")
             filtro_prov = c3.selectbox("Filtrar por Proveedor", provs, key="filtro_prov_stock")
             
+            # --- DETECCIÓN DE RUBRO PARA FILTROS DINÁMICOS ---
+            rubro_sel_upper = str(filtro_rubro).upper().strip()
+            es_rubro_panal = rubro_sel_upper in ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
+            es_rubro_leche = rubro_sel_upper in ["LECHE", "LECHES"] and "SACALECHE" not in rubro_sel_upper
+        
+            # Opciones dinámicas extraídas del DataFrame
+            filtro_linea, filtro_talle, filtro_tam_pk, filtro_tipo = "Todos", "Todos", "Todos", "Todos"
+            filtro_etapa, filtro_formato, filtro_pres = "Todos", "Todos", "Todos"
+        
+            if es_rubro_panal:
+                c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+                
+                # Obtener valores únicos para pañales
+                opts_lineas = ["Todos"] + sorted([str(x).strip().title() for x in df_prod['Linea'].dropna().unique() if str(x).strip()]) if 'Linea' in df_prod.columns else ["Todos"]
+                opts_talles = ["Todos"] + sorted([str(x).strip() for x in df_prod['Talle'].dropna().unique() if str(x).strip()]) if 'Talle' in df_prod.columns else ["Todos"]
+                opts_tam = ["Todos"] + sorted([str(x).strip() for x in df_prod['Tamanio_Paquete'].dropna().unique() if str(x).strip()]) if 'Tamanio_Paquete' in df_prod.columns else ["Todos"]
+                opts_tipo = ["Todos"] + sorted([str(x).strip() for x in df_prod['Tipo'].dropna().unique() if str(x).strip()]) if 'Tipo' in df_prod.columns else ["Todos"]
+                
+                filtro_linea = c_p1.selectbox("Filtrar por Línea", opts_lineas, key="filtro_linea_stock")
+                filtro_talle = c_p2.selectbox("Filtrar por Talle", opts_talles, key="filtro_talle_stock")
+                filtro_tam_pk = c_p3.selectbox("Filtrar por Tamanio Paquete", opts_tam, key="filtro_tam_stock")
+                filtro_tipo = c_p4.selectbox("Filtrar por Tipo", opts_tipo, key="filtro_tipo_stock")
+        
+            elif es_rubro_leche:
+                c_l1, c_l2, c_l3 = st.columns(3)
+                
+                # Obtener valores únicos para leches
+                opts_etapas = ["Todos"] + sorted([str(x).strip() for x in df_prod['Etapa'].dropna().unique() if str(x).strip()]) if 'Etapa' in df_prod.columns else ["Todos"]
+                opts_formatos = ["Todos"] + sorted([str(x).strip() for x in df_prod['Formato_Leche'].dropna().unique() if str(x).strip()]) if 'Formato_Leche' in df_prod.columns else ["Todos"]
+                opts_pres = ["Todos"] + sorted([str(x).strip() for x in df_prod['Presentacion'].dropna().unique() if str(x).strip()]) if 'Presentacion' in df_prod.columns else ["Todos"]
+                
+                filtro_etapa = c_l1.selectbox("Filtrar por Etapa", opts_etapas, key="filtro_etapa_stock")
+                filtro_formato = c_l2.selectbox("Filtrar por Formato", opts_formatos, key="filtro_formato_stock")
+                filtro_pres = c_l3.selectbox("Filtrar por Presentación", opts_pres, key="filtro_pres_stock")
+        
+            # --- APLICACIÓN DE FILTROS AL DATAFRAME ---
             df_f = df_prod.copy()
             
             if 'Estado' in df_f.columns and not mostrar_inactivos:
                 df_f = df_f[df_f['Estado'] != 'INACTIVO']
-    
+        
             if busqueda_texto:
                 busqueda_texto = busqueda_texto.lower()
                 mask = df_f['Nombre'].astype(str).str.lower().str.contains(busqueda_texto, na=False) | \
@@ -4030,26 +4067,47 @@ else:
             if filtro_marca != "Todos":
                 df_f = df_f[df_f['Marca'] == filtro_marca]
                 
-            # --- FILTRADO POR PROVEEDOR (Soporta múltiples proveedores por celda) ---
+            # --- FILTRADO POR PROVEEDOR ---
             if filtro_prov != "Todos":
                 if 'ID_Proveedor' in df_f.columns:
                     df_f = df_f[df_f['ID_Proveedor'].astype(str).str.contains(filtro_prov, na=False, regex=False)]
                 elif 'Proveedor' in df_f.columns:
                     df_f = df_f[df_f['Proveedor'].astype(str).str.contains(filtro_prov, na=False, regex=False)]
-    
+        
+            # --- FILTROS ESPECÍFICOS PAÑALES ---
+            if es_rubro_panal:
+                if filtro_linea != "Todos" and 'Linea' in df_f.columns:
+                    df_f = df_f[df_f['Linea'].astype(str).str.title() == filtro_linea]
+                if filtro_talle != "Todos" and 'Talle' in df_f.columns:
+                    df_f = df_f[df_f['Talle'].astype(str) == filtro_talle]
+                if filtro_tam_pk != "Todos" and 'Tamanio_Paquete' in df_f.columns:
+                    df_f = df_f[df_f['Tamanio_Paquete'].astype(str) == filtro_tam_pk]
+                if filtro_tipo != "Todos" and 'Tipo' in df_f.columns:
+                    df_f = df_f[df_f['Tipo'].astype(str) == filtro_tipo]
+        
+            # --- FILTROS ESPECÍFICOS LECHES ---
+            if es_rubro_leche:
+                if filtro_etapa != "Todos" and 'Etapa' in df_f.columns:
+                    df_f = df_f[df_f['Etapa'].astype(str) == filtro_etapa]
+                if filtro_formato != "Todos" and 'Formato_Leche' in df_f.columns:
+                    df_f = df_f[df_f['Formato_Leche'].astype(str) == filtro_formato]
+                if filtro_pres != "Todos" and 'Presentacion' in df_f.columns:
+                    df_f = df_f[df_f['Presentacion'].astype(str) == filtro_pres]
+        
+            # --- PREPARACIÓN Y CÁLCULOS DE STOCK ---
             df_f['Stock_Actual'] = pd.to_numeric(df_f['Stock_Actual'], errors='coerce').fillna(0)
             df_f['Stock_Min'] = pd.to_numeric(df_f['Stock_Min'], errors='coerce').fillna(0)
             df_f['Stock_Max'] = pd.to_numeric(df_f['Stock_Max'], errors='coerce').fillna(0)
-    
+        
             df_f['Faltante_Min'] = (df_f['Stock_Min'] - df_f['Stock_Actual']).clip(lower=0)
             df_f['Faltante_Max'] = (df_f['Stock_Max'] - df_f['Stock_Actual']).clip(lower=0)
             
             df_f['Pedir'] = False
             cols_mostrar = ['Pedir', 'Nombre', 'Stock_Actual', 'Stock_Min', 'Stock_Max', 'Faltante_Min', 'Faltante_Max']
             cols_presentes = [c for c in cols_mostrar if c in df_f.columns]
-    
+        
             st.caption("💡 Tildá únicamente los artículos que querés incluir en el mensaje de WhatsApp.")
-    
+        
             df_editado = st.data_editor(
                 df_f[cols_presentes],
                 column_config={
@@ -4064,7 +4122,7 @@ else:
                 use_container_width=True,
                 key="editor_tabla_stock"
             )
-    
+        
             col_exp1, col_exp2 = st.columns(2)
             
             import io
@@ -4091,7 +4149,7 @@ else:
                         mensaje += f"- {item['Nombre']}: Faltan {cant_pedir}\n"
                     
                     st.text_area("Copia este mensaje para WhatsApp:", value=mensaje, height=200, key="txt_wsp_p1")
-    
+        
             st.divider()
             if st.button("🔄 RECALCULAR STOCK MÍNIMO/MÁXIMO", key="btn_recalc_p1"):
                 ids_a_recalcular = df_f['ID_Producto'].astype(str).tolist() if 'ID_Producto' in df_f.columns else []
