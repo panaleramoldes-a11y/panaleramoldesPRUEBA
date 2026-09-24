@@ -4488,7 +4488,7 @@ else:
             st.subheader("📊 Tablero de Inteligencia para Decisiones de Compra")
             st.caption("Analizá de forma rápida y visual los faltantes, el impacto en la inversión y la urgencia de reponer.")
             
-            # Tomar ranking si se procesó en pestaña 2 o armar copia limpia de df_prod
+            # 1. Tomar ranking si se procesó en pestaña 2 o armar copia limpia de df_prod
             if 'df_ranking' in locals() and not df_ranking.empty:
                 df_dash = df_ranking.copy()
             else:
@@ -4497,22 +4497,22 @@ else:
                     df_dash = df_dash[df_dash['Estado'] != 'INACTIVO']
                 if 'Es_Stockeable' in df_dash.columns:
                     df_dash = df_dash[df_dash['Es_Stockeable'] == True]
-
+        
                 df_dash['Stock_Actual'] = pd.to_numeric(df_dash.get('Stock_Actual', 0), errors='coerce').fillna(0)
                 df_dash['Stock_Min'] = pd.to_numeric(df_dash.get('Stock_Min', 0), errors='coerce').fillna(0)
                 df_dash['Faltante_Min'] = (df_dash['Stock_Min'] - df_dash['Stock_Actual']).clip(lower=0)
                 
                 df_dash['Categoria_ABC'] = "🟡 General"
                 df_dash['Score_Comercial'] = 0.0
-
+        
                 def calc_urg_dash(row):
                     if row['Stock_Min'] > 0 and row['Faltante_Min'] > 0:
                         return (row['Faltante_Min'] / row['Stock_Min']) * 100
                     return 0.0
-
+        
                 df_dash['Urgencia_%'] = df_dash.apply(calc_urg_dash, axis=1)
-
-            # Asegurar columna de Precio_Costo_Unitario
+        
+            # 2. Asegurar columna de Precio_Costo_Unitario
             if 'Precio_Costo_Unitario' not in df_dash.columns:
                 if 'Precio_Costo' in df_dash.columns:
                     df_dash['Precio_Costo_Unitario'] = pd.to_numeric(df_dash['Precio_Costo'], errors='coerce').fillna(0)
@@ -4520,69 +4520,105 @@ else:
                     df_dash['Precio_Costo_Unitario'] = 0.0
             else:
                 df_dash['Precio_Costo_Unitario'] = pd.to_numeric(df_dash['Precio_Costo_Unitario'], errors='coerce').fillna(0)
-
+        
             df_dash['Inversion_Estimada'] = df_dash['Faltante_Min'] * df_dash['Precio_Costo_Unitario']
-
-            # --- FILTROS INTERACTIVOS DEL DASHBOARD ---
-            st.markdown("##### 🎛️ Filtros Rápidos de Decisión")
-            f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns(5)
-
-            ft_rubro = f_col1.selectbox("Rubro", rubros, key="dash_rubro")
-            ft_marca = f_col2.selectbox("Marca", marcas, key="dash_marca")
-            ft_prov = f_col3.selectbox("Proveedor", provs, key="dash_prov")
+        
+            # --- FILTROS INTERACTIVOS Y OPCIONES DE ORDEN ---
+            st.markdown("##### 🎛️ Filtros Rápidos y Criterios de Ordenamiento")
+            
+            # Fila 1 de Filtros
+            f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+            ft_rubro = f_col1.selectbox("Rubro", rubros if 'rubros' in locals() else ["Todos"], key="dash_rubro")
+            ft_subrubro = f_col2.selectbox("Subrubro", subrubros if 'subrubros' in locals() else ["Todos"], key="dash_subrubro")
+            ft_linea = f_col3.selectbox("Línea", lineas if 'lineas' in locals() else ["Todas"], key="dash_linea")
+            ft_marca = f_col4.selectbox("Marca", marcas if 'marcas' in locals() else ["Todas"], key="dash_marca")
+        
+            # Fila 2 de Filtros
+            f_col5, f_col6, f_col7, f_col8 = st.columns(4)
+            ft_prov = f_col5.selectbox("Proveedor", provs if 'provs' in locals() else ["Todos"], key="dash_prov")
             
             cats_abc_list = ["Todas"] + [c for c in df_dash['Categoria_ABC'].dropna().unique().tolist() if c] if 'Categoria_ABC' in df_dash.columns else ["Todas"]
-            ft_cat = f_col4.selectbox("Categoría ABC", cats_abc_list, key="dash_cat")
-
-            min_urgencia = f_col5.slider("% Urgencia Mínima", min_value=0, max_value=100, value=1, step=5, key="dash_urg_slider")
-
-            # Aplicar Filtros
+            ft_cat = f_col6.selectbox("Categoría ABC", cats_abc_list, key="dash_cat")
+            
+            min_urgencia = f_col7.slider("% Urgencia Mínima", min_value=0, max_value=100, value=1, step=5, key="dash_urg_slider")
+            search_q = f_col8.text_input("🔍 Buscar (ID / Nombre)", "", key="dash_search_q")
+        
+            # Fila 3: Criterios de Ordenamiento
+            o_col1, o_col2 = st.columns([3, 1])
+            opciones_orden = {
+                'Urgencia (%)': 'Urgencia_%',
+                'Inversión Estimada ($)': 'Inversion_Estimada',
+                'Score Comercial': 'Score_Comercial',
+                'Faltante Unidades': 'Faltante_Min',
+                'Nombre': 'Nombre'
+            }
+            crit_orden_label = o_col1.selectbox("Ordenar por", list(opciones_orden.keys()), index=0, key="dash_orden_crit")
+            crit_orden_col = opciones_orden[crit_orden_label]
+            orden_asc = o_col2.radio("Orden", ["Descendente ⬇️", "Ascendente ⬆️"], index=0, key="dash_orden_dir") == "Ascendente ⬆️"
+        
+            # --- APLICAR FILTROS Y LOGICA ---
             df_vis = df_dash.copy()
-
-            if ft_rubro != "Todos":
+        
+            if ft_rubro != "Todos" and 'Rubro' in df_vis.columns:
                 df_vis = df_vis[df_vis['Rubro'] == ft_rubro]
-            if ft_marca != "Todos":
+            if ft_subrubro != "Todos" and 'Subrubro' in df_vis.columns:
+                df_vis = df_vis[df_vis['Subrubro'] == ft_subrubro]
+            if ft_linea != "Todas" and 'Linea' in df_vis.columns:
+                df_vis = df_vis[df_vis['Linea'] == ft_linea]
+            if ft_marca != "Todas" and 'Marca' in df_vis.columns:
                 df_vis = df_vis[df_vis['Marca'] == ft_marca]
-
-            # --- FILTRADO POR PROVEEDOR (Soporta múltiples proveedores por celda) ---
+        
+            # Filtrado por Proveedor (Multivalor)
             if ft_prov != "Todos":
                 if 'ID_Proveedor' in df_vis.columns:
                     df_vis = df_vis[df_vis['ID_Proveedor'].astype(str).str.contains(ft_prov, na=False, regex=False)]
                 elif 'Proveedor' in df_vis.columns:
                     df_vis = df_vis[df_vis['Proveedor'].astype(str).str.contains(ft_prov, na=False, regex=False)]
-
-            if ft_cat != "Todas":
+        
+            if ft_cat != "Todas" and 'Categoria_ABC' in df_vis.columns:
                 df_vis = df_vis[df_vis['Categoria_ABC'] == ft_cat]
-
-            df_vis = df_vis[df_vis['Urgencia_%'] >= min_urgencia]
-
+        
+            if 'Urgencia_%' in df_vis.columns:
+                df_vis = df_vis[df_vis['Urgencia_%'] >= min_urgencia]
+        
+            # Filtro de búsqueda por texto (ID / Nombre)
+            if search_q.strip():
+                q = search_q.strip().lower()
+                cond_id = df_vis['ID_Producto'].astype(str).str.lower().str.contains(q) if 'ID_Producto' in df_vis.columns else pd.Series(False, index=df_vis.index)
+                cond_nom = df_vis['Nombre'].astype(str).str.lower().str.contains(q) if 'Nombre' in df_vis.columns else pd.Series(False, index=df_vis.index)
+                df_vis = df_vis[cond_id | cond_nom]
+        
+            # Aplicar Ordenamiento
+            if crit_orden_col in df_vis.columns:
+                df_vis = df_vis.sort_values(by=crit_orden_col, ascending=orden_asc)
+        
             st.divider()
-
+        
             if df_vis.empty:
-                st.info("🟢 No hay productos con urgencia mayor o igual al filtro seleccionado.")
+                st.info("🟢 No hay productos que cumplan con los filtros seleccionados.")
             else:
                 # --- METRICAS CLAVE / KPIS ---
                 kpi_inversion = float(df_vis['Inversion_Estimada'].sum())
                 kpi_cant_prods = len(df_vis)
-                kpi_criticos = len(df_vis[df_vis['Urgencia_%'] >= 100])
-                kpi_cat_a = len(df_vis[df_vis['Categoria_ABC'].str.contains('Categoría A', na=False)])
-
+                kpi_criticos = len(df_vis[df_vis['Urgencia_%'] >= 100]) if 'Urgencia_%' in df_vis.columns else 0
+                kpi_cat_a = len(df_vis[df_vis['Categoria_ABC'].str.contains('Categoría A', na=False)]) if 'Categoria_ABC' in df_vis.columns else 0
+        
                 k1, k2, k3, k4 = st.columns(4)
                 k1.metric("💵 Inversión Est. Faltantes", f"${kpi_inversion:,.2f}")
                 k2.metric("📦 Artículos a Reponer", f"{kpi_cant_prods}")
                 k3.metric("🚨 Quiebre Total (Urg >= 100%)", f"{kpi_criticos}")
                 k4.metric("⭐ Artículos Categoría A", f"{kpi_cat_a}")
-
+        
                 st.divider()
-
+        
                 # --- GRAFICOS INTERACTIVOS ---
                 import plotly.express as px
-
+        
                 g_col1, g_col2 = st.columns(2)
-
+        
                 with g_col1:
                     st.subheader("🏭 Faltantes por Marca (Inversión Est.)")
-                    if 'Marca' in df_vis.columns:
+                    if 'Marca' in df_vis.columns and not df_vis.empty:
                         top_marcas_dash = df_vis.groupby('Marca')['Inversion_Estimada'].sum().reset_index()
                         top_marcas_dash = top_marcas_dash.sort_values(by='Inversion_Estimada', ascending=True).tail(10)
                         
@@ -4592,29 +4628,28 @@ else:
                         )
                         fig_m.update_layout(xaxis_title="Monto Requerido ($)", yaxis_title="")
                         st.plotly_chart(fig_m, use_container_width=True)
-
+        
                 with g_col2:
                     st.subheader("🎯 Reposición por Categoría ABC")
-                    if 'Categoria_ABC' in df_vis.columns:
+                    if 'Categoria_ABC' in df_vis.columns and not df_vis.empty:
                         abc_dash = df_vis.groupby('Categoria_ABC')['Inversion_Estimada'].sum().reset_index()
                         fig_abc_p = px.pie(
                             abc_dash, names='Categoria_ABC', values='Inversion_Estimada',
                             hole=0.4, color_discrete_sequence=['#2ECC71', '#F1C40F', '#E74C3C']
                         )
                         st.plotly_chart(fig_abc_p, use_container_width=True)
-
+        
                 st.divider()
-
-                # --- NUEVA SECCIÓN: RANKING Y VOLUMEN DE COMPRA POR PROVEEDOR ---
+        
+                # --- RANKING Y VOLUMEN DE COMPRA POR PROVEEDOR ---
                 st.subheader("🚚 Oportunidades y Volumen de Compra por Proveedor")
                 st.caption("Muestra la inversión total potencial que podrías realizar a cada proveedor sumando todos los artículos faltantes que pueden proveerte.")
-
+        
                 col_prov_dash = 'ID_Proveedor' if 'ID_Proveedor' in df_vis.columns else ('Proveedor' if 'Proveedor' in df_vis.columns else None)
                 
                 if col_prov_dash:
                     df_prov_exp = df_vis.copy()
                     
-                    # Función segura para extraer lista de proveedores sin importar el tipo de dato original
                     def procesar_proveedores(val):
                         if pd.isna(val) or val is None:
                             return []
@@ -4625,13 +4660,12 @@ else:
                         if not txt or txt.lower() == "none":
                             return []
                         return [p.strip() for p in txt.split(',') if p.strip() and p.strip().lower() != "none"]
-
+        
                     df_prov_exp['Proveedor_Unico'] = df_prov_exp[col_prov_dash].apply(procesar_proveedores)
                     df_prov_exp = df_prov_exp.explode('Proveedor_Unico')
                     df_prov_exp = df_prov_exp[df_prov_exp['Proveedor_Unico'].notna() & (df_prov_exp['Proveedor_Unico'] != '')]
-
+        
                     if not df_prov_exp.empty:
-                        # Agrupación por Proveedor
                         col_id_prod = 'ID_Producto' if 'ID_Producto' in df_prov_exp.columns else 'Nombre'
                         
                         ranking_prov = df_prov_exp.groupby('Proveedor_Unico').agg(
@@ -4639,11 +4673,11 @@ else:
                             Cant_Articulos=(col_id_prod, 'nunique'),
                             Articulos_Criticos=('Urgencia_%', lambda x: (x >= 100).sum())
                         ).reset_index()
-
+        
                         ranking_prov = ranking_prov.sort_values(by='Inversion_Total', ascending=False)
-
+        
                         col_g_prov, col_t_prov = st.columns([1.2, 1])
-
+        
                         with col_g_prov:
                             fig_p = px.bar(
                                 ranking_prov.head(10).sort_values(by='Inversion_Total', ascending=True),
@@ -4656,7 +4690,7 @@ else:
                             )
                             fig_p.update_layout(xaxis_title="Inversión Potencial ($)", yaxis_title="Proveedor")
                             st.plotly_chart(fig_p, use_container_width=True)
-
+        
                         with col_t_prov:
                             st.markdown("**Ranking Completo de Proveedores**")
                             st.dataframe(
@@ -4675,9 +4709,9 @@ else:
                             )
                     else:
                         st.info("No hay proveedores asignados a los productos filtrados.")
-
+        
                 st.divider()
-
+        
                 # --- MATRIZ DE URGENCIA VS SCORE ---
                 st.subheader("📌 Matriz de Decisión: Score Comercial vs % Urgencia")
                 fig_scatter = px.scatter(
@@ -4685,8 +4719,8 @@ else:
                     x='Score_Comercial', 
                     y='Urgencia_%',
                     size='Faltante_Min', 
-                    color='Categoria_ABC',
-                    hover_name='Nombre',
+                    color='Categoria_ABC' if 'Categoria_ABC' in df_vis.columns else None,
+                    hover_name='Nombre' if 'Nombre' in df_vis.columns else None,
                     labels={'Score_Comercial': 'Relevancia Comercial (Score)', 'Urgencia_%': 'Urgencia (%)'},
                     color_discrete_map={
                         "🟢 Categoría A": "#2ECC71",
@@ -4695,10 +4729,14 @@ else:
                     }
                 )
                 st.plotly_chart(fig_scatter, use_container_width=True)
-
-                # --- TABLA RESUMIDA PARA COMPRAS DIRECTAS ---
+        
+                # --- TABLA RESUMIDA PARA GESTIÓN DIRECTA ---
                 st.subheader("📋 Resumen para Gestión Directa de Pedido")
-                cols_finales = ['Categoria_ABC', 'Marca', 'Nombre', 'Stock_Actual', 'Stock_Min', 'Faltante_Min', 'Precio_Costo_Unitario', 'Inversion_Estimada', 'Urgencia_%']
+                cols_finales = [
+                    'ID_Producto', 'Categoria_ABC', 'Rubro', 'Marca', 'Nombre', 
+                    'Stock_Actual', 'Stock_Min', 'Faltante_Min', 
+                    'Precio_Costo_Unitario', 'Inversion_Estimada', 'Urgencia_%', 'Score_Comercial'
+                ]
                 cols_existentes_tabla = [c for c in cols_finales if c in df_vis.columns]
                 
                 df_tabla_dash = df_vis[cols_existentes_tabla]
@@ -4710,10 +4748,13 @@ else:
                         "Faltante_Min": "{:.0f}",
                         "Precio_Costo_Unitario": "${:,.2f}",
                         "Inversion_Estimada": "${:,.2f}",
-                        "Urgencia_%": "{:.0f}%"
+                        "Urgencia_%": "{:.0f}%",
+                        "Score_Comercial": "{:.2f}"
                     }, na_rep="-"),
-                    use_container_width=True, hide_index=True
+                    use_container_width=True, 
+                    hide_index=True
                 )
+        
     # =====================================================================
     # MODULO: 🚚 PROVEEDORES
     # =====================================================================
