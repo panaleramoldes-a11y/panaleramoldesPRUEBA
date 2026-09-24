@@ -4488,29 +4488,38 @@ else:
             st.subheader("📊 Tablero de Inteligencia para Decisiones de Compra")
             st.caption("Analizá de forma rápida y visual los faltantes, el impacto en la inversión y la urgencia de reponer.")
             
-            # Tomar ranking si se procesó en pestaña 2 o armar copia limpia de df_prod
-            if 'df_ranking' in locals() and not df_ranking.empty:
-                df_dash = df_ranking.copy()
-            else:
-                df_dash = df_prod.copy()
-                if 'Estado' in df_dash.columns:
-                    df_dash = df_dash[df_dash['Estado'] != 'INACTIVO']
-                if 'Es_Stockeable' in df_dash.columns:
-                    df_dash = df_dash[df_dash['Es_Stockeable'] == True]
+            # --- BASE DE DATOS INDEPENDIENTE ---
+            # Usamos df_prod directamente para no heredar filtros de la Pestaña 2
+            df_dash = df_prod.copy()
+            
+            if 'Estado' in df_dash.columns:
+                df_dash = df_dash[df_dash['Estado'] != 'INACTIVO']
+            if 'Es_Stockeable' in df_dash.columns:
+                df_dash = df_dash[df_dash['Es_Stockeable'] == True]
 
-                df_dash['Stock_Actual'] = pd.to_numeric(df_dash.get('Stock_Actual', 0), errors='coerce').fillna(0)
-                df_dash['Stock_Min'] = pd.to_numeric(df_dash.get('Stock_Min', 0), errors='coerce').fillna(0)
-                df_dash['Faltante_Min'] = (df_dash['Stock_Min'] - df_dash['Stock_Actual']).clip(lower=0)
-                
+            df_dash['Stock_Actual'] = pd.to_numeric(df_dash.get('Stock_Actual', 0), errors='coerce').fillna(0)
+            df_dash['Stock_Min'] = pd.to_numeric(df_dash.get('Stock_Min', 0), errors='coerce').fillna(0)
+            df_dash['Faltante_Min'] = (df_dash['Stock_Min'] - df_dash['Stock_Actual']).clip(lower=0)
+            
+            # Recuperar o calcular Categoria_ABC y Score_Comercial si existen
+            if 'df_ranking' in locals() and not df_ranking.empty and 'Categoria_ABC' in df_ranking.columns:
+                # Mapear Categoria_ABC y Score desde df_ranking por ID_Producto / Nombre sin filtrar las filas
+                col_key = 'ID_Producto' if 'ID_Producto' in df_dash.columns else 'Nombre'
+                if col_key in df_ranking.columns:
+                    map_abc = df_ranking.set_index(col_key)['Categoria_ABC'].to_dict()
+                    map_score = df_ranking.set_index(col_key)['Score_Comercial'].to_dict() if 'Score_Comercial' in df_ranking.columns else {}
+                    df_dash['Categoria_ABC'] = df_dash[col_key].map(map_abc).fillna("🟡 General")
+                    df_dash['Score_Comercial'] = df_dash[col_key].map(map_score).fillna(0.0)
+            else:
                 df_dash['Categoria_ABC'] = "🟡 General"
                 df_dash['Score_Comercial'] = 0.0
 
-                def calc_urg_dash(row):
-                    if row['Stock_Min'] > 0 and row['Faltante_Min'] > 0:
-                        return (row['Faltante_Min'] / row['Stock_Min']) * 100
-                    return 0.0
+            def calc_urg_dash(row):
+                if row['Stock_Min'] > 0 and row['Faltante_Min'] > 0:
+                    return (row['Faltante_Min'] / row['Stock_Min']) * 100
+                return 0.0
 
-                df_dash['Urgencia_%'] = df_dash.apply(calc_urg_dash, axis=1)
+            df_dash['Urgencia_%'] = df_dash.apply(calc_urg_dash, axis=1)
 
             # Asegurar columna de Precio_Costo_Unitario
             if 'Precio_Costo_Unitario' not in df_dash.columns:
@@ -4523,13 +4532,29 @@ else:
 
             df_dash['Inversion_Estimada'] = df_dash['Faltante_Min'] * df_dash['Precio_Costo_Unitario']
 
+            # --- LISTAS DE OPCIONES INDEPENDIENTES PARA ESTA PESTAÑA ---
+            rubros_dash = ["Todos"] + sorted([str(x) for x in df_dash['Rubro'].dropna().unique().tolist() if str(x).strip()]) if 'Rubro' in df_dash.columns else ["Todos"]
+            marcas_dash = ["Todas"] + sorted([str(x) for x in df_dash['Marca'].dropna().unique().tolist() if str(x).strip()]) if 'Marca' in df_dash.columns else ["Todas"]
+            
+            # Obtener lista de proveedores única para el selector
+            provs_dash = ["Todos"]
+            if 'ID_Proveedor' in df_dash.columns:
+                raw_p = df_dash['ID_Proveedor'].dropna().astype(str).tolist()
+                p_set = set()
+                for item in raw_p:
+                    for sub_p in item.split(','):
+                        sub_p_clean = sub_p.strip()
+                        if sub_p_clean and sub_p_clean.lower() != 'none':
+                            p_set.add(sub_p_clean)
+                provs_dash += sorted(list(p_set))
+
             # --- FILTROS INTERACTIVOS DEL DASHBOARD ---
             st.markdown("##### 🎛️ Filtros Rápidos de Decisión")
             f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns(5)
 
-            ft_rubro = f_col1.selectbox("Rubro", rubros, key="dash_rubro")
-            ft_marca = f_col2.selectbox("Marca", marcas, key="dash_marca")
-            ft_prov = f_col3.selectbox("Proveedor", provs, key="dash_prov")
+            ft_rubro = f_col1.selectbox("Rubro", rubros_dash, key="dash_rubro")
+            ft_marca = f_col2.selectbox("Marca", marcas_dash, key="dash_marca")
+            ft_prov = f_col3.selectbox("Proveedor", provs_dash, key="dash_prov")
             
             cats_abc_list = ["Todas"] + [c for c in df_dash['Categoria_ABC'].dropna().unique().tolist() if c] if 'Categoria_ABC' in df_dash.columns else ["Todas"]
             ft_cat = f_col4.selectbox("Categoría ABC", cats_abc_list, key="dash_cat")
@@ -4573,7 +4598,7 @@ else:
 
             if ft_rubro != "Todos":
                 df_vis = df_vis[df_vis['Rubro'] == ft_rubro]
-            if ft_marca != "Todos":
+            if ft_marca != "Todas":
                 df_vis = df_vis[df_vis['Marca'] == ft_marca]
 
             # Filtrado específico de Pañales
