@@ -3443,7 +3443,8 @@ else:
                 es_rubro_panal = rubro_upper in ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
                 es_rubro_leche = rubro_upper in ["LECHE", "LECHES"] and "SACALECHE" not in rubro_upper
             
-                with st.form("form_alta_producto_unico", clear_on_submit=True):
+                # Seteamos clear_on_submit=False para evitar que se limpien los campos si falla la validación
+                with st.form("form_alta_producto_unico", clear_on_submit=False):
                     c_alta1, c_alta2 = st.columns(2)
                     
                     with c_alta1:
