@@ -3435,6 +3435,14 @@ else:
             with tab_alta:
                 st.subheader("➕ Registrar Nuevo Artículo")
                 
+                # 1. Selector de Rubro fuera del form para habilitar dinamismo en pantalla
+                lista_rubros_base = LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"]
+                rubro_nuevo = st.selectbox("Seleccione el Rubro del Producto*", options=lista_rubros_base, key="alta_rubro_sel")
+            
+                rubro_upper = str(rubro_nuevo).upper().strip()
+                es_rubro_panal = rubro_upper in ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
+                es_rubro_leche = rubro_upper in ["LECHE", "LECHES"] and "SACALECHE" not in rubro_upper
+            
                 with st.form("form_alta_producto_unico", clear_on_submit=True):
                     c_alta1, c_alta2 = st.columns(2)
                     
@@ -3442,9 +3450,8 @@ else:
                         id_nuevo = st.text_input("Código / ID Producto*", key="alta_id").strip()
                         nombre_nuevo = st.text_input("Descripción / Nombre*", key="alta_nom").strip()
                         marca_nueva = st.text_input("Marca", key="alta_marca").strip()
-                        rubro_nuevo = st.selectbox("Rubro", options=LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"])
                         prov_seleccionado = st.selectbox("Proveedor", options=lista_proveedores)
-                        
+            
                     with c_alta2:
                         stock_ini = st.number_input("Stock Inicial", min_value=0, value=0, step=1)
                         costo_ini = st.number_input("Precio Costo ($)", min_value=0.0, value=0.0, step=10.0)
@@ -3453,13 +3460,54 @@ else:
                         p3 = st.number_input("Precio Lista 3 ($)", min_value=0.0, value=0.0, step=10.0)
                         p4 = st.number_input("Precio Lista 4 ($)", min_value=0.0, value=0.0, step=10.0)
                         p5 = st.number_input("Precio Lista 5 ($)", min_value=0.0, value=0.0, step=10.0)
-    
+            
+                    # --- SECCIÓN DINÁMICA DE ATRIBUTOS OBLIGATORIOS ---
+                    talle_val, linea_val, tam_pk_val, tipo_val = None, None, None, None
+                    etapa_val, formato_val, pres_val = None, None, None
+            
+                    if es_rubro_panal:
+                        st.markdown("---")
+                        st.markdown("##### 🩺 Atributos Obligatorios para Pañales")
+                        c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+                        
+                        opts_talle = [""] + ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "Junior", "CH", "EG", "EEG"]
+                        talle_val = c_p1.selectbox("Talle*", options=opts_talle, key="alta_talle")
+                        
+                        linea_val = c_p2.text_input("Línea* (ej: Premium, Dermacare, Clasica)", key="alta_linea").strip()
+                        
+                        opts_tam = [""] + ["Regular", "Hiperpack", "Pack Ahorro", "Pack Mensual"]
+                        tam_pk_val = c_p3.selectbox("Tamaño Paquete*", options=opts_tam, key="alta_tam_pk")
+                        
+                        opts_tipo = ["Con Abrojo", "Pants"]
+                        tipo_val = c_p4.selectbox("Tipo*", options=opts_tipo, key="alta_tipo")
+            
+                    elif es_rubro_leche:
+                        st.markdown("---")
+                        st.markdown("##### 🥛 Atributos Obligatorios para Leches")
+                        c_l1, c_l2, c_l3 = st.columns(3)
+                        
+                        opts_etapa = [""] + ["Etapa 1", "Etapa 2", "Etapa 3", "Etapa 4", "Escolar", "Común / Toda la familia"]
+                        etapa_val = c_l1.selectbox("Etapa*", options=opts_etapa, key="alta_etapa")
+                        
+                        opts_formato = [""] + ["Líquida", "En Polvo"]
+                        formato_val = c_l2.selectbox("Formato Leche*", options=opts_formato, key="alta_formato")
+                        
+                        opts_pres = [""] + ["190 ml", "200 ml", "500 ml", "1 Lt", "125 grs", "400 grs", "800 grs", "1 kg", "1.2 kg"]
+                        pres_val = c_l3.selectbox("Presentación*", options=opts_pres, key="alta_pres")
+            
                     st.caption("* Campos obligatorios")
                     btn_guardar = st.form_submit_button("💾 Guardar Producto en Base de Datos")
-    
+            
                 if btn_guardar:
+                    # Validación básica de datos generales
                     if not id_nuevo or not nombre_nuevo or p1 <= 0:
-                        st.error("Por favor, completa los campos obligatorios (ID, Nombre y Precio 1 > 0).")
+                        st.error("Por favor, completa los campos obligatorios generales (ID, Nombre y Precio 1 > 0).")
+                    # Validación de campos obligatorios para Pañales
+                    elif es_rubro_panal and (not talle_val or not linea_val or not tam_pk_val):
+                        st.error("⚠️ Para productos del rubro Pañales debe completar Talle, Línea y Tamaño de Paquete.")
+                    # Validación de campos obligatorios para Leches
+                    elif es_rubro_leche and (not etapa_val or not formato_val or not pres_val):
+                        st.error("⚠️ Para productos del rubro Leche debe completar Etapa, Formato y Presentación.")
                     else:
                         nuevo_prod = {
                             "ID_Producto": id_nuevo,
@@ -3476,12 +3524,19 @@ else:
                             "ID_Proveedor": None,
                             "Stock_Min": 0,
                             "Stock_Max": 0,
-                            "Imagen": None
+                            "Imagen": None,
+                            "Talle": talle_val if es_rubro_panal and talle_val != "" else None,
+                            "Linea": linea_val.title() if es_rubro_panal and linea_val != "" else None,
+                            "Tamanio_Paquete": tam_pk_val if es_rubro_panal and tam_pk_val != "" else None,
+                            "Tipo": tipo_val if es_rubro_panal else None,
+                            "Etapa": etapa_val if es_rubro_leche and etapa_val != "" else None,
+                            "Formato_Leche": formato_val if es_rubro_leche and formato_val != "" else None,
+                            "Presentacion": pres_val if es_rubro_leche and pres_val != "" else None
                         }
                         
                         try:
                             db.table("PRODUCTOS").insert(nuevo_prod).execute()
-                            st.success(f"🎉 ¡Producto '{nombre_nuevo}' guardado!")
+                            st.success(f"🎉 ¡Producto '{nombre_nuevo}' guardado con sus atributos correspondientes!")
                             if 'df_prod' in st.session_state: del st.session_state['df_prod']
                             st.rerun()
                         except Exception as e:
