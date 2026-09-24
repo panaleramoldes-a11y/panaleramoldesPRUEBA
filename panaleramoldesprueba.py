@@ -3601,15 +3601,13 @@ else:
                         else:
                             opciones_prov_base = []
                         
-                        # Unir opciones base con las que ya tenga asignadas el producto
                         todos_los_provs_opciones = sorted(list(set(opciones_prov_base + provs_actuales)))
             
-                        # --- PREPARACIÓN DE OBTENCIÓN DE RUBRO (SE LEE DE SESSION O DE FILA) ---
+                        # --- PREPARACIÓN DE OBTENCIÓN DE RUBRO ---
                         rubros_lista = LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"]
                         rubro_actual = get_str_safe('Rubro', fila)
                         idx_rubro_ini = rubros_lista.index(rubro_actual) if rubro_actual in rubros_lista else 0
             
-                        # Selector de rubro interactivo para habilitar o deshabilitar campos específicos
                         n_rub = st.selectbox("Rubro*", options=rubros_lista, index=idx_rubro_ini, key=f"mod_rubro_{id_sel}")
             
                         rubro_upper = str(n_rub).upper().strip()
@@ -3622,7 +3620,6 @@ else:
                                 n_nom = st.text_input("Nombre*", value=get_str_safe('Nombre', fila))
                                 n_mar = st.text_input("Marca", value=get_str_safe('Marca', fila))
                                 
-                                # --- MULTISELECT CON RAZONES SOCIALES ---
                                 n_prov_list = st.multiselect(
                                     "Proveedores Asignados",
                                     options=todos_los_provs_opciones,
@@ -3658,10 +3655,8 @@ else:
                                 idx_talle = opts_talle.index(talle_actual) if talle_actual in opts_talle else 0
                                 talle_val = c_p1.selectbox("Talle*", options=opts_talle, index=idx_talle, key=f"mod_talle_{id_sel}")
                                 
-                                # --- SELECTBOX DE LÍNEAS CON OPCIÓN DE CREAR NUEVA ---
+                                # --- MANEJO ESTABLE DE SELECCIÓN / CREACIÓN DE LÍNEA ---
                                 linea_actual = get_str_safe('Linea', fila).title()
-                                
-                                # Asegurar que la línea actual esté presente entre las opciones desplegables
                                 opts_linea_base = list(lineas_existentes)
                                 if linea_actual and linea_actual not in opts_linea_base:
                                     opts_linea_base.append(linea_actual)
@@ -3670,10 +3665,23 @@ else:
                                 opts_linea = [""] + opts_linea_base + ["➕ Otra / Crear nueva..."]
                                 idx_linea = opts_linea.index(linea_actual) if linea_actual in opts_linea else 0
             
-                                linea_sel = c_p2.selectbox("Línea*", options=opts_linea, index=idx_linea, key=f"mod_linea_sel_{id_sel}")
+                                linea_sel = c_p2.selectbox(
+                                    "Línea*", 
+                                    options=opts_linea, 
+                                    index=idx_linea, 
+                                    key=f"mod_linea_sel_{id_sel}"
+                                )
                                 
+                                linea_nueva_txt = c_p2.text_input(
+                                    "Nueva Línea*", 
+                                    value="", 
+                                    key=f"mod_linea_text_{id_sel}",
+                                    help="Escribí aquí si elegiste '➕ Otra / Crear nueva...'"
+                                )
+                                
+                                # Determinación de la línea a guardar
                                 if linea_sel == "➕ Otra / Crear nueva...":
-                                    linea_val = c_p2.text_input("Escribir nueva Línea*", key=f"mod_linea_text_{id_sel}").strip()
+                                    linea_val = linea_nueva_txt.strip()
                                 else:
                                     linea_val = linea_sel
                                 
@@ -3731,7 +3739,6 @@ else:
                                     except:
                                         return 0.0 if is_float else 0
                                 
-                                # Construir cadena limpia separada por comas
                                 cadena_provs_final = ", ".join(sorted([p.strip() for p in n_prov_list if p.strip()])) if n_prov_list else None
                                 
                                 stock_nuevo = clean_num(n_stk)
@@ -3741,7 +3748,7 @@ else:
                                     "Nombre": nombre_producto_nuevo,
                                     "Rubro": clean_text(n_rub),
                                     "Marca": clean_text(n_mar),
-                                    "ID_Proveedor": cadena_provs_final,  # Guarda texto con las Razones Sociales
+                                    "ID_Proveedor": cadena_provs_final,
                                     "Stock_Actual": stock_nuevo,
                                     "Stock_Min": clean_num(n_min),
                                     "Stock_Max": clean_num(n_max),
