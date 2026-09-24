@@ -3431,38 +3431,61 @@ else:
         # --- PESTAÑAS DE ADMINISTRADOR ---
         if st.session_state.rol == "Administrador":
             
-            # --- PESTAÑA ALTA ---
-            with tab_alta:
-                st.subheader("➕ Registrar Nuevo Artículo")
+            # --- PESTAÑA NUEVO PRODUCTO (ALTA) ---
+            with tab_nuevo:
+                st.subheader("➕ Crear Nuevo Producto")
                 
-                # 1. Selector de Rubro fuera del form para habilitar dinamismo en pantalla
-                lista_rubros_base = LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"]
-                rubro_nuevo = st.selectbox("Seleccione el Rubro del Producto*", options=lista_rubros_base, key="alta_rubro_sel")
+                # --- OBTENER LISTA DE LÍNEAS ÚNICAS PREVIAMENTE CARGADAS ---
+                lineas_existentes = []
+                if not st.session_state.df_prod.empty and 'Linea' in st.session_state.df_prod.columns:
+                    lineas_raw = st.session_state.df_prod['Linea'].dropna().astype(str).str.strip().str.title().unique().tolist()
+                    lineas_existentes = sorted([l for l in lineas_raw if l and l.lower() != "none"])
             
-                rubro_upper = str(rubro_nuevo).upper().strip()
+                # Cargar lista de Razones Sociales desde la tabla PROVEEDORES
+                if 'df_prov' in st.session_state and not st.session_state.df_prov.empty:
+                    opciones_prov_base = sorted(st.session_state.df_prov['Razon_Social'].dropna().astype(str).unique().tolist())
+                elif 'lista_proveedores' in globals():
+                    opciones_prov_base = sorted(lista_proveedores)
+                else:
+                    opciones_prov_base = []
+            
+                # --- SELECTOR DE RUBRO FUERA DEL FORM O CON RE-RUN PARA DINAMISMO ---
+                rubros_lista = LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"]
+                n_rub = st.selectbox("Rubro*", options=rubros_lista, index=0, key="alta_rubro_sel")
+            
+                rubro_upper = str(n_rub).upper().strip()
                 es_rubro_panal = rubro_upper in ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
                 es_rubro_leche = rubro_upper in ["LECHE", "LECHES"] and "SACALECHE" not in rubro_upper
             
-                # Seteamos clear_on_submit=False para evitar que se limpien los campos si falla la validación
-                with st.form("form_alta_producto_unico", clear_on_submit=False):
-                    c_alta1, c_alta2 = st.columns(2)
+                with st.form("form_alta_producto", clear_on_submit=False):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        n_nom = st.text_input("Nombre*", value="")
+                        n_mar = st.text_input("Marca", value="")
+                        
+                        # --- MULTISELECT CON RAZONES SOCIALES DE PROVEEDORES ---
+                        n_prov_list = st.multiselect(
+                            "Proveedores Asignados",
+                            options=opciones_prov_base,
+                            default=[],
+                            help="Podés seleccionar uno o varios proveedores."
+                        )
                     
-                    with c_alta1:
-                        id_nuevo = st.text_input("Código / ID Producto*", key="alta_id").strip()
-                        nombre_nuevo = st.text_input("Descripción / Nombre*", key="alta_nom").strip()
-                        marca_nueva = st.text_input("Marca", key="alta_marca").strip()
-                        prov_seleccionado = st.selectbox("Proveedor", options=lista_proveedores)
+                    with c2:
+                        n_stk = st.number_input("Stock Actual", value=0, min_value=0)
+                        n_min = st.number_input("Stock Min", value=0, min_value=0)
+                        n_max = st.number_input("Stock Max", value=0, min_value=0)
+                        n_img = st.text_input("URL Imagen", value="")
+                    
+                    with c3:
+                        n_cos = st.number_input("Costo", value=0.0, min_value=0.0, format="%.2f")
+                        n_p1 = st.number_input("Precio 1*", value=0.0, min_value=0.0, format="%.2f")
+                        n_p2 = st.number_input("Precio 2", value=0.0, min_value=0.0, format="%.2f")
+                        n_p3 = st.number_input("Precio 3", value=0.0, min_value=0.0, format="%.2f")
+                        n_p4 = st.number_input("Precio 4", value=0.0, min_value=0.0, format="%.2f")
+                        n_p5 = st.number_input("Precio 5", value=0.0, min_value=0.0, format="%.2f")
             
-                    with c_alta2:
-                        stock_ini = st.number_input("Stock Inicial", min_value=0, value=0, step=1)
-                        costo_ini = st.number_input("Precio Costo ($)", min_value=0.0, value=0.0, step=10.0)
-                        p1 = st.number_input("Precio Lista 1 ($)*", min_value=0.0, value=0.0, step=10.0)
-                        p2 = st.number_input("Precio Lista 2 ($)", min_value=0.0, value=0.0, step=10.0)
-                        p3 = st.number_input("Precio Lista 3 ($)", min_value=0.0, value=0.0, step=10.0)
-                        p4 = st.number_input("Precio Lista 4 ($)", min_value=0.0, value=0.0, step=10.0)
-                        p5 = st.number_input("Precio Lista 5 ($)", min_value=0.0, value=0.0, step=10.0)
-            
-                    # --- SECCIÓN DINÁMICA DE ATRIBUTOS OBLIGATORIOS ---
+                    # --- SECCIÓN DINÁMICA DE ATRIBUTOS SEGÚN RUBRO ---
                     talle_val, linea_val, tam_pk_val, tipo_val = None, None, None, None
                     etapa_val, formato_val, pres_val = None, None, None
             
@@ -3472,15 +3495,23 @@ else:
                         c_p1, c_p2, c_p3, c_p4 = st.columns(4)
                         
                         opts_talle = [""] + ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "Junior", "CH", "EG", "EEG"]
-                        talle_val = c_p1.selectbox("Talle*", options=opts_talle, key="alta_talle")
+                        talle_val = c_p1.selectbox("Talle*", options=opts_talle, index=0, key="alta_talle_sel")
                         
-                        linea_val = c_p2.text_input("Línea* (ej: Premium, Dermacare, Clasica)", key="alta_linea").strip()
+                        # --- SELECCIÓN / CREACIÓN DE LÍNEA ---
+                        opts_linea = [""] + lineas_existentes + ["➕ Otra / Crear nueva..."]
+                        linea_sel = c_p2.selectbox("Línea*", options=opts_linea, index=0, key="alta_linea_sel")
+                        linea_nueva_txt = c_p2.text_input("Nueva Línea*", value="", key="alta_linea_text", help="Escribí aquí si elegiste '➕ Otra / Crear nueva...'")
+                        
+                        if linea_sel == "➕ Otra / Crear nueva...":
+                            linea_val = linea_nueva_txt.strip()
+                        else:
+                            linea_val = linea_sel
                         
                         opts_tam = [""] + ["Regular", "Hiperpack", "Pack Ahorro", "Pack Mensual"]
-                        tam_pk_val = c_p3.selectbox("Tamaño Paquete*", options=opts_tam, key="alta_tam_pk")
+                        tam_pk_val = c_p3.selectbox("Tamaño Paquete*", options=opts_tam, index=0, key="alta_tam_sel")
                         
                         opts_tipo = ["Con Abrojo", "Pants"]
-                        tipo_val = c_p4.selectbox("Tipo*", options=opts_tipo, key="alta_tipo")
+                        tipo_val = c_p4.selectbox("Tipo*", options=opts_tipo, index=0, key="alta_tipo_sel")
             
                     elif es_rubro_leche:
                         st.markdown("---")
@@ -3488,44 +3519,59 @@ else:
                         c_l1, c_l2, c_l3 = st.columns(3)
                         
                         opts_etapa = [""] + ["Etapa 1", "Etapa 2", "Etapa 3", "Etapa 4", "Escolar", "Común / Toda la familia"]
-                        etapa_val = c_l1.selectbox("Etapa*", options=opts_etapa, key="alta_etapa")
+                        etapa_val = c_l1.selectbox("Etapa*", options=opts_etapa, index=0, key="alta_etapa_sel")
                         
                         opts_formato = [""] + ["Líquida", "En Polvo"]
-                        formato_val = c_l2.selectbox("Formato Leche*", options=opts_formato, key="alta_formato")
+                        formato_val = c_l2.selectbox("Formato Leche*", options=opts_formato, index=0, key="alta_formato_sel")
                         
                         opts_pres = [""] + ["190 ml", "200 ml", "500 ml", "1 Lt", "125 grs", "400 grs", "800 grs", "1 kg", "1.2 kg"]
-                        pres_val = c_l3.selectbox("Presentación*", options=opts_pres, key="alta_pres")
+                        pres_val = c_l3.selectbox("Presentación*", options=opts_pres, index=0, key="alta_pres_sel")
             
                     st.caption("* Campos obligatorios")
-                    btn_guardar = st.form_submit_button("💾 Guardar Producto en Base de Datos")
+                    btn_alta_guardar = st.form_submit_button("✅ Guardar Producto")
             
-                if btn_guardar:
-                    # Validación básica de datos generales
-                    if not id_nuevo or not nombre_nuevo or p1 <= 0:
-                        st.error("Por favor, completa los campos obligatorios generales (ID, Nombre y Precio 1 > 0).")
-                    # Validación de campos obligatorios para Pañales
+                if btn_alta_guardar:
+                    # Validaciones de entrada
+                    if not n_nom or n_p1 <= 0:
+                        st.error("Por favor, completa los campos obligatorios generales (Nombre y Precio 1 > 0).")
                     elif es_rubro_panal and (not talle_val or not linea_val or not tam_pk_val):
                         st.error("⚠️ Para productos del rubro Pañales debe completar Talle, Línea y Tamaño de Paquete.")
-                    # Validación de campos obligatorios para Leches
                     elif es_rubro_leche and (not etapa_val or not formato_val or not pres_val):
                         st.error("⚠️ Para productos del rubro Leche debe completar Etapa, Formato y Presentación.")
                     else:
-                        nuevo_prod = {
-                            "ID_Producto": id_nuevo,
-                            "Nombre": nombre_nuevo,
-                            "Rubro": rubro_nuevo if rubro_nuevo != "" else None,
-                            "Marca": marca_nueva if marca_nueva != "" else None,
-                            "Stock_Actual": int(stock_ini),
-                            "Precio_Costo": float(costo_ini),
-                            "Precio_1": float(p1),
-                            "Precio_2": float(p2),
-                            "Precio_3": float(p3),
-                            "Precio_4": float(p4),
-                            "Precio_5": float(p5),
-                            "ID_Proveedor": None,
-                            "Stock_Min": 0,
-                            "Stock_Max": 0,
-                            "Imagen": None,
+                        def clean_text(val):
+                            if val is None or val == "" or str(val).lower() == "none":
+                                return None
+                            return str(val).strip()
+                        
+                        def clean_num(val, is_float=False):
+                            try:
+                                if val in [None, '', 'None']: return 0.0 if is_float else 0
+                                return float(val) if is_float else int(val)
+                            except:
+                                return 0.0 if is_float else 0
+            
+                        # Formatear lista de proveedores
+                        cadena_provs_final = ", ".join(sorted([p.strip() for p in n_prov_list if p.strip()])) if n_prov_list else None
+                        
+                        stock_inicial = clean_num(n_stk)
+                        nombre_producto_nuevo = str(n_nom).strip()
+            
+                        datos_insert = {
+                            "Nombre": nombre_producto_nuevo,
+                            "Rubro": clean_text(n_rub),
+                            "Marca": clean_text(n_mar),
+                            "ID_Proveedor": cadena_provs_final,
+                            "Stock_Actual": stock_inicial,
+                            "Stock_Min": clean_num(n_min),
+                            "Stock_Max": clean_num(n_max),
+                            "Imagen": clean_text(n_img),
+                            "Precio_Costo": clean_num(n_cos, True),
+                            "Precio_1": clean_num(n_p1, True),
+                            "Precio_2": clean_num(n_p2, True),
+                            "Precio_3": clean_num(n_p3, True),
+                            "Precio_4": clean_num(n_p4, True),
+                            "Precio_5": clean_num(n_p5, True),
                             "Talle": talle_val if es_rubro_panal and talle_val != "" else None,
                             "Linea": linea_val.title() if es_rubro_panal and linea_val != "" else None,
                             "Tamanio_Paquete": tam_pk_val if es_rubro_panal and tam_pk_val != "" else None,
@@ -3534,14 +3580,50 @@ else:
                             "Formato_Leche": formato_val if es_rubro_leche and formato_val != "" else None,
                             "Presentacion": pres_val if es_rubro_leche and pres_val != "" else None
                         }
-                        
+            
                         try:
-                            db.table("PRODUCTOS").insert(nuevo_prod).execute()
-                            st.success(f"🎉 ¡Producto '{nombre_nuevo}' guardado con sus atributos correspondientes!")
+                            # 1. Insertar en Supabase
+                            res_insert = db.table("PRODUCTOS").insert(datos_insert).execute()
+                            
+                            # Obtener ID del producto recien creado si es retornado
+                            id_producto_creado = None
+                            if res_insert and res_insert.data and len(res_insert.data) > 0:
+                                id_producto_creado = res_insert.data[0].get("ID_Producto")
+            
+                            # 2. Obtenemos el nombre del usuario activo
+                            usuario_activo = st.session_state.get('usuario_nombre') or st.session_state.get('usuario_actual', 'Martin')
+            
+                            # 3. Registrar en Kardex el stock inicial si es mayor a 0
+                            if stock_inicial > 0:
+                                db.table("MOVIMIENTOS_STOCK").insert({
+                                    "id_producto": str(id_producto_creado) if id_producto_creado else "NUEVO",
+                                    "nombre_producto": nombre_producto_nuevo,
+                                    "tipo_movimiento": "STOCK INICIAL",
+                                    "cantidad": stock_inicial,
+                                    "stock_anterior": 0,
+                                    "stock_nuevo": int(stock_inicial),
+                                    "origen_referencia": "Alta Inicial de Producto",
+                                    "usuario": str(usuario_activo)
+                                }).execute()
+            
+                            # 4. Auditoría
+                            log_auditoria(
+                                tabla="PRODUCTOS",
+                                accion="INSERT",
+                                id_entidad=id_producto_creado if id_producto_creado else "NUEVO",
+                                detalles={
+                                    "motivo": "Creación manual desde formulario de alta",
+                                    "valores_iniciales": datos_insert
+                                },
+                                usuario=usuario_activo
+                            )
+            
+                            st.success(f"¡Producto '{nombre_producto_nuevo}' creado exitosamente!")
                             if 'df_prod' in st.session_state: del st.session_state['df_prod']
                             st.rerun()
+            
                         except Exception as e:
-                            st.error(f"Error técnico: {e}")
+                            st.error(f"Error al crear el producto en Supabase: {e}")
     
             # --- PESTAÑA MODIFICAR ---
             with tab_modificar:
