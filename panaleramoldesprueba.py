@@ -3438,10 +3438,16 @@ else:
                 # 1. Selector de Rubro fuera del form para habilitar dinamismo en pantalla
                 lista_rubros_base = LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"]
                 rubro_nuevo = st.selectbox("Seleccione el Rubro del Producto*", options=lista_rubros_base, key="alta_rubro_sel")
-            
+                
                 rubro_upper = str(rubro_nuevo).upper().strip()
                 es_rubro_panal = rubro_upper in ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
                 es_rubro_leche = rubro_upper in ["LECHE", "LECHES"] and "SACALECHE" not in rubro_upper
+            
+                # OBTENER LÍNEAS EXISTENTES PARA EL DROPDOWN
+                lineas_existentes = []
+                if 'df_prod' in st.session_state and not st.session_state.df_prod.empty and 'Linea' in st.session_state.df_prod.columns:
+                    lineas_raw = st.session_state.df_prod['Linea'].dropna().astype(str).str.strip().str.title().unique().tolist()
+                    lineas_existentes = sorted([l for l in lineas_raw if l and l.lower() != "none"])
             
                 # Seteamos clear_on_submit=False para evitar que se limpien los campos si falla la validación
                 with st.form("form_alta_producto_unico", clear_on_submit=False):
@@ -3451,8 +3457,8 @@ else:
                         id_nuevo = st.text_input("Código / ID Producto*", key="alta_id").strip()
                         nombre_nuevo = st.text_input("Descripción / Nombre*", key="alta_nom").strip()
                         marca_nueva = st.text_input("Marca", key="alta_marca").strip()
-                        prov_seleccionado = st.selectbox("Proveedor", options=lista_proveedores)
-            
+                        prov_seleccionado = st.selectbox("Proveedor", options=lista_proveedores if 'lista_proveedores' in globals() else [""])
+                    
                     with c_alta2:
                         stock_ini = st.number_input("Stock Inicial", min_value=0, value=0, step=1)
                         costo_ini = st.number_input("Precio Costo ($)", min_value=0.0, value=0.0, step=10.0)
@@ -3461,11 +3467,11 @@ else:
                         p3 = st.number_input("Precio Lista 3 ($)", min_value=0.0, value=0.0, step=10.0)
                         p4 = st.number_input("Precio Lista 4 ($)", min_value=0.0, value=0.0, step=10.0)
                         p5 = st.number_input("Precio Lista 5 ($)", min_value=0.0, value=0.0, step=10.0)
-            
+                    
                     # --- SECCIÓN DINÁMICA DE ATRIBUTOS OBLIGATORIOS ---
                     talle_val, linea_val, tam_pk_val, tipo_val = None, None, None, None
                     etapa_val, formato_val, pres_val = None, None, None
-            
+                    
                     if es_rubro_panal:
                         st.markdown("---")
                         st.markdown("##### 🩺 Atributos Obligatorios para Pañales")
@@ -3474,14 +3480,22 @@ else:
                         opts_talle = [""] + ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "Junior", "CH", "EG", "EEG"]
                         talle_val = c_p1.selectbox("Talle*", options=opts_talle, key="alta_talle")
                         
-                        linea_val = c_p2.text_input("Línea* (ej: Premium, Dermacare, Clasica)", key="alta_linea").strip()
+                        # --- DESPLEGABLE / CREACIÓN DE LÍNEA CORREGIDO ---
+                        opts_linea = [""] + lineas_existentes + ["➕ Otra / Crear nueva..."]
+                        linea_sel = c_p2.selectbox("Línea*", options=opts_linea, key="alta_linea_sel")
+                        linea_nueva_txt = c_p2.text_input("Nueva Línea*", value="", key="alta_linea_text", help="Escribí aquí si elegiste '➕ Otra / Crear nueva...'")
+                        
+                        if linea_sel == "➕ Otra / Crear nueva...":
+                            linea_val = linea_nueva_txt.strip()
+                        else:
+                            linea_val = linea_sel
                         
                         opts_tam = [""] + ["Regular", "Hiperpack", "Pack Ahorro", "Pack Mensual"]
                         tam_pk_val = c_p3.selectbox("Tamaño Paquete*", options=opts_tam, key="alta_tam_pk")
                         
                         opts_tipo = ["Con Abrojo", "Pants"]
                         tipo_val = c_p4.selectbox("Tipo*", options=opts_tipo, key="alta_tipo")
-            
+                    
                     elif es_rubro_leche:
                         st.markdown("---")
                         st.markdown("##### 🥛 Atributos Obligatorios para Leches")
@@ -3495,10 +3509,10 @@ else:
                         
                         opts_pres = [""] + ["190 ml", "200 ml", "500 ml", "1 Lt", "125 grs", "400 grs", "800 grs", "1 kg", "1.2 kg"]
                         pres_val = c_l3.selectbox("Presentación*", options=opts_pres, key="alta_pres")
-            
+                    
                     st.caption("* Campos obligatorios")
                     btn_guardar = st.form_submit_button("💾 Guardar Producto en Base de Datos")
-            
+                
                 if btn_guardar:
                     # Validación básica de datos generales
                     if not id_nuevo or not nombre_nuevo or p1 <= 0:
@@ -3522,7 +3536,7 @@ else:
                             "Precio_3": float(p3),
                             "Precio_4": float(p4),
                             "Precio_5": float(p5),
-                            "ID_Proveedor": None,
+                            "ID_Proveedor": prov_seleccionado if prov_seleccionado != "" else None,
                             "Stock_Min": 0,
                             "Stock_Max": 0,
                             "Imagen": None,
