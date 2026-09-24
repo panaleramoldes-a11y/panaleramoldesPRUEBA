@@ -4211,53 +4211,115 @@ else:
                 placeholder="Ej: pampers, babydry, 779...",
                 key="busqueda_texto_abc"
             )
-
+        
+            # --- PREPARACIÓN Y ORDENAMIENTO ALFABÉTICO DE FILTROS ---
+            rubros_unicos = sorted([r for r in df_prod['Rubro'].dropna().astype(str).str.strip().unique() if r and r.lower() != "none"]) if 'Rubro' in df_prod.columns else []
+            p_rubros = ["Todos"] + rubros_unicos
+        
+            marcas_unicas = sorted([m for m in df_prod['Marca'].dropna().astype(str).str.strip().unique() if m and m.lower() != "none"]) if 'Marca' in df_prod.columns else []
+            p_marcas = ["Todos"] + marcas_unicas
+        
+            col_prov = 'ID_Proveedor' if 'ID_Proveedor' in df_prod.columns else ('Proveedor' if 'Proveedor' in df_prod.columns else None)
+            provs_unicos = sorted([p for p in df_prod[col_prov].dropna().astype(str).str.strip().unique() if p and p.lower() != "none"]) if col_prov else []
+            p_provs = ["Todos"] + provs_unicos
+        
+            # --- FILTROS PRINCIPALES ---
             fa1, fa2, fa3 = st.columns(3)
-            p_rubro = fa1.selectbox("Rubro", rubros, key="p_rubro_abc")
-            p_marca = fa2.selectbox("Marca", marcas, key="p_marca_abc")
-            p_prov = fa3.selectbox("Proveedor", provs, key="p_prov_abc")
+            p_rubro = fa1.selectbox("Rubro", p_rubros, key="p_rubro_abc")
+            p_marca = fa2.selectbox("Marca", p_marcas, key="p_marca_abc")
+            p_prov = fa3.selectbox("Proveedor", p_provs, key="p_prov_abc")
+        
+            # --- DETECCIÓN DE RUBRO Y FILTROS DINÁMICOS ADICIONALES ---
+            rubro_sel_upper = str(p_rubro).upper().strip()
+            es_rubro_panal = rubro_sel_upper in ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
+            es_rubro_leche = rubro_sel_upper in ["LECHE", "LECHES"] and "SACALECHE" not in rubro_sel_upper
+        
+            filtro_linea_abc, filtro_talle_abc, filtro_tam_pk_abc, filtro_tipo_abc = "Todos", "Todos", "Todos", "Todos"
+            filtro_etapa_abc, filtro_formato_abc, filtro_pres_abc = "Todos", "Todos", "Todos"
+        
+            if es_rubro_panal:
+                c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+                opts_lineas = ["Todos"] + sorted([str(x).strip().title() for x in df_prod['Linea'].dropna().unique() if str(x).strip()]) if 'Linea' in df_prod.columns else ["Todos"]
+                opts_talles = ["Todos"] + sorted([str(x).strip() for x in df_prod['Talle'].dropna().unique() if str(x).strip()]) if 'Talle' in df_prod.columns else ["Todos"]
+                opts_tam = ["Todos"] + sorted([str(x).strip() for x in df_prod['Tamanio_Paquete'].dropna().unique() if str(x).strip()]) if 'Tamanio_Paquete' in df_prod.columns else ["Todos"]
+                opts_tipo = ["Todos"] + sorted([str(x).strip() for x in df_prod['Tipo'].dropna().unique() if str(x).strip()]) if 'Tipo' in df_prod.columns else ["Todos"]
+                
+                filtro_linea_abc = c_p1.selectbox("Línea", opts_lineas, key="f_linea_abc")
+                filtro_talle_abc = c_p2.selectbox("Talle", opts_talles, key="f_talle_abc")
+                filtro_tam_pk_abc = c_p3.selectbox("Tamaño Paquete", opts_tam, key="f_tam_abc")
+                filtro_tipo_abc = c_p4.selectbox("Tipo", opts_tipo, key="f_tipo_abc")
+        
+            elif es_rubro_leche:
+                c_l1, c_l2, c_l3 = st.columns(3)
+                opts_etapas = ["Todos"] + sorted([str(x).strip() for x in df_prod['Etapa'].dropna().unique() if str(x).strip()]) if 'Etapa' in df_prod.columns else ["Todos"]
+                opts_formatos = ["Todos"] + sorted([str(x).strip() for x in df_prod['Formato_Leche'].dropna().unique() if str(x).strip()]) if 'Formato_Leche' in df_prod.columns else ["Todos"]
+                opts_pres = ["Todos"] + sorted([str(x).strip() for x in df_prod['Presentacion'].dropna().unique() if str(x).strip()]) if 'Presentacion' in df_prod.columns else ["Todos"]
+                
+                filtro_etapa_abc = c_l1.selectbox("Etapa", opts_etapas, key="f_etapa_abc")
+                filtro_formato_abc = c_l2.selectbox("Formato", opts_formatos, key="f_formato_abc")
+                filtro_pres_abc = c_l3.selectbox("Presentación", opts_pres, key="f_pres_abc")
             
             dias_analisis = st.slider("Días de historia de ventas para scoring:", min_value=15, max_value=90, value=60, step=15, key="slider_dias_abc")
-
-            # Traemos solo los campos estándar de VENTAS_DETALLE (evita errores si no existe la columna de costo en la tabla de ventas)
+        
+            # Traemos solo los campos estándar de VENTAS_DETALLE
             res_vd = db.table("VENTAS_DETALLE").select("ID_Producto, Cantidad, Subtotal").execute().data
             df_vd = pd.DataFrame(res_vd) if res_vd else pd.DataFrame()
-
+        
             df_ranking = df_prod.copy()
             
             if 'Estado' in df_ranking.columns:
                 df_ranking = df_ranking[df_ranking['Estado'] != 'INACTIVO']
-
+        
             if 'Es_Stockeable' in df_ranking.columns:
                 df_ranking = df_ranking[df_ranking['Es_Stockeable'] == True]
-
+        
             if 'Rubro' in df_ranking.columns and 'Nombre' in df_ranking.columns:
                 es_leche = df_ranking['Rubro'].astype(str).str.upper() == 'LECHE'
                 contiene_bulto = df_ranking['Nombre'].astype(str).str.contains(' x12| x24| x30| x400| x800| x1000| x1200', case=False, na=False)
                 df_ranking = df_ranking[~es_leche | contiene_bulto]
-
+        
             df_ranking['Stock_Actual'] = pd.to_numeric(df_ranking['Stock_Actual'], errors='coerce').fillna(0)
             df_ranking['Stock_Min'] = pd.to_numeric(df_ranking['Stock_Min'], errors='coerce').fillna(0)
             df_ranking['Stock_Max'] = pd.to_numeric(df_ranking['Stock_Max'], errors='coerce').fillna(0)
-
+        
+            # --- APLICACIÓN DE FILTROS AL RANKING ---
             if busqueda_abc:
                 b_txt = busqueda_abc.lower()
                 mask_abc = df_ranking['Nombre'].astype(str).str.lower().str.contains(b_txt, na=False) | \
                            df_ranking['ID_Producto'].astype(str).str.lower().str.contains(b_txt, na=False)
                 df_ranking = df_ranking[mask_abc]
-
+        
             if p_rubro != "Todos":
                 df_ranking = df_ranking[df_ranking['Rubro'] == p_rubro]
+        
             if p_marca != "Todos":
                 df_ranking = df_ranking[df_ranking['Marca'] == p_marca]
                 
-            # --- FILTRADO POR PROVEEDOR (Soporta múltiples proveedores por celda) ---
             if p_prov != "Todos":
                 if 'ID_Proveedor' in df_ranking.columns:
                     df_ranking = df_ranking[df_ranking['ID_Proveedor'].astype(str).str.contains(p_prov, na=False, regex=False)]
                 elif 'Proveedor' in df_ranking.columns:
                     df_ranking = df_ranking[df_ranking['Proveedor'].astype(str).str.contains(p_prov, na=False, regex=False)]
-
+        
+            # --- APLICACIÓN DE FILTROS ESPECÍFICOS ---
+            if es_rubro_panal:
+                if filtro_linea_abc != "Todos" and 'Linea' in df_ranking.columns:
+                    df_ranking = df_ranking[df_ranking['Linea'].astype(str).str.title() == filtro_linea_abc]
+                if filtro_talle_abc != "Todos" and 'Talle' in df_ranking.columns:
+                    df_ranking = df_ranking[df_ranking['Talle'].astype(str) == filtro_talle_abc]
+                if filtro_tam_pk_abc != "Todos" and 'Tamanio_Paquete' in df_ranking.columns:
+                    df_ranking = df_ranking[df_ranking['Tamanio_Paquete'].astype(str) == filtro_tam_pk_abc]
+                if filtro_tipo_abc != "Todos" and 'Tipo' in df_ranking.columns:
+                    df_ranking = df_ranking[df_ranking['Tipo'].astype(str) == filtro_tipo_abc]
+        
+            if es_rubro_leche:
+                if filtro_etapa_abc != "Todos" and 'Etapa' in df_ranking.columns:
+                    df_ranking = df_ranking[df_ranking['Etapa'].astype(str) == filtro_etapa_abc]
+                if filtro_formato_abc != "Todos" and 'Formato_Leche' in df_ranking.columns:
+                    df_ranking = df_ranking[df_ranking['Formato_Leche'].astype(str) == filtro_formato_abc]
+                if filtro_pres_abc != "Todos" and 'Presentacion' in df_ranking.columns:
+                    df_ranking = df_ranking[df_ranking['Presentacion'].astype(str) == filtro_pres_abc]
+        
             if df_ranking.empty:
                 st.info("No se encontraron productos con los criterios, texto y filtros seleccionados.")
             else:
@@ -4265,7 +4327,6 @@ else:
                     df_vd['Cantidad'] = pd.to_numeric(df_vd['Cantidad'], errors='coerce').fillna(0)
                     df_vd['Subtotal'] = pd.to_numeric(df_vd['Subtotal'], errors='coerce').fillna(0)
                     
-                    # Unimos con df_prod para tomar el costo real actualizado de la ficha del producto
                     df_vd['ID_Producto'] = df_vd['ID_Producto'].astype(str)
                     
                     df_costos = df_prod[['ID_Producto', 'Precio_Costo_Unitario']].copy()
@@ -4273,9 +4334,9 @@ else:
                     
                     df_vd = pd.merge(df_vd, df_costos, on='ID_Producto', how='left')
                     df_vd['Precio_Costo_Unitario'] = df_vd['Precio_Costo_Unitario'].fillna(0)
-
+        
                     df_vd['Ganancia_Real'] = df_vd['Subtotal'] - (df_vd['Cantidad'] * df_vd['Precio_Costo_Unitario'])
-
+        
                     agrupado = df_vd.groupby('ID_Producto').agg({
                         'Cantidad': 'sum',
                         'Subtotal': 'sum',
@@ -4287,27 +4348,26 @@ else:
                     })
                     
                     df_ranking['ID_Producto'] = df_ranking['ID_Producto'].astype(str)
-                    
                     df_ranking = pd.merge(df_ranking, agrupado, on='ID_Producto', how='left')
                 else:
                     df_ranking['Rotacion_Unid'] = 0
                     df_ranking['Facturacion_Total'] = 0.0
                     df_ranking['Ganancia_Total'] = 0.0
-
+        
                 df_ranking['Rotacion_Unid'] = df_ranking['Rotacion_Unid'].fillna(0)
                 df_ranking['Facturacion_Total'] = df_ranking['Facturacion_Total'].fillna(0.0)
                 df_ranking['Ganancia_Total'] = df_ranking['Ganancia_Total'].fillna(0.0)
-
+        
                 max_rot = df_ranking['Rotacion_Unid'].max()
                 max_fact = df_ranking['Facturacion_Total'].max()
                 max_gan = df_ranking['Ganancia_Total'].max()
-
+        
                 norm_rot = (df_ranking['Rotacion_Unid'] / max_rot * 100) if max_rot > 0 else 0
                 norm_fact = (df_ranking['Facturacion_Total'] / max_fact * 100) if max_fact > 0 else 0
                 norm_gan = (df_ranking['Ganancia_Total'] / max_gan * 100) if max_gan > 0 else 0
-
+        
                 df_ranking['Score_Comercial'] = (0.40 * norm_fact) + (0.35 * norm_rot) + (0.25 * norm_gan)
-
+        
                 def asignar_categoria(score, p70, p30):
                     if score >= p70 and score > 0:
                         return "🟢 Categoría A"
@@ -4315,21 +4375,21 @@ else:
                         return "🟡 Categoría B"
                     else:
                         return "🔴 Categoría C"
-
+        
                 p70 = df_ranking['Score_Comercial'].quantile(0.70)
                 p30 = df_ranking['Score_Comercial'].quantile(0.30)
                 
                 df_ranking['Categoria_ABC'] = df_ranking['Score_Comercial'].apply(lambda x: asignar_categoria(x, p70, p30))
-
+        
                 df_ranking['Faltante_Min'] = (df_ranking['Stock_Min'] - df_ranking['Stock_Actual']).clip(lower=0)
-
+        
                 def calc_urgencia(row):
                     if row['Stock_Min'] > 0 and row['Faltante_Min'] > 0:
                         return (row['Faltante_Min'] / row['Stock_Min']) * 100
                     return 0.0
-
+        
                 df_ranking['Urgencia_%'] = df_ranking.apply(calc_urgencia, axis=1)
-
+        
                 df_ranking['Orden_Cat'] = df_ranking['Categoria_ABC'].map({
                     "🟢 Categoría A": 1,
                     "🟡 Categoría B": 2,
@@ -4340,15 +4400,15 @@ else:
                     by=['Orden_Cat', 'Urgencia_%', 'Score_Comercial'], 
                     ascending=[True, False, False]
                 ).reset_index(drop=True)
-
+        
                 df_ranking['Pedir'] = df_ranking['Urgencia_%'] > 0
                 
                 cols_abc_mostrar = ['Pedir', 'Categoria_ABC', 'Nombre', 'Urgencia_%', 'Stock_Actual', 'Stock_Min', 'Faltante_Min', 'Score_Comercial']
                 cols_abc_presentes = [c for c in cols_abc_mostrar if c in df_ranking.columns]
-
+        
                 st.markdown("---")
                 st.caption("📌 Los artículos con stock por debajo del mínimo vienen tildados automáticamente. Podés destildar o sumar los que desees.")
-
+        
                 df_abc_editado = st.data_editor(
                     df_ranking[cols_abc_presentes],
                     column_config={
@@ -4366,19 +4426,34 @@ else:
                     use_container_width=True,
                     key="editor_tabla_abc"
                 )
-
+        
                 col_abc_wsp, col_abc_exp = st.columns(2)
                 
                 if col_abc_wsp.button("💬 Generar WhatsApp Priorizado", type="primary", key="btn_wsp_abc"):
-                    sel_abc = df_abc_editado[df_abc_editado['Pedir'] == True]
+                    sel_abc = df_abc_editado[df_abc_editado['Pedir'] == True].copy()
                     
                     if sel_abc.empty:
                         st.warning("⚠️ No seleccionaste ningún producto. Tildá las casillas en la columna '📱 Pedir'.")
                     else:
+                        # --- ORDENAMIENTO PERSONALIZADO POR TALLE PARA WHATSAPP ---
+                        orden_talles = ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "Junior", "CH", "EG", "EEG"]
+                        
+                        if 'Talle' in df_ranking.columns:
+                            sel_abc['Talle'] = df_ranking.loc[sel_abc.index, 'Talle'].astype(str).str.strip()
+                            sel_abc['Talle_Cat'] = pd.Categorical(
+                                sel_abc['Talle'], 
+                                categories=orden_talles, 
+                                ordered=True
+                            )
+                            sel_abc = sel_abc.sort_values(by=['Talle_Cat', 'Nombre'], na_position='last')
+        
                         msg_abc = ""
                         for _, r in sel_abc.iterrows():
                             cant_comprar = int(r['Faltante_Min']) if r['Faltante_Min'] > 0 else 1
-                            rubro_prod = str(r.get('Rubro', '')).strip().upper()
+                            
+                            # Identificar si es leche vía df_ranking
+                            idx = r.name
+                            rubro_prod = str(df_ranking.loc[idx, 'Rubro']).strip().upper() if 'Rubro' in df_ranking.columns and idx in df_ranking.index else ""
                             
                             if rubro_prod == "LECHE":
                                 unid_texto = "fardo" if cant_comprar == 1 else "fardos"
@@ -4388,9 +4463,9 @@ else:
                             msg_abc += f"{cant_comprar} {unid_texto} *{r['Nombre']}*\n"
                         
                         st.text_area("Copiar mensaje para proveedor:", value=msg_abc, height=220, key="txt_area_abc")
-
+        
                 df_export_excel = df_ranking[df_ranking['Urgencia_%'] > 0].drop(columns=['Pedir', 'Orden_Cat'], errors='ignore')
-
+        
                 if not df_export_excel.empty:
                     buffer_abc = io.BytesIO()
                     with pd.ExcelWriter(buffer_abc, engine='xlsxwriter') as writer_abc:
