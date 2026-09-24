@@ -3557,13 +3557,19 @@ else:
                 
                 if not st.session_state.df_prod.empty:
                     opciones = (st.session_state.df_prod['ID_Producto'].astype(str) + " - " + st.session_state.df_prod['Nombre']).tolist()
-                    prod_sel = st.selectbox("Seleccionar producto:", [""] + opciones)
+                    prod_sel = st.selectbox("Seleccionar producto:", [""] + opciones, key="mod_prod_sel")
                     
                     def get_safe(key, fila, default=0, is_float=False):
                         val = fila.get(key)
                         if val is None or (isinstance(val, float) and pd.isna(val)) or str(val).strip() == "":
                             return default
                         return float(val) if is_float else int(float(val))
+            
+                    def get_str_safe(key, fila, default=""):
+                        val = fila.get(key)
+                        if val is None or (isinstance(val, float) and pd.isna(val)) or str(val).lower() == "none":
+                            return default
+                        return str(val).strip()
                     
                     if prod_sel:
                         id_sel = prod_sel.split(" - ")[0]
@@ -3588,18 +3594,27 @@ else:
                             opciones_prov_base = lista_proveedores
                         else:
                             opciones_prov_base = []
-            
+                        
                         # Unir opciones base con las que ya tenga asignadas el producto
                         todos_los_provs_opciones = sorted(list(set(opciones_prov_base + provs_actuales)))
-                        
-                        with st.form("form_mod_completo"):
+            
+                        # --- PREPARACIÓN DE OBTENCIÓN DE RUBRO (SE LEE DE SESSION O DE FILA) ---
+                        rubros_lista = LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"]
+                        rubro_actual = get_str_safe('Rubro', fila)
+                        idx_rubro_ini = rubros_lista.index(rubro_actual) if rubro_actual in rubros_lista else 0
+            
+                        # Selector de rubro interactivo para habilitar o deshabilitar campos específicos
+                        n_rub = st.selectbox("Rubro*", options=rubros_lista, index=idx_rubro_ini, key=f"mod_rubro_{id_sel}")
+            
+                        rubro_upper = str(n_rub).upper().strip()
+                        es_rubro_panal = rubro_upper in ["PAÑALES", "PANALES", "PAÑALES ADULTOS", "PANALES ADULTOS"]
+                        es_rubro_leche = rubro_upper in ["LECHE", "LECHES"] and "SACALECHE" not in rubro_upper
+            
+                        with st.form("form_mod_completo", clear_on_submit=False):
                             c1, c2, c3 = st.columns(3)
                             with c1:
-                                n_nom = st.text_input("Nombre", value=str(fila.get('Nombre', '')))
-                                rubros_lista = LISTA_RUBROS if 'LISTA_RUBROS' in globals() else ["General"]
-                                idx_rubro = rubros_lista.index(fila.get('Rubro')) if fila.get('Rubro') in rubros_lista else 0
-                                n_rub = st.selectbox("Rubro", options=rubros_lista, index=idx_rubro)
-                                n_mar = st.text_input("Marca", value=str(fila.get('Marca', '')))
+                                n_nom = st.text_input("Nombre*", value=get_str_safe('Nombre', fila))
+                                n_mar = st.text_input("Marca", value=get_str_safe('Marca', fila))
                                 
                                 # --- MULTISELECT CON RAZONES SOCIALES ---
                                 n_prov_list = st.multiselect(
@@ -3608,26 +3623,83 @@ else:
                                     default=[p for p in provs_actuales if p in todos_los_provs_opciones],
                                     help="Podés agregar o quitar múltiples proveedores."
                                 )
-            
+                            
                             with c2:
                                 n_stk = st.number_input("Stock Actual", value=val_stk)
                                 n_min = st.number_input("Stock Min", value=val_min)
                                 n_max = st.number_input("Stock Max", value=val_max)
-                                n_img = st.text_input("URL Imagen", value=str(fila.get('Imagen', '')))
-            
+                                n_img = st.text_input("URL Imagen", value=get_str_safe('Imagen', fila))
+                            
                             with c3:
                                 n_cos = st.number_input("Costo", value=val_cos, format="%.2f")
-                                n_p1 = st.number_input("Precio 1", value=get_safe('Precio_1', fila, 0.0, True), format="%.2f")
+                                n_p1 = st.number_input("Precio 1*", value=get_safe('Precio_1', fila, 0.0, True), format="%.2f")
                                 n_p2 = st.number_input("Precio 2", value=get_safe('Precio_2', fila, 0.0, True), format="%.2f")
                                 n_p3 = st.number_input("Precio 3", value=get_safe('Precio_3', fila, 0.0, True), format="%.2f")
                                 n_p4 = st.number_input("Precio 4", value=get_safe('Precio_4', fila, 0.0, True), format="%.2f")
                                 n_p5 = st.number_input("Precio 5", value=get_safe('Precio_5', fila, 0.0, True), format="%.2f")
-                            
-                            if st.form_submit_button("✅ Guardar Todos los Cambios"):
+            
+                            # --- SECCIÓN DINÁMICA DE ATRIBUTOS SEGÚN RUBRO ---
+                            talle_val, linea_val, tam_pk_val, tipo_val = None, None, None, None
+                            etapa_val, formato_val, pres_val = None, None, None
+            
+                            if es_rubro_panal:
+                                st.markdown("---")
+                                st.markdown("##### 🩺 Atributos Obligatorios para Pañales")
+                                c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+                                
+                                opts_talle = [""] + ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "Junior", "CH", "EG", "EEG"]
+                                talle_actual = get_str_safe('Talle', fila)
+                                idx_talle = opts_talle.index(talle_actual) if talle_actual in opts_talle else 0
+                                talle_val = c_p1.selectbox("Talle*", options=opts_talle, index=idx_talle, key=f"mod_talle_{id_sel}")
+                                
+                                linea_val = c_p2.text_input("Línea* (ej: Premium, Dermacare, Clasica)", value=get_str_safe('Linea', fila), key=f"mod_linea_{id_sel}").strip()
+                                
+                                opts_tam = [""] + ["Regular", "Hiperpack", "Pack Ahorro", "Pack Mensual"]
+                                tam_actual = get_str_safe('Tamanio_Paquete', fila)
+                                idx_tam = opts_tam.index(tam_actual) if tam_actual in opts_tam else 0
+                                tam_pk_val = c_p3.selectbox("Tamaño Paquete*", options=opts_tam, index=idx_tam, key=f"mod_tam_{id_sel}")
+                                
+                                opts_tipo = ["Con Abrojo", "Pants"]
+                                tipo_actual = get_str_safe('Tipo', fila)
+                                idx_tipo = opts_tipo.index(tipo_actual) if tipo_actual in opts_tipo else 0
+                                tipo_val = c_p4.selectbox("Tipo*", options=opts_tipo, index=idx_tipo, key=f"mod_tipo_{id_sel}")
+            
+                            elif es_rubro_leche:
+                                st.markdown("---")
+                                st.markdown("##### 🥛 Atributos Obligatorios para Leches")
+                                c_l1, c_l2, c_l3 = st.columns(3)
+                                
+                                opts_etapa = [""] + ["Etapa 1", "Etapa 2", "Etapa 3", "Etapa 4", "Escolar", "Común / Toda la familia"]
+                                etapa_actual = get_str_safe('Etapa', fila)
+                                idx_etapa = opts_etapa.index(etapa_actual) if etapa_actual in opts_etapa else 0
+                                etapa_val = c_l1.selectbox("Etapa*", options=opts_etapa, index=idx_etapa, key=f"mod_etapa_{id_sel}")
+                                
+                                opts_formato = [""] + ["Líquida", "En Polvo"]
+                                formato_actual = get_str_safe('Formato_Leche', fila)
+                                idx_formato = opts_formato.index(formato_actual) if formato_actual in opts_formato else 0
+                                formato_val = c_l2.selectbox("Formato Leche*", options=opts_formato, index=idx_formato, key=f"mod_formato_{id_sel}")
+                                
+                                opts_pres = [""] + ["190 ml", "200 ml", "500 ml", "1 Lt", "125 grs", "400 grs", "800 grs", "1 kg", "1.2 kg"]
+                                pres_actual = get_str_safe('Presentacion', fila)
+                                idx_pres = opts_pres.index(pres_actual) if pres_actual in opts_pres else 0
+                                pres_val = c_l3.selectbox("Presentación*", options=opts_pres, index=idx_pres, key=f"mod_pres_{id_sel}")
+            
+                            st.caption("* Campos obligatorios")
+                            btn_mod_guardar = st.form_submit_button("✅ Guardar Todos los Cambios")
+            
+                        if btn_mod_guardar:
+                            # Validaciones previas al guardado
+                            if not n_nom or n_p1 <= 0:
+                                st.error("Por favor, completa los campos obligatorios generales (Nombre y Precio 1 > 0).")
+                            elif es_rubro_panal and (not talle_val or not linea_val or not tam_pk_val):
+                                st.error("⚠️ Para productos del rubro Pañales debe completar Talle, Línea y Tamaño de Paquete.")
+                            elif es_rubro_leche and (not etapa_val or not formato_val or not pres_val):
+                                st.error("⚠️ Para productos del rubro Leche debe completar Etapa, Formato y Presentación.")
+                            else:
                                 def clean_text(val):
                                     if val is None or val == "" or str(val).lower() == "none":
                                         return None
-                                    return str(val)
+                                    return str(val).strip()
                                 
                                 def clean_num(val, is_float=False):
                                     try:
@@ -3638,7 +3710,7 @@ else:
                                 
                                 # Construir cadena limpia separada por comas
                                 cadena_provs_final = ", ".join(sorted([p.strip() for p in n_prov_list if p.strip()])) if n_prov_list else None
-            
+                                
                                 stock_nuevo = clean_num(n_stk)
                                 nombre_producto_nuevo = str(n_nom) if n_nom else "Sin nombre"
                                 
@@ -3656,7 +3728,14 @@ else:
                                     "Precio_2": clean_num(n_p2, True),
                                     "Precio_3": clean_num(n_p3, True),
                                     "Precio_4": clean_num(n_p4, True),
-                                    "Precio_5": clean_num(n_p5, True)
+                                    "Precio_5": clean_num(n_p5, True),
+                                    "Talle": talle_val if es_rubro_panal and talle_val != "" else None,
+                                    "Linea": linea_val.title() if es_rubro_panal and linea_val != "" else None,
+                                    "Tamanio_Paquete": tam_pk_val if es_rubro_panal and tam_pk_val != "" else None,
+                                    "Tipo": tipo_val if es_rubro_panal else None,
+                                    "Etapa": etapa_val if es_rubro_leche and etapa_val != "" else None,
+                                    "Formato_Leche": formato_val if es_rubro_leche and formato_val != "" else None,
+                                    "Presentacion": pres_val if es_rubro_leche and pres_val != "" else None
                                 }
                                 
                                 try:
