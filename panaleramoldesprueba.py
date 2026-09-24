@@ -4008,6 +4008,21 @@ else:
                 key="busqueda_stock"
             )
             
+            # --- PREPARACIÓN Y ORDENAMIENTO ALFABÉTICO DE OPCIONES PARA FILTROS ---
+            
+            # 1. Rubros ordenados alfabéticamente
+            rubros_unicos = sorted([r for r in df_prod['Rubro'].dropna().astype(str).str.strip().unique() if r and r.lower() != "none"]) if 'Rubro' in df_prod.columns else []
+            rubros = ["Todos"] + rubros_unicos
+        
+            # 2. Marcas ordenadas alfabéticamente
+            marcas_unicas = sorted([m for m in df_prod['Marca'].dropna().astype(str).str.strip().unique() if m and m.lower() != "none"]) if 'Marca' in df_prod.columns else []
+            marcas = ["Todos"] + marcas_unicas
+        
+            # 3. Proveedores ordenados alfabéticamente
+            col_prov = 'ID_Proveedor' if 'ID_Proveedor' in df_prod.columns else ('Proveedor' if 'Proveedor' in df_prod.columns else None)
+            provs_unicos = sorted([p for p in df_prod[col_prov].dropna().astype(str).str.strip().unique() if p and p.lower() != "none"]) if col_prov else []
+            provs = ["Todos"] + provs_unicos
+        
             # --- FILTROS PRINCIPALES ---
             c1, c2, c3 = st.columns(3)
             filtro_rubro = c1.selectbox("Filtrar por Rubro", rubros, key="filtro_rubro_stock")
