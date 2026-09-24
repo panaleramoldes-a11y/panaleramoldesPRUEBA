@@ -3571,6 +3571,12 @@ else:
                             return default
                         return str(val).strip()
                     
+                    # --- OBTENER LISTA DE LÍNEAS ÚNICAS PREVIAMENTE CARGADAS ---
+                    lineas_existentes = []
+                    if 'Linea' in st.session_state.df_prod.columns:
+                        lineas_raw = st.session_state.df_prod['Linea'].dropna().astype(str).str.strip().str.title().unique().tolist()
+                        lineas_existentes = sorted([l for l in lineas_raw if l and l.lower() != "none"])
+            
                     if prod_sel:
                         id_sel = prod_sel.split(" - ")[0]
                         fila = st.session_state.df_prod[st.session_state.df_prod['ID_Producto'].astype(str) == id_sel].iloc[0]
@@ -3652,7 +3658,24 @@ else:
                                 idx_talle = opts_talle.index(talle_actual) if talle_actual in opts_talle else 0
                                 talle_val = c_p1.selectbox("Talle*", options=opts_talle, index=idx_talle, key=f"mod_talle_{id_sel}")
                                 
-                                linea_val = c_p2.text_input("Línea* (ej: Premium, Dermacare, Clasica)", value=get_str_safe('Linea', fila), key=f"mod_linea_{id_sel}").strip()
+                                # --- SELECTBOX DE LÍNEAS CON OPCIÓN DE CREAR NUEVA ---
+                                linea_actual = get_str_safe('Linea', fila).title()
+                                
+                                # Asegurar que la línea actual esté presente entre las opciones desplegables
+                                opts_linea_base = list(lineas_existentes)
+                                if linea_actual and linea_actual not in opts_linea_base:
+                                    opts_linea_base.append(linea_actual)
+                                    opts_linea_base = sorted(opts_linea_base)
+            
+                                opts_linea = [""] + opts_linea_base + ["➕ Otra / Crear nueva..."]
+                                idx_linea = opts_linea.index(linea_actual) if linea_actual in opts_linea else 0
+            
+                                linea_sel = c_p2.selectbox("Línea*", options=opts_linea, index=idx_linea, key=f"mod_linea_sel_{id_sel}")
+                                
+                                if linea_sel == "➕ Otra / Crear nueva...":
+                                    linea_val = c_p2.text_input("Escribir nueva Línea*", key=f"mod_linea_text_{id_sel}").strip()
+                                else:
+                                    linea_val = linea_sel
                                 
                                 opts_tam = [""] + ["Regular", "Hiperpack", "Pack Ahorro", "Pack Mensual"]
                                 tam_actual = get_str_safe('Tamanio_Paquete', fila)
