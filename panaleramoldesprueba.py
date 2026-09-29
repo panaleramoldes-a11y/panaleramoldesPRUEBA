@@ -14,6 +14,7 @@ from math import radians, cos, sin, asin, sqrt
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 from modulos import reportes
+from modulo_desempenio import render_modulo_desempenio
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -1079,7 +1080,7 @@ else:
 
     # --- SIDEBAR CON PERMISOS ---
     with st.sidebar:
-        st.title("🛡️ Pañalera Moldes")
+        st.title("🛡️️ Pañalera Moldes")
         st.write(f"👤 Usuario: {st.session_state.usuario_actual}")
         st.write(f"💼 Rol: {st.session_state.rol}")
         
@@ -1087,15 +1088,18 @@ else:
         opciones_disponibles = ["💰 Caja"]
         
         if st.session_state.rol == "Administrador":
-            # Agregamos "📈 Reporte de Utilidades" a la lista
             opciones_disponibles.extend([
                 "🛒 Punto de Venta", "👥 Clientes", "📋 Historial de Ventas", 
                 "⚙️ Configuración Pagos", "📦 Productos",
                 "📦 Stock", "🚚 Proveedores", "📦 Compras", "👥 Vendedores", 
-                "⚙️ Auditoría", "📈 Reporte de Utilidades", "🚚 Gestión de Repartos", "📊 Reportes" # <--- AQUÍ LO AGREGAMOS
+                "⚙️ Auditoría", "📈 Reporte de Utilidades", "🚚 Gestión de Repartos", 
+                "📊 Reportes", "🛡️ Desempeño y Tareas"
             ])
         elif st.session_state.rol == "Vendedor":
-            opciones_disponibles.extend(["🛒 Punto de Venta", "🚚 Gestión de Repartos", "📦 Productos", "👥 Clientes"])
+            opciones_disponibles.extend([
+                "🛒 Punto de Venta", "🚚 Gestión de Repartos", "📦 Productos", 
+                "👥 Clientes", "🛡️ Desempeño y Tareas"
+            ])
         
         menu = st.selectbox("Menú Principal", opciones_disponibles)
         
@@ -5966,3 +5970,9 @@ else:
     # =====================================================================
     elif menu == "📊 Reportes":
         reportes.render_reportes(db)
+
+    # =====================================================================
+    # MODULO: 🛡️ DESEMPEÑO Y TAREAS
+    # =====================================================================
+    elif menu == "🛡️ Desempeño y Tareas":
+        render_modulo_desempenio(db)
