@@ -18,9 +18,13 @@ def render_modulo_desempenio(db):
         st.subheader("📋 Registro Operativo Diario")
         st.caption("Completá los horarios de ejecución, estado y novedades de cada tarea asignada a la jornada.")
 
+        # Control de versión para refrescar formulario
+        if "ver_chk" not in st.session_state:
+            st.session_state["ver_chk"] = 0
+
         col_f1, col_f2 = st.columns([1, 2])
         fecha_sel = col_f1.date_input("Fecha de Trabajo", value=datetime.now().date(), key="chk_fecha_sel")
-        usuario_actual = st.session_state.get("usuario", "Vendedora")
+        usuario_actual = st.session_state.get("usuario_actual", st.session_state.get("usuario", "Vendedora"))
 
         # Cargar tareas guardadas para esta fecha
         res_existente = db.table("REGISTRO_TAREAS_DIARIAS").select("*").eq("fecha", str(fecha_sel)).execute().data or []
@@ -56,8 +60,10 @@ def render_modulo_desempenio(db):
 
         st.divider()
 
+        v = st.session_state["ver_chk"] # Sufijo dinámico para las keys
+
         # Formulario de carga interactivo
-        with st.form(key="form_checklist_diario"):
+        with st.form(key=f"form_checklist_diario_{v}"):
             registros_para_guardar = []
 
             for idx, item in enumerate(tareas_mostrar):
@@ -67,14 +73,14 @@ def render_modulo_desempenio(db):
 
                 c1, c2, c3, c4 = st.columns([1, 1, 1.2, 2.5])
                 
-                h_inicio = c1.time_input("Inicio Real", value=item['hora_inicio'], key=f"h_ini_{idx}")
-                h_fin = c2.time_input("Fin Real", value=item['hora_fin'], key=f"h_fin_{idx}")
+                h_inicio = c1.time_input("Inicio Real", value=item['hora_inicio'], key=f"h_ini_{v}_{idx}")
+                h_fin = c2.time_input("Fin Real", value=item['hora_fin'], key=f"h_fin_{v}_{idx}")
                 
-                opts_estado = ["PENDIENTE", "✅ CUMPLIDA", "⚠️ PARCIAL", "❌ NO REALIZADA"]
+                opts_estado = ["PENDIENTE", "✅ CUMPLIDA", "⚠️️ PARCIAL", "❌ NO REALIZADA"]
                 idx_est = opts_estado.index(item['estado']) if item['estado'] in opts_estado else 0
-                est_sel = c3.selectbox("Estado", opts_estado, index=idx_est, key=f"est_{idx}")
+                est_sel = c3.selectbox("Estado", opts_estado, index=idx_est, key=f"est_{v}_{idx}")
                 
-                obs_val = c4.text_input("Observaciones / Novedad", value=item['observaciones'], placeholder="Ej: No se terminó por alta demanda en caja", key=f"obs_{idx}")
+                obs_val = c4.text_input("Observaciones / Novedad", value=item['observaciones'], placeholder="Ej: No se terminó por alta demanda en caja", key=f"obs_{v}_{idx}")
 
                 registros_para_guardar.append({
                     "id": item["id"],
@@ -109,8 +115,10 @@ def render_modulo_desempenio(db):
                         else:
                             db.table("REGISTRO_TAREAS_DIARIAS").insert(payload).execute()
                     
-                    st.success("✅ ¡Checklist de la jornada guardado correctamente!")
-                    st.rerun()  # <--- HACE EL REFRESH EN TIEMPO REAL
+                    st.toast("✅ ¡Checklist guardado con éxito!", icon="🎉")
+                    # Incrementamos versión para forzar limpieza de inputs e instantáneo reload
+                    st.session_state["ver_chk"] += 1
+                    st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al guardar checklist: {e}")
 
