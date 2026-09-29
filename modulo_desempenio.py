@@ -5,11 +5,20 @@ from datetime import datetime, time
 def render_modulo_desempenio(db):
     st.title("🛡️ Gestión de Desempeño y Tareas Diarias")
     
-    tab_checklist, tab_bono, tab_historial = st.tabs([
-        "📋 Checklist Diario", 
-        "🏆 Bono de Excelencia", 
-        "📊 Historial & Auditoría"
-    ])
+    es_admin = st.session_state.get('rol') == "Administrador"
+
+    # Definimos las pestañas dinámicamente según el rol
+    if es_admin:
+        tab_checklist, tab_bono, tab_historial = st.tabs([
+            "📋 Checklist Diario", 
+            "🏆 Bono de Excelencia", 
+            "📊 Historial & Auditoría"
+        ])
+    else:
+        tab_checklist, tab_bono = st.tabs([
+            "📋 Checklist Diario", 
+            "🏆 Bono de Excelencia"
+        ])
 
     # -----------------------------------------------------------------
     # PESTAÑA 1: CHECKLIST DIARIO DE TAREAS (REGISTRO INDIVIDUAL E INMUTABLE)
@@ -205,10 +214,8 @@ def render_modulo_desempenio(db):
     # -----------------------------------------------------------------
     # PESTAÑA 3: HISTORIAL & AUDITORÍA (SOLO ADMINISTRADOR)
     # -----------------------------------------------------------------
-    with tab_historial:
-        if st.session_state.get('rol') != "Administrador":
-            st.warning("🔒 Esta sección es de acceso exclusivo para la administración.")
-        else:
+    if es_admin:
+        with tab_historial:
             st.subheader("📊 Historial General y Auditoría")
             
             # 1. Obtener de forma dinámica la última fecha registrada en Supabase
