@@ -18,19 +18,25 @@ def render_modulo_desempenio(db):
         st.subheader("📋 Registro Operativo Diario")
         st.caption("Completá los horarios de ejecución, estado y novedades de cada tarea asignada a la jornada.")
 
-        # Control de versión para refrescar formulario
+        # Control de versión y flag de reseteo
         if "ver_chk" not in st.session_state:
             st.session_state["ver_chk"] = 0
+        if "just_saved_chk" not in st.session_state:
+            st.session_state["just_saved_chk"] = False
 
         col_f1, col_f2 = st.columns([1, 2])
         fecha_sel = col_f1.date_input("Fecha de Trabajo", value=datetime.now().date(), key="chk_fecha_sel")
         usuario_actual = st.session_state.get("usuario_actual", st.session_state.get("usuario", "Vendedora"))
 
-        # Cargar tareas guardadas para esta fecha
-        res_existente = db.table("REGISTRO_TAREAS_DIARIAS").select("*").eq("fecha", str(fecha_sel)).execute().data or []
+        # Si recién se guardó, forzamos carga limpia de plantilla (estado inicial en 0)
+        if st.session_state["just_saved_chk"]:
+            res_existente = []
+            st.session_state["just_saved_chk"] = False # Reseteamos la bandera
+        else:
+            res_existente = db.table("REGISTRO_TAREAS_DIARIAS").select("*").eq("fecha", str(fecha_sel)).execute().data or []
 
         if not res_existente:
-            # Si no hay registros aún, cargamos las plantillas
+            # Estado INICIAL en 0 / Limpio
             res_plantilla = db.table("TAREAS_PLANTILLA").select("*").eq("activo", True).order("orden").execute().data or []
             tareas_mostrar = []
             for t in res_plantilla:
@@ -60,9 +66,9 @@ def render_modulo_desempenio(db):
 
         st.divider()
 
-        v = st.session_state["ver_chk"] # Sufijo dinámico para las keys
+        v = st.session_state["ver_chk"]
 
-        # Formulario de carga interactivo
+        # Formulario de carga
         with st.form(key=f"form_checklist_diario_{v}"):
             registros_para_guardar = []
 
@@ -76,7 +82,7 @@ def render_modulo_desempenio(db):
                 h_inicio = c1.time_input("Inicio Real", value=item['hora_inicio'], key=f"h_ini_{v}_{idx}")
                 h_fin = c2.time_input("Fin Real", value=item['hora_fin'], key=f"h_fin_{v}_{idx}")
                 
-                opts_estado = ["PENDIENTE", "✅ CUMPLIDA", "⚠️️ PARCIAL", "❌ NO REALIZADA"]
+                opts_estado = ["PENDIENTE", "✅ CUMPLIDA", "⚠️ PARCIAL", "❌ NO REALIZADA"]
                 idx_est = opts_estado.index(item['estado']) if item['estado'] in opts_estado else 0
                 est_sel = c3.selectbox("Estado", opts_estado, index=idx_est, key=f"est_{v}_{idx}")
                 
@@ -116,7 +122,9 @@ def render_modulo_desempenio(db):
                             db.table("REGISTRO_TAREAS_DIARIAS").insert(payload).execute()
                     
                     st.toast("✅ ¡Checklist guardado con éxito!", icon="🎉")
-                    # Incrementamos versión para forzar limpieza de inputs e instantáneo reload
+                    
+                    # Marcamos la bandera de reseteo e incrementamos la key para vaciar los inputs
+                    st.session_state["just_saved_chk"] = True
                     st.session_state["ver_chk"] += 1
                     st.rerun()
                 except Exception as e:
