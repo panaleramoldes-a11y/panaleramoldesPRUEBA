@@ -12,123 +12,101 @@ def render_modulo_desempenio(db):
     ])
 
     # -----------------------------------------------------------------
-    # PESTAÑA 1: CHECKLIST DIARIO DE TAREAS
+    # PESTAÑA 1: CHECKLIST DIARIO DE TAREAS (REGISTRO INDIVIDUAL E INMUTABLE)
     # -----------------------------------------------------------------
     with tab_checklist:
-        st.subheader("📋 Registro Operativo Diario")
-        st.caption("Completá los horarios de ejecución, estado y novedades de cada tarea asignada a la jornada.")
-
-        # Control de versión y flag de reseteo
-        if "ver_chk" not in st.session_state:
-            st.session_state["ver_chk"] = 0
-        if "just_saved_chk" not in st.session_state:
-            st.session_state["just_saved_chk"] = False
+        st.subheader("📋 Registro Operativo Diario por Tarea")
+        st.caption("Completa y registra cada tarea a medida que la ejecutes durante tu turno. Una vez enviada, no podrá modificarse.")
 
         col_f1, col_f2 = st.columns([1, 2])
         fecha_sel = col_f1.date_input("Fecha de Trabajo", value=datetime.now().date(), key="chk_fecha_sel")
         usuario_actual = st.session_state.get("usuario_actual", st.session_state.get("usuario", "Vendedora"))
 
-        # Si recién se guardó, forzamos carga limpia de plantilla (estado inicial en 0)
-        if st.session_state["just_saved_chk"]:
-            res_existente = []
-            st.session_state["just_saved_chk"] = False # Reseteamos la bandera
-        else:
-            res_existente = db.table("REGISTRO_TAREAS_DIARIAS").select("*").eq("fecha", str(fecha_sel)).execute().data or []
+        # 1. Cargar tareas maestras (Plantilla)
+        res_plantilla = db.table("TAREAS_PLANTILLA").select("*").eq("activo", True).order("orden").execute().data or []
 
-        if not res_existente:
-            # Estado INICIAL en 0 / Limpio
-            res_plantilla = db.table("TAREAS_PLANTILLA").select("*").eq("activo", True).order("orden").execute().data or []
-            tareas_mostrar = []
-            for t in res_plantilla:
-                tareas_mostrar.append({
-                    "id": None,
-                    "nombre_tarea": t["nombre_tarea"],
-                    "horario_sugerido": t.get("horario_sugerido", ""),
-                    "hora_inicio": time(14, 0),
-                    "hora_fin": time(14, 15),
-                    "estado": "PENDIENTE",
-                    "observaciones": ""
-                })
-        else:
-            tareas_mostrar = []
-            for r in res_existente:
-                h_ini = datetime.strptime(r["hora_inicio"], "%H:%M:%S").time() if r.get("hora_inicio") else time(14, 0)
-                h_fin = datetime.strptime(r["hora_fin"], "%H:%M:%S").time() if r.get("hora_fin") else time(14, 15)
-                tareas_mostrar.append({
-                    "id": r["id"],
-                    "nombre_tarea": r["nombre_tarea"],
-                    "horario_sugerido": r.get("horario_sugerido", ""),
-                    "hora_inicio": h_ini,
-                    "hora_fin": h_fin,
-                    "estado": r.get("estado", "PENDIENTE"),
-                    "observaciones": r.get("observaciones", "") or ""
-                })
+        # 2. Cargar registros existentes para la fecha y usuario seleccionados
+        res_existente = db.table("REGISTRO_TAREAS_DIARIAS")\
+            .select("*")\
+            .eq("fecha", str(fecha_sel))\
+            .eq("usuario", usuario_actual)\
+            .execute().data or []
+
+        # Mapa de tareas ya registradas para rápido acceso
+        mapa_registrados = {r["nombre_tarea"]: r for r in res_existente}
 
         st.divider()
 
-        v = st.session_state["ver_chk"]
+        # Renderizado de tareas individuales
+        for idx, t in enumerate(res_plantilla):
+            nombre_t = t["nombre_tarea"]
+            horario_sug = t.get("horario_sugerido", "")
+            
+            # Verificamos si la tarea ya fue enviada/registrada
+            ya_registrada = nombre_t in mapa_registrados
+            reg_datos = mapa_registrados.get(nombre_t, {})
 
-        # Formulario de carga
-        with st.form(key=f"form_checklist_diario_{v}"):
-            registros_para_guardar = []
+            # Encabezado de la tarea con indicador de estado
+            if ya_registrada:
+                st.markdown(f"##### 📌 {nombre_t} &nbsp;&nbsp; `🔒 REGISTRADO`", unsafe_allow_html=True)
+            else:
+                st.markdown(f"##### 📌 {nombre_t}")
 
-            for idx, item in enumerate(tareas_mostrar):
-                st.markdown(f"##### 📌 {item['nombre_tarea']}")
-                if item['horario_sugerido']:
-                    st.caption(f"Horario Sugerido: {item['horario_sugerido']}")
+            if horario_sug:
+                st.caption(f"Horario Sugerido: {horario_sug}")
 
-                c1, c2, c3, c4 = st.columns([1, 1, 1.2, 2.5])
-                
-                h_inicio = c1.time_input("Inicio Real", value=item['hora_inicio'], key=f"h_ini_{v}_{idx}")
-                h_fin = c2.time_input("Fin Real", value=item['hora_fin'], key=f"h_fin_{v}_{idx}")
-                
-                opts_estado = ["PENDIENTE", "✅ CUMPLIDA", "⚠️ PARCIAL", "❌ NO REALIZADA"]
-                idx_est = opts_estado.index(item['estado']) if item['estado'] in opts_estado else 0
-                est_sel = c3.selectbox("Estado", opts_estado, index=idx_est, key=f"est_{v}_{idx}")
-                
-                obs_val = c4.text_input("Observaciones / Novedad", value=item['observaciones'], placeholder="Ej: No se terminó por alta demanda en caja", key=f"obs_{v}_{idx}")
+            # Valores por defecto o precargados si ya existe
+            if ya_registrada:
+                h_ini_val = datetime.strptime(reg_datos["hora_inicio"], "%H:%M:%S").time() if reg_datos.get("hora_inicio") else time(14, 0)
+                h_fin_val = datetime.strptime(reg_datos["hora_fin"], "%H:%M:%S").time() if reg_datos.get("hora_fin") else time(14, 15)
+                est_val = reg_datos.get("estado", "✅ CUMPLIDA")
+                obs_val = reg_datos.get("observaciones", "") or ""
+            else:
+                h_ini_val = time(14, 0)
+                h_fin_val = time(14, 15)
+                est_val = "PENDIENTE"
+                obs_val = ""
 
-                registros_para_guardar.append({
-                    "id": item["id"],
-                    "fecha": str(fecha_sel),
-                    "usuario": usuario_actual,
-                    "nombre_tarea": item["nombre_tarea"],
-                    "horario_sugerido": item["horario_sugerido"],
-                    "hora_inicio": str(h_inicio),
-                    "hora_fin": str(h_fin),
-                    "estado": est_sel,
-                    "observaciones": obs_val
-                })
-                st.markdown("---")
+            c1, c2, c3, c4 = st.columns([1, 1, 1.2, 2.5])
 
-            btn_guardar_chk = st.form_submit_button("💾 Guardar Checklist Diario", type="primary", use_container_width=True)
+            # Controles deshabilitados si ya se envió
+            h_inicio = c1.time_input("Inicio Real", value=h_ini_val, disabled=ya_registrada, key=f"h_ini_{idx}")
+            h_fin = c2.time_input("Fin Real", value=h_fin_val, disabled=ya_registrada, key=f"h_fin_{idx}")
 
-            if btn_guardar_chk:
-                try:
-                    for reg in registros_para_guardar:
-                        payload = {
-                            "fecha": reg["fecha"],
-                            "usuario": reg["usuario"],
-                            "nombre_tarea": reg["nombre_tarea"],
-                            "horario_sugerido": reg["horario_sugerido"],
-                            "hora_inicio": reg["hora_inicio"],
-                            "hora_fin": reg["hora_fin"],
-                            "estado": reg["estado"],
-                            "observaciones": reg["observaciones"]
+            opts_estado = ["PENDIENTE", "✅ CUMPLIDA", "⚠️ PARCIAL", "❌ NO REALIZADA"]
+            idx_est = opts_estado.index(est_val) if est_val in opts_estado else 0
+            est_sel = c3.selectbox("Estado", opts_estado, index=idx_est, disabled=ya_registrada, key=f"est_{idx}")
+
+            obs_txt = c4.text_input("Observaciones / Novedad", value=obs_val, placeholder="Ej: Demora por atencion en caja", disabled=ya_registrada, key=f"obs_{idx}")
+
+            # Botón individual de envío por tarea
+            c_btn1, _ = st.columns([1.5, 3])
+            
+            if ya_registrada:
+                c_btn1.button("✅ Enviado", key=f"btn_single_{idx}", disabled=True)
+            else:
+                if c_btn1.button("📩 Registrar Tarea", key=f"btn_single_{idx}", type="primary"):
+                    if est_sel == "PENDIENTE":
+                        st.warning("⚠️ Selecciona un estado distinto a 'PENDIENTE' antes de registrar.")
+                    else:
+                        payload_single = {
+                            "fecha": str(fecha_sel),
+                            "usuario": usuario_actual,
+                            "nombre_tarea": nombre_t,
+                            "horario_sugerido": horario_sug,
+                            "hora_inicio": str(h_inicio),
+                            "hora_fin": str(h_fin),
+                            "estado": est_sel,
+                            "observaciones": obs_txt
                         }
-                        if reg["id"]:
-                            db.table("REGISTRO_TAREAS_DIARIAS").update(payload).eq("id", reg["id"]).execute()
-                        else:
-                            db.table("REGISTRO_TAREAS_DIARIAS").insert(payload).execute()
-                    
-                    st.toast("✅ ¡Checklist guardado con éxito!", icon="🎉")
-                    
-                    # Marcamos la bandera de reseteo e incrementamos la key para vaciar los inputs
-                    st.session_state["just_saved_chk"] = True
-                    st.session_state["ver_chk"] += 1
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al guardar checklist: {e}")
+                        try:
+                            db.table("REGISTRO_TAREAS_DIARIAS").insert(payload_single).execute()
+                            st.toast(f"✅ ¡'{nombre_t}' registrada correctamente!", icon="🎉")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al registrar tarea: {e}")
+
+            st.markdown("---")
 
     # -----------------------------------------------------------------
     # PESTAÑA 2: BONO DE EXCELENCIA & PUNTAJE
