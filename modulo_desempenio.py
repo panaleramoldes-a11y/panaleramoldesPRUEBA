@@ -230,18 +230,42 @@ def render_modulo_desempenio(db):
     with tab_historial:
         st.subheader("📊 Historial General y Auditoría")
         
-        c_h1, c_h2 = st.columns(2)
-        f_desde = c_h1.date_input("Desde", value=datetime.now().date().replace(day=1))
-        f_hasta = c_h2.date_input("Hasta", value=datetime.now().date())
+        # 1. Obtener de forma dinámica la última fecha registrada en Supabase
+        res_ultima_fecha = db.table("REGISTRO_TAREAS_DIARIAS")\
+            .select("fecha")\
+            .order("fecha", desc=True)\
+            .limit(1)\
+            .execute().data or []
 
+        if res_ultima_fecha and res_ultima_fecha[0].get("fecha"):
+            # Parseamos la última fecha enviada
+            ultima_fecha_envio = datetime.strptime(res_ultima_fecha[0]["fecha"], "%Y-%m-%d").date()
+        else:
+            # Fallback a hoy si la tabla está vacía
+            ultima_fecha_envio = datetime.now().date()
+
+        # 2. Renderizado de selectores de fecha con el valor por defecto ajustado
+        c_h1, c_h2 = st.columns(2)
+        f_desde = c_h1.date_input("Desde", value=ultima_fecha_envio, key="audit_f_desde")
+        f_hasta = c_h2.date_input("Hasta", value=ultima_fecha_envio, key="audit_f_hasta")
+
+        # 3. Consulta de registros filtrados por el rango seleccionado
         res_audit = db.table("REGISTRO_TAREAS_DIARIAS")\
             .select("*")\
             .gte("fecha", str(f_desde))\
             .lte("fecha", str(f_hasta))\
+            .order("fecha", desc=True)\
             .execute().data or []
 
         if res_audit:
             df_audit = pd.DataFrame(res_audit)
-            st.dataframe(df_audit[['fecha', 'usuario', 'nombre_tarea', 'hora_inicio', 'hora_fin', 'estado', 'observaciones']], use_container_width=True, hide_index=True)
+            cols_mostrar = ['fecha', 'usuario', 'nombre_tarea', 'hora_inicio', 'hora_fin', 'estado', 'observaciones']
+            cols_presentes = [c for c in cols_mostrar if c in df_audit.columns]
+            
+            st.dataframe(
+                df_audit[cols_presentes], 
+                use_container_width=True, 
+                hide_index=True
+            )
         else:
             st.info("No se encontraron registros de tareas en el rango de fechas seleccionado.")
