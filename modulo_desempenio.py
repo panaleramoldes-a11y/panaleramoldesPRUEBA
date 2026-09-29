@@ -110,7 +110,7 @@ def render_modulo_desempenio(db):
                             db.table("REGISTRO_TAREAS_DIARIAS").insert(payload).execute()
                     
                     st.success("✅ ¡Checklist de la jornada guardado correctamente!")
-                    st.rerun()
+                    st.rerun()  # <--- HACE EL REFRESH EN TIEMPO REAL
                 except Exception as e:
                     st.error(f"❌ Error al guardar checklist: {e}")
 
