@@ -123,6 +123,20 @@ def render_modulo_desempenio(db):
     with tab_bono:
         st.subheader("🏆 Control y Seguimiento del Bono de Excelencia")
         
+        # ---------------------------------------------------------
+        # 🖼️ GUÍA VISUAL DEL BONO DE EXCELENCIA (Expander)
+        # ---------------------------------------------------------
+        with st.expander("📖 Ver Guía Rápida del Bono de Excelencia (Premios y Faltas)", expanded=False):
+            try:
+                # Usamos el mismo diseño de columnas que en el inventario
+                col_img, col_vacia = st.columns([0.8, 0.2])
+                with col_img:
+                    st.image("guia_bono_excelencia.png", use_container_width=True)
+            except Exception:
+                st.warning("⚠️ No se encontró la imagen 'guia_bono_excelencia.png' en el directorio del proyecto.")
+
+        st.divider()
+
         mes_activo = datetime.now().strftime("%Y-%m")
         st.info(f"📅 **Periodo Activo:** {datetime.now().strftime('%B %Y').title()} (`{mes_activo}`)")
 
@@ -159,6 +173,8 @@ def render_modulo_desempenio(db):
                 f_col1, f_col2 = st.columns([1, 2])
                 
                 tipo_evt = f_col1.selectbox("Tipo de Evento", [
+                    "⭐ +10 PTS: Reseña Positiva (5 estrellas en Google/Redes)",
+                    "📦 +5 PTS: Inventario Perfecto Semanal (100% coincidencia)",
                     "🎁 +10 PTS: Propuesta de Contenido (Scouting)",
                     "🎁 +5 PTS: Semana Perfecta (100% Checklists)",
                     "⚠️ -5 PTS: Orden e Imagen (Basura, Microzona, etc.)",
@@ -173,8 +189,12 @@ def render_modulo_desempenio(db):
                 btn_reg_pts = st.form_submit_button("📌 Registrar Evento en el Bono", type="primary")
 
                 if btn_reg_pts:
-                    # Determinar puntos según selección
-                    if "Propuesta de Contenido" in tipo_evt:
+                    # Determinar puntos según selección exacta
+                    if "Reseña Positiva" in tipo_evt:
+                        pts = 10
+                    elif "Inventario Perfecto Semanal" in tipo_evt:
+                        pts = 5
+                    elif "Propuesta de Contenido" in tipo_evt:
                         pts = 10
                     elif "Semana Perfecta" in tipo_evt:
                         pts = 5
