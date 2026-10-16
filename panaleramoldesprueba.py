@@ -4480,25 +4480,22 @@ else:
                     if sel_abc.empty:
                         st.warning("⚠️ No seleccionaste ningún producto. Tildá las casillas en la columna '📱 Pedir'.")
                     else:
-                        # --- ORDENAMIENTO PERSONALIZADO POR TALLE PARA WHATSAPP ---
-                        orden_talles = ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "Junior", "CH", "EG", "EEG"]
-                        
-                        if 'Talle' in df_ranking.columns:
-                            sel_abc['Talle'] = df_ranking.loc[sel_abc.index, 'Talle'].astype(str).str.strip()
-                            sel_abc['Talle_Cat'] = pd.Categorical(
-                                sel_abc['Talle'], 
-                                categories=orden_talles, 
-                                ordered=True
-                            )
-                            sel_abc = sel_abc.sort_values(by=['Talle_Cat', 'Nombre'], na_position='last')
-        
+                        # --- ASIGNACIÓN DE RUBRO Y ORDENAMIENTO ALFABÉTICO (RUBRO -> NOMBRE) ---
+                        if 'Rubro' in df_ranking.columns:
+                            # Mapeamos el Rubro desde df_ranking y limpiamos espacios/formato
+                            sel_abc['Rubro'] = df_ranking.loc[sel_abc.index, 'Rubro'].astype(str).str.strip().str.upper()
+                        else:
+                            sel_abc['Rubro'] = ""
+
+                        # Ordenamos primero por Rubro (A-Z) y luego por Nombre (A-Z)
+                        sel_abc = sel_abc.sort_values(by=['Rubro', 'Nombre'], ascending=[True, True])
+
                         msg_abc = ""
                         for _, r in sel_abc.iterrows():
                             cant_comprar = int(r['Faltante_Min']) if r['Faltante_Min'] > 0 else 1
                             
-                            # Identificar si es leche vía df_ranking
-                            idx = r.name
-                            rubro_prod = str(df_ranking.loc[idx, 'Rubro']).strip().upper() if 'Rubro' in df_ranking.columns and idx in df_ranking.index else ""
+                            # Identificar si es leche para el texto de unidades
+                            rubro_prod = str(r['Rubro']).strip().upper()
                             
                             if rubro_prod == "LECHE":
                                 unid_texto = "fardo" if cant_comprar == 1 else "fardos"
