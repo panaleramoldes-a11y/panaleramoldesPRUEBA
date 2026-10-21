@@ -692,41 +692,52 @@ else:
             orden_manual = {}
             
             for idx, v in enumerate(ruta_optima):
-                # Usamos un ID único por ítem basado en ID_Venta o Cliente para evitar colisiones
-                id_item = str(v.get('ID_Venta', v['Cliente']))
-                key_pos_state = f"pos_orden_{fecha}_{id_item}"
+                # Creador de ID unívoco absoluto usando el índice de posición + ID_Venta + Cliente
+                id_venta_raw = v.get('ID_Venta', f"P_{idx}")
+                cliente_raw = str(v.get('Cliente', 'Parada')).replace(" ", "_")
+                
+                # Clave única única e irrepetible para session_state y widget
+                uid_parada = f"{idx}_{id_venta_raw}_{cliente_raw}"
+                key_pos_state = f"pos_orden_{fecha}_{uid_parada}"
                 
                 # Valor por defecto inicial si no fue modificado aún
                 val_defecto = st.session_state.get(key_pos_state, idx + 1)
                 
-                # Key estática fija para Streamlit
-                key_widget = f"input_num_{fecha}_{id_item}"
-    
                 pos_nueva = st.number_input(
-                    f"Posición para {v['Cliente']}", 
+                    f"Posición #{idx+1}: {v['Cliente']}", 
                     min_value=1, 
                     max_value=len(ruta_optima),
                     value=int(val_defecto),
-                    key=key_widget
+                    key=f"input_num_{fecha}_{uid_parada}"
                 )
-                orden_manual[id_item] = pos_nueva
+                orden_manual[idx] = pos_nueva
             
             submit = st.form_submit_button("Aplicar nuevo orden")
             
             if submit:
-                for id_item, valor in orden_manual.items():
-                    st.session_state[f"pos_orden_{fecha}_{id_item}"] = valor
+                for idx, valor in orden_manual.items():
+                    v = ruta_optima[idx]
+                    id_venta_raw = v.get('ID_Venta', f"P_{idx}")
+                    cliente_raw = str(v.get('Cliente', 'Parada')).replace(" ", "_")
+                    uid_parada = f"{idx}_{id_venta_raw}_{cliente_raw}"
+                    
+                    st.session_state[f"pos_orden_{fecha}_{uid_parada}"] = valor
                 st.rerun()
     
-        # Ordenar la lista según lo guardado en session_state
-        def obtener_posicion(item, idx_orig):
-            id_item = str(item.get('ID_Venta', item['Cliente']))
-            return st.session_state.get(f"pos_orden_{fecha}_{id_item}", idx_orig + 1)
+        # Función para extraer la posición asignada manualmente a cada parada
+        def obtener_posicion(idx_item, item):
+            id_venta_raw = item.get('ID_Venta', f"P_{idx_item}")
+            cliente_raw = str(item.get('Cliente', 'Parada')).replace(" ", "_")
+            uid_parada = f"{idx_item}_{id_venta_raw}_{cliente_raw}"
+            
+            return st.session_state.get(f"pos_orden_{fecha}_{uid_parada}", idx_item + 1)
     
+        # Ordenar la lista según la posición obtenida
         ruta_reordenada = sorted(
-            ruta_optima, 
-            key=lambda x: obtener_posicion(x, ruta_optima.index(x))
+            list(enumerate(ruta_optima)), 
+            key=lambda pair: obtener_posicion(pair[0], pair[1])
         )
+        ruta_reordenada = [pair[1] for pair in ruta_reordenada]
         
         # Mostrar resultados finales en texto
         st.write("### 🚚 Ruta Optimizada Final")
