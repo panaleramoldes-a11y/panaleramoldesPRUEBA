@@ -636,6 +636,10 @@ else:
             destino_final=punto_destino
         )
         
+        # 2. Inicializamos el estado del orden
+        if f"orden_{fecha}" not in st.session_state:
+            st.session_state[f"orden_{fecha}"] = {v['Cliente']: i+1 for i, v in enumerate(ruta_optima)}
+    
         st.write("### 🗺️ Previsualización de Ruta")
     
         # 1. Blindaje: Verificamos si hay datos antes de intentar crear el mapa
@@ -686,77 +690,48 @@ else:
                     ],
                 ))
     
-        # Formulario de reordenamiento manual
-        with st.form(key=f"form_orden_reparto_{fecha}"):
-            st.markdown("#### 🔢 Ajustar Orden de Entregas")
+        # Formulario de orden
+        with st.form(key=f"form_orden_{fecha}"):
             orden_manual = {}
-            
             for idx, v in enumerate(ruta_optima):
-                # Creador de ID unívoco absoluto usando el índice de posición + ID_Venta + Cliente
-                id_venta_raw = v.get('ID_Venta', f"P_{idx}")
-                cliente_raw = str(v.get('Cliente', 'Parada')).replace(" ", "_")
-                
-                # Clave única única e irrepetible para session_state y widget
-                uid_parada = f"{idx}_{id_venta_raw}_{cliente_raw}"
-                key_pos_state = f"pos_orden_{fecha}_{uid_parada}"
-                
-                # Valor por defecto inicial si no fue modificado aún
-                val_defecto = st.session_state.get(key_pos_state, idx + 1)
-                
-                pos_nueva = st.number_input(
-                    f"Posición #{idx+1}: {v['Cliente']}", 
-                    min_value=1, 
-                    max_value=len(ruta_optima),
-                    value=int(val_defecto),
-                    key=f"input_num_{fecha}_{uid_parada}"
+                orden_manual[v['Cliente']] = st.number_input(
+                    f"Orden para {v['Cliente']}", min_value=1, max_value=len(ruta_optima),
+                    value=st.session_state.get(f"pos_{v['Cliente']}_{fecha}", idx + 1)
                 )
-                orden_manual[idx] = pos_nueva
-            
             submit = st.form_submit_button("Aplicar nuevo orden")
             
             if submit:
-                for idx, valor in orden_manual.items():
-                    v = ruta_optima[idx]
-                    id_venta_raw = v.get('ID_Venta', f"P_{idx}")
-                    cliente_raw = str(v.get('Cliente', 'Parada')).replace(" ", "_")
-                    uid_parada = f"{idx}_{id_venta_raw}_{cliente_raw}"
-                    
-                    st.session_state[f"pos_orden_{fecha}_{uid_parada}"] = valor
-                st.rerun()
+                # Guardamos los nuevos valores en session_state
+                for cliente, valor in orden_manual.items():
+                    st.session_state[f"pos_{cliente}_{fecha}"] = valor
+                st.rerun() # Fuerza la recarga para que se ordene la lista
     
-        # Función para extraer la posición asignada manualmente a cada parada
-        def obtener_posicion(idx_item, item):
-            id_venta_raw = item.get('ID_Venta', f"P_{idx_item}")
-            cliente_raw = str(item.get('Cliente', 'Parada')).replace(" ", "_")
-            uid_parada = f"{idx_item}_{id_venta_raw}_{cliente_raw}"
-            
-            return st.session_state.get(f"pos_orden_{fecha}_{uid_parada}", idx_item + 1)
-    
-        # Ordenar la lista según la posición obtenida
-        ruta_reordenada = sorted(
-            list(enumerate(ruta_optima)), 
-            key=lambda pair: obtener_posicion(pair[0], pair[1])
-        )
-        ruta_reordenada = [pair[1] for pair in ruta_reordenada]
+        # Generación de lista final
+        # Usamos el orden guardado en session_state o el original
+        ruta_reordenada = sorted(ruta_optima, key=lambda x: st.session_state.get(f"pos_{x['Cliente']}_{fecha}", 0))
         
-        # Mostrar resultados finales en texto
+        # 3. Mostrar resultados finales
         st.write("### 🚚 Ruta Optimizada Final")
         texto_whatsapp = f"*DIAGRAMA DE REPARTOS {fecha}*\n\n"
         
+        # Se corrige la iteración sobre ruta_reordenada
         for i, row in enumerate(ruta_reordenada, start=1):
             cliente = row['Cliente']
             total = row.get('Total', 0)
             metodo_pago = row.get('Metodo_Pago', '')
             
+            # 1. Armamos la base de la línea
             linea = f"{i}. {cliente} ${total} {metodo_pago}"
             
+            # 2. Extraemos y validamos si existen observaciones
             obs = row.get('Observaciones', '')
             if pd.notna(obs) and str(obs).strip() and str(obs).strip().lower() not in ["nan", "none"]:
                 linea += f" *{str(obs).strip()}*"
                 
             texto_whatsapp += linea + "\n"
         
-        st.text_area("📋 Copiar para WhatsApp:", value=texto_whatsapp, height=200, key=f"area_txt_wsp_{fecha}")
+        # Muestra el resultado listo para copiar
+        st.text_area("📋 Copiar para WhatsApp:", value=texto_whatsapp, height=200)
     
     def extraer_coords_desde_link(link):
         # Busca el patrón @-XX.XXXX,-YY.YYYY en el link
