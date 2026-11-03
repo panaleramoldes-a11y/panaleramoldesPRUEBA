@@ -5820,7 +5820,8 @@ else:
                     
                     # --- AUTOMATIZACIÓN: DETECCIÓN DE AVISOS PENDIENTES ---
                     try:
-                        avisos_pendientes = db.table("AVISOS_CLIENTES").select("*").eq("estado", "PENDIENTE").execute().data
+                        # 1. Usamos el nombre de la tabla en minúsculas tal como está en Supabase
+                        avisos_pendientes = db.table("avisos_clientes").select("*").eq("estado", "PENDIENTE").execute().data
                         
                         if avisos_pendientes:
                             for item in st.session_state.carrito_compra:
@@ -5839,25 +5840,50 @@ else:
                                     for aviso in avisos_pendientes:
                                         match = True
                                         
-                                        if aviso.get('rubro') and str(aviso['rubro']).strip().lower() != p_rubro:
-                                            match = False
-                                        if aviso.get('marca') and str(aviso['marca']).strip().lower() not in p_marca:
-                                            match = False
-                                        if aviso.get('linea') and str(aviso['linea']).strip().lower() not in p_linea:
-                                            match = False
-                                        if aviso.get('talle') and str(aviso['talle']).strip().lower() != p_talle:
-                                            match = False
-                                        if aviso.get('etapa') and str(aviso['etapa']).strip().lower() != p_etapa:
-                                            match = False
-                                        if aviso.get('formato_leche') and str(aviso['formato_leche']).strip().lower() != p_formato:
-                                            match = False
-                                            
+                                        # Rubro (Coincidencia exacta si el aviso lo especificó)
+                                        av_rubro = str(aviso.get('rubro', '')).strip().lower()
+                                        if av_rubro and av_rubro != 'none' and av_rubro != '':
+                                            if av_rubro != p_rubro:
+                                                match = False
+                                        
+                                        # Marca (Coincidencia parcial o total si el aviso lo especificó)
+                                        av_marca = str(aviso.get('marca', '')).strip().lower()
+                                        if av_marca and av_marca != 'none' and av_marca != '':
+                                            if av_marca not in p_marca:
+                                                match = False
+                                        
+                                        # Línea (Coincidencia parcial si el aviso lo especificó)
+                                        av_linea = str(aviso.get('linea', '')).strip().lower()
+                                        if av_linea and av_linea != 'none' and av_linea != '':
+                                            if av_linea not in p_linea:
+                                                match = False
+                                        
+                                        # Talle (Coincidencia exacta si el aviso lo especificó)
+                                        av_talle = str(aviso.get('talle', '')).strip().lower()
+                                        if av_talle and av_talle != 'none' and av_talle != '':
+                                            if av_talle != p_talle:
+                                                match = False
+                                        
+                                        # Etapa (Coincidencia exacta si el aviso lo especificó)
+                                        av_etapa = str(aviso.get('etapa', '')).strip().lower()
+                                        if av_etapa and av_etapa != 'none' and av_etapa != '':
+                                            if av_etapa != p_etapa:
+                                                match = False
+                                        
+                                        # Formato Leche (Coincidencia exacta si el aviso lo especificó)
+                                        av_formato = str(aviso.get('formato_leche', '')).strip().lower()
+                                        if av_formato and av_formato != 'none' and av_formato != '':
+                                            if av_formato != p_formato:
+                                                match = False
+                                                
+                                        # Si pasó todas las validaciones de los campos cargados, habilitamos el aviso
                                         if match:
-                                            db.table("AVISOS_CLIENTES").update({
+                                            db.table("avisos_clientes").update({
                                                 "estado": "HABILITADO"
                                             }).eq("id", aviso['id']).execute()
                     except Exception as e:
                         print(f"Error al evaluar avisos automáticos: {e}")
+                    # -----------------------------------------------------------------
                     # -----------------------------------------------------------------
                     
                     # --- Limpieza de Órdenes en Edición ---
