@@ -1266,7 +1266,7 @@ else:
         # --- 1. CALCULAMOS PRIMERO EL CONTADOR DE AVISOS HABILITADOS ---
         cant_avisos_hab = 0
         try:
-            res_avisos = db.table("AVISOS_CLIENTES").select("id").eq("estado", "HABILITADO").execute()
+            res_avisos = db.table("avisos_clientes").select("id").eq("estado", "HABILITADO").execute() # 👈 En minúsculas
             if res_avisos and res_avisos.data:
                 cant_avisos_hab = len(res_avisos.data)
         except Exception:
@@ -1370,7 +1370,9 @@ else:
         @st.dialog("🔔 Bandeja de Clientes a Avisar", width="large")
         def abrir_bandeja_avisos():
             try:
-                avisos_hab = db.table("AVISOS_CLIENTES").select("*").eq("estado", "HABILITADO").execute().data
+                # ⬇️ Cambiamos a minúsculas "avisos_clientes"
+                avisos_hab = db.table("avisos_clientes").select("*").eq("estado", "HABILITADO").execute().data
+                
                 if not avisos_hab:
                     st.info("📭 No hay avisos habilitados pendientes de notificar.")
                 else:
@@ -1388,17 +1390,19 @@ else:
                                 st.caption(f"🛍️ **Esperaba:** {f_rubro} / {f_marca} / {f_talle}")
                             with c_acciones:
                                 tel_limpio = str(row['telefono']).replace(".0", "").strip()
-                                mensaje_wsp = f"¡Hola {row['cliente_nombre']}! Te escribimos de la panalera porque acaban de ingresar los productos que estabas esperando. 🛍️"
+                                mensaje_wsp = f"¡Hola {row['cliente_nombre']}! Te escribimos de la pañalera porque acaban de ingresar los productos que estabas esperando. 🛍️"
                                 link_wsp = f"https://wa.me/{tel_limpio}?text={mensaje_wsp.replace(' ', '%20')}"
                                 st.markdown(f"[💬 Enviar WhatsApp]({link_wsp})", unsafe_allow_html=True)
                                 b1, b2 = st.columns(2)
                                 with b1:
                                     if st.button("✔️ Avisado", key=f"av_{row['id']}", use_container_width=True):
-                                        db.table("AVISOS_CLIENTES").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
+                                        # ⬇️ Cambiamos a minúsculas "avisos_clientes"
+                                        db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
                                         st.rerun()
                                 with b2:
                                     if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
-                                        db.table("AVISOS_CLIENTES").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
+                                        # ⬇️ Cambiamos a minúsculas "avisos_clientes"
+                                        db.table("avisos_clientes").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
                                         st.rerun()
             except Exception as e:
                 st.error(f"Error al leer la bandeja de avisos: {e}")
