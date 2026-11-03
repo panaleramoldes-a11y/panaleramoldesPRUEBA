@@ -1407,9 +1407,13 @@ else:
         def abrir_crear_aviso_pos():
             st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
             with st.form("form_aviso_pos_modal"):
-                df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("ID_Cliente, Nombre, Apellido, Telefono, Razón Social").execute().data)
+                # 👇 Reemplazamos el select específico por select("*") para evitar el error con espacios/acentos
+                df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("*").execute().data)
+                
                 if not df_cli_modal.empty:
-                    df_cli_modal['Display_C'] = df_cli_modal['Razón Social'].fillna('') + " - " + df_cli_modal['Nombre'].fillna('') + " " + df_cli_modal['Apellido'].fillna('')
+                    # Nos aseguramos de manejar los nombres de columnas de forma segura
+                    razon_col = df_cli_modal.get('Razón Social', df_cli_modal.get('Razon_Social', pd.Series(['']*len(df_cli_modal))))
+                    df_cli_modal['Display_C'] = razon_col.fillna('') + " - " + df_cli_modal['Nombre'].fillna('') + " " + df_cli_modal['Apellido'].fillna('')
                     lista_c_modal = df_cli_modal['Display_C'].tolist()
                     dict_id_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['ID_Cliente']))
                     dict_tel_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['Telefono']))
