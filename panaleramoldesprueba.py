@@ -1492,9 +1492,23 @@ else:
                 
                 st.divider()
                 st.markdown("#### Características del Producto Buscado")
+                
+                # Lista oficial de rubros ordenada alfabéticamente con una opción vacía inicial
+                lista_rubros_modal = [""] + sorted([
+                    "ACEITE", "ACONDICIONADOR", "ALGODON", 
+                    "APOSITOS", "BAÑO LIQUIDO", "CAMBIADOR", "CHUPETE", 
+                    "COLONIA", "CREMA", "CUCHARAS", "DESCONGESTIONADORES NASALES", 
+                    "ESPONJA", "HIGIENE BUCAL", "HISOPOS", "JABON", 
+                    "LECHE", "LIMPIEZA ROPA", "MAMADERA", "MOCHILA MATERNAL", "MORDILLOS", 
+                    "OLEO CALCAREO", "PAÑALES", "PAÑALES ADULTOS", "PLATOS", "PROTECTOR MAMARIO", 
+                    "SACALECHES", "SEGURIDAD", "SHAMPOO", "TALCO", 
+                    "TETINAS", "TIJERAS", "TOALLITAS FEMENINAS", 
+                    "TOALLITAS HUMEDAS", "VASOS"
+                ])
+
                 col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
-                    rubro_m = st.selectbox("Rubro", ["", "PAÑALES", "LECHE", "CHUPETE", "ACCESORIOS", "OTRO"])
+                    rubro_m = st.selectbox("Rubro", lista_rubros_modal)
                 with col_m2:
                     marca_m = st.text_input("Marca (Ej: Huggies, Enterox)")
                 with col_m3:
