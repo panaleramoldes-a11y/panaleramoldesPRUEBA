@@ -5803,7 +5803,7 @@ else:
                                 "usuario": str(usuario_logueado)
                             }).execute()
                     
-                    # --- 🚀 AQUÍ VA EL BLOQUE DE AUTOMATIZACIÓN DE AVISOS PENDIENTES ---
+                    # --- AUTOMATIZACIÓN: DETECCIÓN DE AVISOS PENDIENTES ---
                     try:
                         avisos_pendientes = db.table("AVISOS_CLIENTES").select("*").eq("estado", "PENDIENTE").execute().data
                         
@@ -5819,6 +5819,7 @@ else:
                                     p_linea = str(p.get('Linea', '')).strip().lower()
                                     p_talle = str(p.get('Talle', '')).strip().lower()
                                     p_etapa = str(p.get('Etapa', '')).strip().lower()
+                                    p_formato = str(p.get('Formato_Leche', '')).strip().lower()
                                     
                                     for aviso in avisos_pendientes:
                                         match = True
@@ -5832,6 +5833,8 @@ else:
                                         if aviso.get('talle') and str(aviso['talle']).strip().lower() != p_talle:
                                             match = False
                                         if aviso.get('etapa') and str(aviso['etapa']).strip().lower() != p_etapa:
+                                            match = False
+                                        if aviso.get('formato_leche') and str(aviso['formato_leche']).strip().lower() != p_formato:
                                             match = False
                                             
                                         if match:
