@@ -1549,21 +1549,37 @@ else:
                     if not cliente_display:
                         st.error("Por favor, seleccioná un cliente válido.")
                     else:
-                        db.table("AVISOS_CLIENTES").insert({
-                            "id_cliente": id_cliente_final,
-                            "cliente_nombre": cliente_nombre_final if cliente_nombre_final else "CLIENTE",
-                            "telefono": telefono_ingresado,
-                            "rubro": rubro_m if rubro_m else None,
-                            "marca": marca_m if marca_m else None,
-                            "linea": linea_m if linea_m else None,
-                            "talle": talle_m if talle_m else None,
-                            "etapa": etapa_m if etapa_m else None,
-                            "formato_leche": formato_m if formato_m else None,
-                            "estado": "PENDIENTE"
-                        }).execute()
-                        
-                        st.success("¡Aviso registrado con éxito! Quedará en espera de stock.")
-                        st.rerun()
+                        tel_a_guardar = telefono_ingresado.strip() if telefono_ingresado and telefono_ingresado.strip() else "S/N"
+                        nombre_a_guardar = cliente_nombre_final.strip() if cliente_nombre_final and cliente_nombre_final.strip() else "CLIENTE"
+
+                        # Limpiamos los selects para que manden None si están vacíos o seleccionados en blanco
+                        rubro_val = rubro_m if rubro_m and rubro_m != "" else None
+                        marca_val = marca_m if marca_m and marca_m != "" else None
+                        linea_val = linea_m if linea_m and linea_m != "" else None
+                        talle_val = talle_m if talle_m and talle_m != "" else None
+                        etapa_val = etapa_m if etapa_m and etapa_m != "" else None
+                        formato_val = formato_m if formato_m and formato_m != "" else None
+
+                        try:
+                            db.table("AVISOS_CLIENTES").insert({
+                                "id_cliente": int(id_cliente_final) if id_cliente_final else None,
+                                "cliente_nombre": nombre_a_guardar,
+                                "telefono": tel_a_guardar,
+                                "rubro": rubro_val,
+                                "marca": marca_val,
+                                "linea": linea_val,
+                                "talle": talle_val,
+                                "etapa": etapa_val,
+                                "formato_leche": formato_val,
+                                "estado": "PENDIENTE"
+                            }).execute()
+                            
+                            st.success("¡Aviso registrado con éxito! Quedará en espera de stock.")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            # Esto nos mostrará el error exacto de Supabase en la pantalla para saber qué falló
+                            st.error(f"Detalle exacto del error de Supabase: {e}")
     
         # --- 3. RENDERIZAMOS LA BOTONERA SUPERIOR DE ACCESO RÁPIDO ---
         col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns([2.2, 1.1, 1.1, 1.1, 1])
