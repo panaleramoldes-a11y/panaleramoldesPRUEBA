@@ -1534,14 +1534,14 @@ else:
                 with col_m3:
                     linea_m = st.selectbox("Línea / Modelo", lineas_modal)
 
-                col_m4, col_m5 = st.columns(2)
+                # Separamos Talle, Etapa y Formato Leche en 3 columnas limpias
+                col_m4, col_m5, col_m6 = st.columns(3)
                 with col_m4:
                     talle_m = st.selectbox("Talle", talles_modal)
                 with col_m5:
-                    etapa_m = st.selectbox("Etapa / Formato Leche", etapas_modal)
-
-                # Si querés incluir también el formato de leche por separado:
-                # formato_m = st.selectbox("Formato Leche", formatos_modal)
+                    etapa_m = st.selectbox("Etapa (Leche)", etapas_modal)
+                with col_m6:
+                    formato_m = st.selectbox("Formato Leche", formatos_modal)
 
                 btn_guardar_aviso = st.form_submit_button("💾 Guardar en Agenda Pendiente", type="primary")
                 
@@ -1557,7 +1557,8 @@ else:
                             "marca": marca_m if marca_m else None,
                             "linea": linea_m if linea_m else None,
                             "talle": talle_m if talle_m else None,
-                            "etapa_leche": etapa_m if etapa_m else None,
+                            "etapa": etapa_m if etapa_m else None,
+                            "formato_leche": formato_m if formato_m else None,
                             "estado": "PENDIENTE"
                         }).execute()
                         
