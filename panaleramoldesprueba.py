@@ -1261,299 +1261,228 @@ else:
     # =====================================================================
     # MODULO: 🛒 PUNTO DE VENTA
     # =====================================================================
-    elif menu == "🛒 Punto de Venta":
-        # Ampliamos a 4 columnas para acomodar el nuevo botón de carga de avisos
-        col_t1, col_t2, col_t3, col_t4 = st.columns([2.5, 1.2, 1.2, 1])
-        col_t1.header("🚀 Venta Rápida - Pañalera Moldes")
-        
-        if col_t2.button(f"🔔 Avisos Listos ({cant_avisos_hab})", type="secondary", use_container_width=True):
-            abrir_bandeja_avisos()
+        elif menu == "🛒 Punto de Venta":
             
-        if col_t3.button("➕ Anotar Faltante", type="secondary", use_container_width=True):
-            abrir_crear_aviso_pos()
-            
-        if col_t4.button("🧹 Limpiar", type="secondary", use_container_width=True):
-            resetear_punto_venta()
-        # 1.5. BOTÓN PARA VER PENDIENTES (Visual Horizontal Expandida y Ordenada Alfabéticamente)
-        @st.dialog("Ventas Pendientes", width="large")
-        def abrir_pendientes():
-            import json
-            import re
-        
-            def limpiar_monto(texto):
-                """Extrae números de un string como 'Transferencia: $59,600'"""
-                solo_numeros = re.sub(r"[^\d.]", "", texto.replace(",", ""))
-                try:
-                    return float(solo_numeros)
-                except:
-                    return 0.0
-        
-            try:
-                # Traemos los vendedores para mapear el ID al Nombre en la visual
-                vendedores_dict = {}
-                if "df_vend" in locals() and not df_vend.empty:
-                    vendedores_dict = dict(
-                        zip(
-                            df_vend["ID_Vendedor"].astype(str),
-                            df_vend["Nombre"],
-                        )
-                    )
-        
-                # 1. Consultamos los datos crudos de Supabase
-                datos_raw = db.table("VENTAS_PENDIENTES").select("*").execute().data
-        
-                if not datos_raw:
-                    st.info("📭 No hay ventas pendientes registradas.")
-                else:
-                    # Ordenamos la lista alfabéticamente por el nombre del Cliente
-                    pendientes = sorted(
-                        datos_raw,
-                        key=lambda x: str(x.get("Cliente", "")).strip().lower(),
-                    )
-        
-                    st.markdown("### Listado de Espera (Ordenado por Cliente)")
-        
-                    for v in pendientes:
-                        # Contenedor que aprovecha el ancho completo del diálogo grande
-                        with st.container(border=True):
-                            # Dividimos en 4 columnas horizontales
-                            c_id, c_cliente, c_monto, c_acciones = st.columns(
-                                [1.2, 2.0, 1.2, 1.2], vertical_alignment="center"
-                            )
-        
-                            with c_id:
-                                id_corto = v["ID_Pendiente"].replace("PEND-", "")
-                                st.markdown(
-                                    f"🆔 **#{id_corto}**\n\n📅 {v['Fecha']}"
-                                )
-        
-                            with c_cliente:
-                                id_vendedor_str = str(v.get("Vendedor", "1"))
-                                nombre_vendedor = vendedores_dict.get(
-                                    id_vendedor_str, f"Vendedor {id_vendedor_str}"
-                                )
-                                st.markdown(
-                                    f"👤 **{v['Cliente']}**\n\n👔 {nombre_vendedor}"
-                                )
-        
-                            with c_monto:
-                                monto_numerico = limpiar_monto(
-                                    v.get("Metodo_Pago", "0")
-                                )
-                                st.markdown(
-                                    f"💰 **Total:**\n\n### ${monto_numerico:,.0f}"
-                                )
-        
-                            with c_acciones:
-                                btn_col1, btn_col2 = st.columns(2, gap="small")
-        
-                                with btn_col1:
-                                    if st.button(
-                                        "📥 Cargar",
-                                        key=f"recup_{v['ID_Pendiente']}",
-                                        use_container_width=True,
-                                        type="primary",
-                                    ):
-                                        st.session_state.id_pendiente_cargado = v[
-                                            "ID_Pendiente"
-                                        ]
-                                        st.session_state.carrito_vta = json.loads(
-                                            v["Detalle_JSON"]
-                                        )
-                                        st.session_state.pagos_split = json.loads(
-                                            v.get(
-                                                "Pagos_JSON",
-                                                '[{"metodo": "Efectivo", "monto": 0.0}]',
-                                            )
-                                        )
-                                        st.session_state.cliente_recuperado = v[
-                                            "Cliente"
-                                        ]
-                                        st.session_state.id_cliente_recuperado = (
-                                            v.get("ID_Cliente_Pendiente", "0")
-                                        )
-        
-                                        st.session_state.vendedor_recuperado = (
-                                            id_vendedor_str
-                                        )
-        
-                                        st.session_state.tipo_entrega = v.get(
-                                            "Forma_Entrega", "Mostrador"
-                                        )
-                                        st.session_state.direccion_entrega = v.get(
-                                            "Direccion_Entrega", "N/A"
-                                        )
-                                        st.session_state.link_maps_entrega = v.get(
-                                            "Link_Maps_Entrega", "N/A"
-                                        )
-                                        st.session_state.fecha_reparto = v.get(
-                                            "Fecha_Entrega",
-                                            str(datetime.today().date()),
-                                        )
-                                        st.session_state.observaciones_entrega = v.get(
-                                            "Observaciones", ""
-                                        )
-                                        st.rerun()
-        
-                                with btn_col2:
-                                    if st.button(
-                                        "🗑️",
-                                        key=f"del_{v['ID_Pendiente']}",
-                                        use_container_width=True,
-                                        help="Eliminar de pendientes",
-                                    ):
-                                        db.table("VENTAS_PENDIENTES").delete().eq(
-                                            "ID_Pendiente", v["ID_Pendiente"]
-                                        ).execute()
-                                        st.rerun()
-        
-            except Exception as e:
-                st.error(f"Error al leer pendientes: {e}")
-        
-        
-        # --- 🔥 BOTÓN PRINCIPAL CON CONTADOR DENTRO DEL PARÉNTESIS ---
-        cant_pendientes = 0
-        try:
-            # Consulta ultra liviana a Supabase solo trayendo la columna ID para contar
-            res_cant = db.table("VENTAS_PENDIENTES").select("ID_Pendiente").execute()
-            if res_cant and res_cant.data:
-                cant_pendientes = len(res_cant.data)
-        except Exception:
-            cant_pendientes = 0
-        
-        # Construimos el label con el formato exacto solicitado
-        label_boton = f"📂 VER PENDIENTES ({cant_pendientes})"
-        
-        if st.button(label_boton, width="stretch"):
-            abrir_pendientes()
-
-        # -----------------------------------------------------------------
-        # 1.6. BOTÓN Y DIÁLOGO PARA GESTIÓN DE AVISOS HABILITADOS A CLIENTES
-        # -----------------------------------------------------------------
-        @st.dialog("🔔 Bandeja de Clientes a Avisar", width="large")
-        def abrir_bandeja_avisos():
-            try:
-                # Consultamos los avisos que ya pasaron a estado HABILITADO
-                avisos_hab = db.table("AVISOS_CLIENTES").select("*").eq("estado", "HABILITADO").execute().data
-                
-                if not avisos_hab:
-                    st.info("📭 No hay avisos habilitados pendientes de notificar.")
-                else:
-                    st.markdown("### 📋 Listado de Clientes listos para contactar (Mercadería Ingresada)")
-                    
-                    for row in avisos_hab:
-                        with st.container(border=True):
-                            c_info, c_filtros, c_acciones = st.columns([2, 2, 2], vertical_alignment="center")
-                            
-                            with c_info:
-                                st.markdown(f"👤 **{row['cliente_nombre']}**")
-                                st.markdown(f"📞 `{row['telefono']}`")
-                            
-                            with c_filtros:
-                                # Mostramos qué filtros esperaba el cliente
-                                f_rubro = row.get('rubro') or '-'
-                                f_marca = row.get('marca') or '-'
-                                f_talle = row.get('talle') or '-'
-                                st.caption(f"🛍️ **Esperaba:** {f_rubro} / {f_marca} / {f_talle}")
-                            
-                            with c_acciones:
-                                tel_limpio = str(row['telefono']).replace(".0", "").strip()
-                                mensaje_wsp = f"¡Hola {row['cliente_nombre']}! Te escribimos de la panalera porque acaban de ingresar los productos que estabas esperando. 🛍️"
-                                link_wsp = f"https://wa.me/{tel_limpio}?text={mensaje_wsp.replace(' ', '%20')}"
-                                
-                                st.markdown(f"[💬 Enviar WhatsApp]({link_wsp})", unsafe_allow_html=True)
-                                
-                                b1, b2 = st.columns(2)
-                                with b1:
-                                    if st.button("✔️ Avisado", key=f"av_{row['id']}", use_container_width=True):
-                                        db.table("AVISOS_CLIENTES").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
-                                        st.rerun()
-                                with b2:
-                                    if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
-                                        db.table("AVISOS_CLIENTES").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
-                                        st.rerun()
-            except Exception as e:
-                st.error(f"Error al leer la bandeja de avisos: {e}")
-    
-        # --- CONTADOR DE AVISOS HABILITADOS PARA EL BOTÓN ---
-        cant_avisos_hab = 0
-        try:
-            res_avisos = db.table("AVISOS_CLIENTES").select("id").eq("estado", "HABILITADO").execute()
-            if res_avisos and res_avisos.data:
-                cant_avisos_hab = len(res_avisos.data)
-        except Exception:
+            # --- 1. CALCULAMOS PRIMERO EL CONTADOR DE AVISOS HABILITADOS ---
             cant_avisos_hab = 0
+            try:
+                res_avisos = db.table("AVISOS_CLIENTES").select("id").eq("estado", "HABILITADO").execute()
+                if res_avisos and res_avisos.data:
+                    cant_avisos_hab = len(res_avisos.data)
+            except Exception:
+                cant_avisos_hab = 0
     
-        # -----------------------------------------------------------------
-
-        # -----------------------------------------------------------------
-        # 1.7. DIÁLOGO PARA CREAR UN AVISO DE FALTANTE DESDE EL POS
-        # -----------------------------------------------------------------
-        @st.dialog("📌 Anotar Cliente para Aviso (Faltante)", width="large")
-        def abrir_crear_aviso_pos():
-            st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
+            # --- 2. DEFINIMOS LAS FUNCIONES DE DIÁLOGO PRIMERO ---
+            @st.dialog("Ventas Pendientes", width="large")
+            def abrir_pendientes():
+                import json
+                import re
             
-            with st.form("form_aviso_pos_modal"):
-                # Si ya hay un cliente seleccionado en la venta, podemos usarlo por defecto o listar todos
-                df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("ID_Cliente, Nombre, Apellido, Telefono, Razón Social").execute().data)
-                
-                if not df_cli_modal.empty:
-                    df_cli_modal['Display_C'] = df_cli_modal['Razón Social'].fillna('') + " - " + df_cli_modal['Nombre'].fillna('') + " " + df_cli_modal['Apellido'].fillna('')
-                    lista_c_modal = df_cli_modal['Display_C'].tolist()
-                    dict_id_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['ID_Cliente']))
-                    dict_tel_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['Telefono']))
-                else:
-                    lista_c_modal = ["Sin clientes"]
-                    dict_id_c = {}
-                    dict_tel_c = {}
-    
-                cliente_elegido = st.selectbox("Seleccionar Cliente", lista_c_modal)
-                
-                # Autocompletar teléfono
-                tel_auto = str(dict_tel_c.get(cliente_elegido, ""))
-                if tel_auto == "nan" or not tel_auto:
-                    tel_auto = ""
-                telefono_ingresado = st.text_input("Teléfono / WhatsApp", value=tel_auto)
-                
-                st.divider()
-                st.markdown("#### Características del Producto Buscado")
-                
-                col_m1, col_m2, col_m3 = st.columns(3)
-                with col_m1:
-                    rubro_m = st.selectbox("Rubro", ["", "PAÑALES", "LECHE", "CHUPETE", "ACCESORIOS", "OTRO"])
-                with col_m2:
-                    marca_m = st.text_input("Marca (Ej: Huggies, Enterox)")
-                with col_m3:
-                    linea_m = st.text_input("Línea / Modelo")
-    
-                col_m4, col_m5 = st.columns(2)
-                with col_m4:
-                    talle_m = st.text_input("Talle (Ej: G, XG)")
-                with col_m5:
-                    etapa_m = st.text_input("Etapa / Formato Leche")
-    
-                btn_guardar_aviso = st.form_submit_button("💾 Guardar en Agenda Pendiente", type="primary")
-    
-                if btn_guardar_aviso:
-                    if not cliente_elegido or cliente_elegido == "Sin clientes":
-                        st.error("Por favor, seleccioná un cliente válido.")
+                def limpiar_monto(texto):
+                    solo_numeros = re.sub(r"[^\d.]", "", texto.replace(",", ""))
+                    try:
+                        return float(solo_numeros)
+                    except:
+                        return 0.0
+            
+                try:
+                    vendedores_dict = {}
+                    if "df_vend" in locals() and not df_vend.empty:
+                        vendedores_dict = dict(
+                            zip(
+                                df_vend["ID_Vendedor"].astype(str),
+                                df_vend["Nombre"],
+                            )
+                        )
+            
+                    datos_raw = db.table("VENTAS_PENDIENTES").select("*").execute().data
+            
+                    if not datos_raw:
+                        st.info("📭 No hay ventas pendientes registradas.")
                     else:
-                        id_cliente_val = dict_id_c.get(cliente_elegido, None)
-                        
-                        db.table("AVISOS_CLIENTES").insert({
-                            "id_cliente": int(id_cliente_val) if id_cliente_val else None,
-                            "cliente_nombre": cliente_elegido,
-                            "telefono": telefono_ingresado,
-                            "rubro": rubro_m if rubro_m else None,
-                            "marca": marca_m if marca_m else None,
-                            "linea": linea_m if linea_m else None,
-                            "talle": talle_m if talle_m else None,
-                            "etapa_leche": etapa_m if etapa_m else None, # o etapa según tu columna
-                            "estado": "PENDIENTE"
-                        }).execute()
-                        
-                        st.success("¡Aviso registrado con éxito! Quedará en espera de stock.")
-                        st.rerun()
+                        pendientes = sorted(
+                            datos_raw,
+                            key=lambda x: str(x.get("Cliente", "")).strip().lower(),
+                        )
+            
+                        st.markdown("### Listado de Espera (Ordenado por Cliente)")
+            
+                        for v in pendientes:
+                            with st.container(border=True):
+                                c_id, c_cliente, c_monto, c_acciones = st.columns(
+                                    [1.2, 2.0, 1.2, 1.2], vertical_alignment="center"
+                                )
+            
+                                with c_id:
+                                    id_corto = v["ID_Pendiente"].replace("PEND-", "")
+                                    st.markdown(f"🆔 **#{id_corto}**\n\n📅 {v['Fecha']}")
+            
+                                with c_cliente:
+                                    id_vendedor_str = str(v.get("Vendedor", "1"))
+                                    nombre_vendedor = vendedores_dict.get(
+                                        id_vendedor_str, f"Vendedor {id_vendedor_str}"
+                                    )
+                                    st.markdown(f"👤 **{v['Cliente']}**\n\n👔 {nombre_vendedor}")
+            
+                                with c_monto:
+                                    monto_numerico = limpiar_monto(v.get("Metodo_Pago", "0"))
+                                    st.markdown(f"💰 **Total:**\n\n### ${monto_numerico:,.0f}")
+            
+                                with c_acciones:
+                                    btn_col1, btn_col2 = st.columns(2, gap="small")
+            
+                                    with btn_col1:
+                                        if st.button(
+                                            "📥 Cargar",
+                                            key=f"recup_{v['ID_Pendiente']}",
+                                            use_container_width=True,
+                                            type="primary",
+                                        ):
+                                            st.session_state.id_pendiente_cargado = v["ID_Pendiente"]
+                                            st.session_state.carrito_vta = json.loads(v["Detalle_JSON"])
+                                            st.session_state.pagos_split = json.loads(
+                                                v.get("Pagos_JSON", '[{"metodo": "Efectivo", "monto": 0.0}]')
+                                            )
+                                            st.session_state.cliente_recuperado = v["Cliente"]
+                                            st.session_state.id_cliente_recuperado = v.get("ID_Cliente_Pendiente", "0")
+                                            st.session_state.vendedor_recuperado = id_vendedor_str
+                                            st.session_state.tipo_entrega = v.get("Forma_Entrega", "Mostrador")
+                                            st.session_state.direccion_entrega = v.get("Direccion_Entrega", "N/A")
+                                            st.session_state.link_maps_entrega = v.get("Link_Maps_Entrega", "N/A")
+                                            st.session_state.fecha_reparto = v.get("Fecha_Entrega", str(datetime.today().date()))
+                                            st.session_state.observaciones_entrega = v.get("Observaciones", "")
+                                            st.rerun()
+            
+                                    with btn_col2:
+                                        if st.button(
+                                            "🗑️",
+                                            key=f"del_{v['ID_Pendiente']}",
+                                            use_container_width=True,
+                                            help="Eliminar de pendientes",
+                                        ):
+                                            db.table("VENTAS_PENDIENTES").delete().eq(
+                                                "ID_Pendiente", v["ID_Pendiente"]
+                                            ).execute()
+                                            st.rerun()
+                except Exception as e:
+                    st.error(f"Error al leer pendientes: {e}")
+    
+            @st.dialog("🔔 Bandeja de Clientes a Avisar", width="large")
+            def abrir_bandeja_avisos():
+                try:
+                    avisos_hab = db.table("AVISOS_CLIENTES").select("*").eq("estado", "HABILITADO").execute().data
+                    if not avisos_hab:
+                        st.info("📭 No hay avisos habilitados pendientes de notificar.")
+                    else:
+                        st.markdown("### 📋 Listado de Clientes listos para contactar (Mercadería Ingresada)")
+                        for row in avisos_hab:
+                            with st.container(border=True):
+                                c_info, c_filtros, c_acciones = st.columns([2, 2, 2], vertical_alignment="center")
+                                with c_info:
+                                    st.markdown(f"👤 **{row['cliente_nombre']}**")
+                                    st.markdown(f"📞 `{row['telefono']}`")
+                                with c_filtros:
+                                    f_rubro = row.get('rubro') or '-'
+                                    f_marca = row.get('marca') or '-'
+                                    f_talle = row.get('talle') or '-'
+                                    st.caption(f"🛍️ **Esperaba:** {f_rubro} / {f_marca} / {f_talle}")
+                                with c_acciones:
+                                    tel_limpio = str(row['telefono']).replace(".0", "").strip()
+                                    mensaje_wsp = f"¡Hola {row['cliente_nombre']}! Te escribimos de la panalera porque acaban de ingresar los productos que estabas esperando. 🛍️"
+                                    link_wsp = f"https://wa.me/{tel_limpio}?text={mensaje_wsp.replace(' ', '%20')}"
+                                    st.markdown(f"[💬 Enviar WhatsApp]({link_wsp})", unsafe_allow_html=True)
+                                    b1, b2 = st.columns(2)
+                                    with b1:
+                                        if st.button("✔️ Avisado", key=f"av_{row['id']}", use_container_width=True):
+                                            db.table("AVISOS_CLIENTES").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
+                                            st.rerun()
+                                    with b2:
+                                        if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
+                                            db.table("AVISOS_CLIENTES").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
+                                            st.rerun()
+                except Exception as e:
+                    st.error(f"Error al leer la bandeja de avisos: {e}")
+    
+            @st.dialog("📌 Anotar Cliente para Aviso (Faltante)", width="large")
+            def abrir_crear_aviso_pos():
+                st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
+                with st.form("form_aviso_pos_modal"):
+                    df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("ID_Cliente, Nombre, Apellido, Telefono, Razón Social").execute().data)
+                    if not df_cli_modal.empty:
+                        df_cli_modal['Display_C'] = df_cli_modal['Razón Social'].fillna('') + " - " + df_cli_modal['Nombre'].fillna('') + " " + df_cli_modal['Apellido'].fillna('')
+                        lista_c_modal = df_cli_modal['Display_C'].tolist()
+                        dict_id_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['ID_Cliente']))
+                        dict_tel_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['Telefono']))
+                    else:
+                        lista_c_modal = ["Sin clientes"]
+                        dict_id_c = {}
+                        dict_tel_c = {}
+    
+                    cliente_elegido = st.selectbox("Seleccionar Cliente", lista_c_modal)
+                    tel_auto = str(dict_tel_c.get(cliente_elegido, ""))
+                    if tel_auto == "nan" or not tel_auto:
+                        tel_auto = ""
+                    telefono_ingresado = st.text_input("Teléfono / WhatsApp", value=tel_auto)
+                    
+                    st.divider()
+                    st.markdown("#### Características del Producto Buscado")
+                    col_m1, col_m2, col_m3 = st.columns(3)
+                    with col_m1:
+                        rubro_m = st.selectbox("Rubro", ["", "PAÑALES", "LECHE", "CHUPETE", "ACCESORIOS", "OTRO"])
+                    with col_m2:
+                        marca_m = st.text_input("Marca (Ej: Huggies, Enterox)")
+                    with col_m3:
+                        linea_m = st.text_input("Línea / Modelo")
+    
+                    col_m4, col_m5 = st.columns(2)
+                    with col_m4:
+                        talle_m = st.text_input("Talle (Ej: G, XG)")
+                    with col_m5:
+                        etapa_m = st.text_input("Etapa / Formato Leche")
+    
+                    btn_guardar_aviso = st.form_submit_button("💾 Guardar en Agenda Pendiente", type="primary")
+                    if btn_guardar_aviso:
+                        if not cliente_elegido or cliente_elegido == "Sin clientes":
+                            st.error("Por favor, seleccioná un cliente válido.")
+                        else:
+                            id_cliente_val = dict_id_c.get(cliente_elegido, None)
+                            db.table("AVISOS_CLIENTES").insert({
+                                "id_cliente": int(id_cliente_val) if id_cliente_val else None,
+                                "cliente_nombre": cliente_elegido,
+                                "telefono": telefono_ingresado,
+                                "rubro": rubro_m if rubro_m else None,
+                                "marca": marca_m if marca_m else None,
+                                "linea": linea_m if linea_m else None,
+                                "talle": talle_m if talle_m else None,
+                                "etapa_leche": etapa_m if etapa_m else None,
+                                "estado": "PENDIENTE"
+                            }).execute()
+                            st.success("¡Aviso registrado con éxito! Quedará en espera de stock.")
+                            st.rerun()
+    
+            # --- 3. RENDERIZAMOS LA BOTONERA SUPERIOR DE ACCESO RÁPIDO ---
+            col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns([2.2, 1.1, 1.1, 1.1, 1])
+            col_t1.header("🚀 Venta Rápida")
+    
+            cant_pendientes = 0
+            try:
+                res_cant = db.table("VENTAS_PENDIENTES").select("ID_Pendiente").execute()
+                if res_cant and res_cant.data:
+                    cant_pendientes = len(res_cant.data)
+            except Exception:
+                cant_pendientes = 0
+    
+            if col_t2.button(f"📂 Pendientes ({cant_pendientes})", use_container_width=True):
+                abrir_pendientes()
+    
+            if col_t3.button(f"🔔 Avisos ({cant_avisos_hab})", type="secondary", use_container_width=True):
+                abrir_bandeja_avisos()
+                
+            if col_t4.button("➕ Faltante", type="secondary", use_container_width=True):
+                abrir_crear_aviso_pos()
+                
+            if col_t5.button("🧹 Limpiar", type="secondary", use_container_width=True):
+                resetear_punto_venta()
 
         # 1. CARGA DE DATOS DESDE SUPABASE
         # Cargamos las tablas necesarias
