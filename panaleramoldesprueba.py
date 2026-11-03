@@ -1561,7 +1561,7 @@ else:
                         formato_val = formato_m if formato_m and formato_m != "" else None
 
                         try:
-                            db.table("AVISOS_CLIENTES").insert({
+                            db.table("avisos_clientes").insert({  # 👈 En minúsculas
                                 "id_cliente": int(id_cliente_final) if id_cliente_final else None,
                                 "cliente_nombre": nombre_a_guardar,
                                 "telefono": tel_a_guardar,
@@ -1578,7 +1578,6 @@ else:
                             st.rerun()
                             
                         except Exception as e:
-                            # Esto nos mostrará el error exacto de Supabase en la pantalla para saber qué falló
                             st.error(f"Detalle exacto del error de Supabase: {e}")
     
         # --- 3. RENDERIZAMOS LA BOTONERA SUPERIOR DE ACCESO RÁPIDO ---
