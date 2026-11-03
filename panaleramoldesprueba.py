@@ -1407,86 +1407,87 @@ else:
         def abrir_crear_aviso_pos():
             st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
             
-            with st.form("form_aviso_pos_modal"):
-                # Cargamos los datos de clientes
-                try:
-                    df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("*").execute().data)
-                except Exception:
-                    df_cli_modal = pd.DataFrame()
+            # Cargamos los datos de clientes
+            try:
+                df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("*").execute().data)
+            except Exception:
+                df_cli_modal = pd.DataFrame()
 
-                # --- HELPER AUXILIAR DE LIMPIEZA ---
-                def limpiar_val(val):
-                    if (
-                        pd.isna(val)
-                        or val is None
-                        or str(val).strip().upper() in ["NAN", "NONE", "NULL"]
-                    ):
-                        return ""
-                    return str(val).strip()
+            # --- HELPER AUXILIAR DE LIMPIEZA ---
+            def limpiar_val(val):
+                if (
+                    pd.isna(val)
+                    or val is None
+                    or str(val).strip().upper() in ["NAN", "NONE", "NULL"]
+                ):
+                    return ""
+                return str(val).strip()
 
-                # --- CREAR LA COLUMNA DISPLAY IDÉNTICA A LA VENTA ---
-                def obtener_display_cliente(row):
-                    razon = limpiar_val(row.get("Razón Social"))
-                    nombre = limpiar_val(row.get("Nombre"))
-                    apellido = limpiar_val(row.get("Apellido"))
-                    tel = limpiar_val(row.get("Telefono"))
-                    id_c = row.get("ID_Cliente")
+            # --- CREAR LA COLUMNA DISPLAY IDÉNTICA A LA VENTA ---
+            def obtener_display_cliente(row):
+                razon = limpiar_val(row.get("Razón Social"))
+                nombre = limpiar_val(row.get("Nombre"))
+                apellido = limpiar_val(row.get("Apellido"))
+                tel = limpiar_val(row.get("Telefono"))
+                id_c = row.get("ID_Cliente")
 
-                    txt_tel = f" ({tel})" if tel else ""
+                txt_tel = f" ({tel})" if tel else ""
 
-                    if razon:
-                        nombre_completo = f"{nombre} {apellido}".strip()
-                        if nombre_completo:
-                            return f"{razon.upper()} | {nombre_completo.upper()}{txt_tel} - ID: {id_c}"
-                        else:
-                            return f"{razon.upper()}{txt_tel} - ID: {id_c}"
+                if razon:
+                    nombre_completo = f"{nombre} {apellido}".strip()
+                    if nombre_completo:
+                        return f"{razon.upper()} | {nombre_completo.upper()}{txt_tel} - ID: {id_c}"
                     else:
-                        nombre_completo = f"{nombre} {apellido}".strip()
-                        if not nombre_completo:
-                            nombre_completo = "SIN NOMBRE"
-                        return f"{nombre_completo.upper()}{txt_tel} - ID: {id_c}"
-
-                if not df_cli_modal.empty:
-                    df_cli_modal["Display"] = df_cli_modal.apply(obtener_display_cliente, axis=1)
-                    options_list = df_cli_modal["Display"].tolist()
+                        return f"{razon.upper()}{txt_tel} - ID: {id_c}"
                 else:
-                    options_list = []
+                    nombre_completo = f"{nombre} {apellido}".strip()
+                    if not nombre_completo:
+                        nombre_completo = "SIN NOMBRE"
+                    return f"{nombre_completo.upper()}{txt_tel} - ID: {id_c}"
 
-                # --- SELECTOR DE CLIENTE ---
-                cliente_display = st.selectbox(
-                    "👤 Buscar Cliente (Nombre, Apellido, Teléfono o Razón Social)",
-                    options=options_list,
-                    placeholder="Seleccione o busque un cliente...",
-                )
+            if not df_cli_modal.empty:
+                df_cli_modal["Display"] = df_cli_modal.apply(obtener_display_cliente, axis=1)
+                options_list = df_cli_modal["Display"].tolist()
+            else:
+                options_list = []
 
-                # --- EXTRACCIÓN Y AUTOCOMPLETADO DE TELÉFONO / NOMBRE ---
-                id_cliente_final = None
-                telefono_sugerido = ""
-                cliente_nombre_final = ""
+            # --- SELECTOR FUERA DEL FORMULARIO PARA DETECTAR EL CAMBIO AL INSTANTE ---
+            cliente_display = st.selectbox(
+                "👤 Buscar Cliente (Nombre, Apellido, Teléfono o Razón Social)",
+                options=options_list,
+                placeholder="Seleccione o busque un cliente...",
+                key="pos_modal_cliente_sel"
+            )
 
-                if cliente_display and " - ID: " in cliente_display:
-                    try:
-                        id_str = cliente_display.split(" - ID: ")[1]
-                        id_cliente_final = int(id_str)
+            # Extraemos el teléfono y datos del cliente seleccionado en tiempo real
+            telefono_sugerido = ""
+            id_cliente_final = None
+            cliente_nombre_final = ""
+
+            if cliente_display and " - ID: " in cliente_display:
+                try:
+                    id_str = cliente_display.split(" - ID: ")[1]
+                    id_cliente_final = int(id_str)
+                    
+                    fila_sel = df_cli_modal[df_cli_modal["ID_Cliente"].astype(str) == str(id_cliente_final)]
+                    if not fila_sel.empty:
+                        r = fila_sel.iloc[0]
+                        tel_raw = limpiar_val(r.get("Telefono"))
+                        telefono_sugerido = tel_raw.replace(".0", "") if tel_raw else ""
                         
-                        # Recuperamos la fila para extraer sus datos limpios
-                        fila_sel = df_cli_modal[df_cli_modal["ID_Cliente"].astype(str) == str(id_cliente_final)]
-                        if not fila_sel.empty:
-                            r = fila_sel.iloc[0]
-                            tel_raw = limpiar_val(r.get("Telefono"))
-                            telefono_sugerido = tel_raw.replace(".0", "") if tel_raw else ""
-                            
-                            razon_sel = limpiar_val(r.get("Razón Social"))
-                            nombre_sel = limpiar_val(r.get("Nombre"))
-                            apellido_sel = limpiar_val(r.get("Apellido"))
-                            
-                            if razon_sel:
-                                cliente_nombre_final = razon_sel.upper()
-                            else:
-                                cliente_nombre_final = f"{nombre_sel} {apellido_sel}".strip().upper()
-                    except Exception as e:
-                        st.error(f"Error al procesar ID: {e}")
+                        razon_sel = limpiar_val(r.get("Razón Social"))
+                        nombre_sel = limpiar_val(r.get("Nombre"))
+                        apellido_sel = limpiar_val(r.get("Apellido"))
+                        
+                        if razon_sel:
+                            cliente_nombre_final = razon_sel.upper()
+                        else:
+                            cliente_nombre_final = f"{nombre_sel} {apellido_sel}".strip().upper()
+                except Exception as e:
+                    pass
 
+            # --- FORMULARIO PARA LOS DATOS DEL PRODUCTO Y GUARDADO ---
+            with st.form("form_aviso_pos_modal"):
                 telefono_ingresado = st.text_input("Teléfono / WhatsApp", value=telefono_sugerido)
                 
                 st.divider()
