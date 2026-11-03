@@ -1406,27 +1406,88 @@ else:
         @st.dialog("📌 Anotar Cliente para Aviso (Faltante)", width="large")
         def abrir_crear_aviso_pos():
             st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
+            
             with st.form("form_aviso_pos_modal"):
-                # 👇 Reemplazamos el select específico por select("*") para evitar el error con espacios/acentos
-                df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("*").execute().data)
-                
+                # Cargamos los datos de clientes
+                try:
+                    df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("*").execute().data)
+                except Exception:
+                    df_cli_modal = pd.DataFrame()
+
+                # --- HELPER AUXILIAR DE LIMPIEZA ---
+                def limpiar_val(val):
+                    if (
+                        pd.isna(val)
+                        or val is None
+                        or str(val).strip().upper() in ["NAN", "NONE", "NULL"]
+                    ):
+                        return ""
+                    return str(val).strip()
+
+                # --- CREAR LA COLUMNA DISPLAY IDÉNTICA A LA VENTA ---
+                def obtener_display_cliente(row):
+                    razon = limpiar_val(row.get("Razón Social"))
+                    nombre = limpiar_val(row.get("Nombre"))
+                    apellido = limpiar_val(row.get("Apellido"))
+                    tel = limpiar_val(row.get("Telefono"))
+                    id_c = row.get("ID_Cliente")
+
+                    txt_tel = f" ({tel})" if tel else ""
+
+                    if razon:
+                        nombre_completo = f"{nombre} {apellido}".strip()
+                        if nombre_completo:
+                            return f"{razon.upper()} | {nombre_completo.upper()}{txt_tel} - ID: {id_c}"
+                        else:
+                            return f"{razon.upper()}{txt_tel} - ID: {id_c}"
+                    else:
+                        nombre_completo = f"{nombre} {apellido}".strip()
+                        if not nombre_completo:
+                            nombre_completo = "SIN NOMBRE"
+                        return f"{nombre_completo.upper()}{txt_tel} - ID: {id_c}"
+
                 if not df_cli_modal.empty:
-                    # Nos aseguramos de manejar los nombres de columnas de forma segura
-                    razon_col = df_cli_modal.get('Razón Social', df_cli_modal.get('Razon_Social', pd.Series(['']*len(df_cli_modal))))
-                    df_cli_modal['Display_C'] = razon_col.fillna('') + " - " + df_cli_modal['Nombre'].fillna('') + " " + df_cli_modal['Apellido'].fillna('')
-                    lista_c_modal = df_cli_modal['Display_C'].tolist()
-                    dict_id_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['ID_Cliente']))
-                    dict_tel_c = dict(zip(df_cli_modal['Display_C'], df_cli_modal['Telefono']))
+                    df_cli_modal["Display"] = df_cli_modal.apply(obtener_display_cliente, axis=1)
+                    options_list = df_cli_modal["Display"].tolist()
                 else:
-                    lista_c_modal = ["Sin clientes"]
-                    dict_id_c = {}
-                    dict_tel_c = {}
-    
-                cliente_elegido = st.selectbox("Seleccionar Cliente", lista_c_modal)
-                tel_auto = str(dict_tel_c.get(cliente_elegido, ""))
-                if tel_auto == "nan" or not tel_auto:
-                    tel_auto = ""
-                telefono_ingresado = st.text_input("Teléfono / WhatsApp", value=tel_auto)
+                    options_list = []
+
+                # --- SELECTOR DE CLIENTE ---
+                cliente_display = st.selectbox(
+                    "👤 Buscar Cliente (Nombre, Apellido, Teléfono o Razón Social)",
+                    options=options_list,
+                    placeholder="Seleccione o busque un cliente...",
+                )
+
+                # --- EXTRACCIÓN Y AUTOCOMPLETADO DE TELÉFONO / NOMBRE ---
+                id_cliente_final = None
+                telefono_sugerido = ""
+                cliente_nombre_final = ""
+
+                if cliente_display and " - ID: " in cliente_display:
+                    try:
+                        id_str = cliente_display.split(" - ID: ")[1]
+                        id_cliente_final = int(id_str)
+                        
+                        # Recuperamos la fila para extraer sus datos limpios
+                        fila_sel = df_cli_modal[df_cli_modal["ID_Cliente"].astype(str) == str(id_cliente_final)]
+                        if not fila_sel.empty:
+                            r = fila_sel.iloc[0]
+                            tel_raw = limpiar_val(r.get("Telefono"))
+                            telefono_sugerido = tel_raw.replace(".0", "") if tel_raw else ""
+                            
+                            razon_sel = limpiar_val(r.get("Razón Social"))
+                            nombre_sel = limpiar_val(r.get("Nombre"))
+                            apellido_sel = limpiar_val(r.get("Apellido"))
+                            
+                            if razon_sel:
+                                cliente_nombre_final = razon_sel.upper()
+                            else:
+                                cliente_nombre_final = f"{nombre_sel} {apellido_sel}".strip().upper()
+                    except Exception as e:
+                        st.error(f"Error al procesar ID: {e}")
+
+                telefono_ingresado = st.text_input("Teléfono / WhatsApp", value=telefono_sugerido)
                 
                 st.divider()
                 st.markdown("#### Características del Producto Buscado")
@@ -1437,22 +1498,22 @@ else:
                     marca_m = st.text_input("Marca (Ej: Huggies, Enterox)")
                 with col_m3:
                     linea_m = st.text_input("Línea / Modelo")
-    
+
                 col_m4, col_m5 = st.columns(2)
                 with col_m4:
                     talle_m = st.text_input("Talle (Ej: G, XG)")
                 with col_m5:
                     etapa_m = st.text_input("Etapa / Formato Leche")
-    
+
                 btn_guardar_aviso = st.form_submit_button("💾 Guardar en Agenda Pendiente", type="primary")
+                
                 if btn_guardar_aviso:
-                    if not cliente_elegido or cliente_elegido == "Sin clientes":
+                    if not cliente_display:
                         st.error("Por favor, seleccioná un cliente válido.")
                     else:
-                        id_cliente_val = dict_id_c.get(cliente_elegido, None)
                         db.table("AVISOS_CLIENTES").insert({
-                            "id_cliente": int(id_cliente_val) if id_cliente_val else None,
-                            "cliente_nombre": cliente_elegido,
+                            "id_cliente": id_cliente_final,
+                            "cliente_nombre": cliente_nombre_final if cliente_nombre_final else "CLIENTE",
                             "telefono": telefono_ingresado,
                             "rubro": rubro_m if rubro_m else None,
                             "marca": marca_m if marca_m else None,
@@ -1461,6 +1522,7 @@ else:
                             "etapa_leche": etapa_m if etapa_m else None,
                             "estado": "PENDIENTE"
                         }).execute()
+                        
                         st.success("¡Aviso registrado con éxito! Quedará en espera de stock.")
                         st.rerun()
     
