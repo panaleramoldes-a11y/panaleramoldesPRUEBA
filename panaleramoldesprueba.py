@@ -1407,11 +1407,16 @@ else:
         def abrir_crear_aviso_pos():
             st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
             
-            # Cargamos los datos de clientes
+            # Cargamos los datos de clientes y productos
             try:
                 df_cli_modal = pd.DataFrame(db.table("CLIENTES").select("*").execute().data)
             except Exception:
                 df_cli_modal = pd.DataFrame()
+
+            try:
+                df_prod_modal = pd.DataFrame(db.table("PRODUCTOS").select("*").execute().data)
+            except Exception:
+                df_prod_modal = pd.DataFrame()
 
             # --- HELPER AUXILIAR DE LIMPIEZA ---
             def limpiar_val(val):
@@ -1486,6 +1491,34 @@ else:
                 except Exception as e:
                     pass
 
+            # --- OBTENCIÓN DINÁMICA DE OPCIONES PARA LOS SELECTS ---
+            lista_rubros_modal = [""] + sorted([
+                "ACEITE", "ACONDICIONADOR", "ALGODON", 
+                "APOSITOS", "BAÑO LIQUIDO", "CAMBIADOR", "CHUPETE", 
+                "COLONIA", "CREMA", "CUCHARAS", "DESCONGESTIONADORES NASALES", 
+                "ESPONJA", "HIGIENE BUCAL", "HISOPOS", "JABON", 
+                "LECHE", "LIMPIEZA ROPA", "MAMADERA", "MOCHILA MATERNAL", "MORDILLOS", 
+                "OLEO CALCAREO", "PAÑALES", "PAÑALES ADULTOS", "PLATOS", "PROTECTOR MAMARIO", 
+                "SACALECHES", "SEGURIDAD", "SHAMPOO", "TALCO", 
+                "TETINAS", "TIJERAS", "TOALLITAS FEMENINAS", 
+                "TOALLITAS HUMEDAS", "VASOS"
+            ])
+
+            marcas_modal = [""] + sorted([m for m in df_prod_modal.get('Marca', pd.Series()).dropna().unique().tolist() if str(m).strip()])
+            lineas_modal = [""] + sorted([l for l in df_prod_modal.get('Linea', pd.Series()).dropna().unique().tolist() if str(l).strip()])
+            
+            orden_talles_ref = ["PR", "RN", "RN+", "P", "M", "G", "XG", "XXG", "XXXG", "JUNIOR", "CH", "EG", "EEG"]
+            raw_talles = [t for t in df_prod_modal.get('Talle', pd.Series()).dropna().unique().tolist() if str(t).strip()]
+            talles_ordenados = sorted(raw_talles, key=lambda x: orden_talles_ref.index(str(x).upper()) if str(x).upper() in orden_talles_ref else 99)
+            talles_modal = [""] + talles_ordenados
+
+            orden_etapa_ref = ["ETAPA 1", "ETAPA 2", "ETAPA 3", "ETAPA 4", "ESCOLAR", "COMÚN / TODA LA FAMILIA", "COMUN / TODA LA FAMILIA"]
+            raw_etapas = [e for e in df_prod_modal.get('Etapa', pd.Series()).dropna().unique().tolist() if str(e).strip()]
+            etapas_ordenadas = sorted(raw_etapas, key=lambda x: orden_etapa_ref.index(str(x).upper()) if str(x).upper() in orden_etapa_ref else 99)
+            etapas_modal = [""] + etapas_ordenadas
+
+            formatos_modal = [""] + sorted([f for f in df_prod_modal.get('Formato_Leche', pd.Series()).dropna().unique().tolist() if str(f).strip()])
+
             # --- FORMULARIO PARA LOS DATOS DEL PRODUCTO Y GUARDADO ---
             with st.form("form_aviso_pos_modal"):
                 telefono_ingresado = st.text_input("Teléfono / WhatsApp", value=telefono_sugerido)
@@ -1493,32 +1526,22 @@ else:
                 st.divider()
                 st.markdown("#### Características del Producto Buscado")
                 
-                # Lista oficial de rubros ordenada alfabéticamente con una opción vacía inicial
-                lista_rubros_modal = [""] + sorted([
-                    "ACEITE", "ACONDICIONADOR", "ALGODON", 
-                    "APOSITOS", "BAÑO LIQUIDO", "CAMBIADOR", "CHUPETE", 
-                    "COLONIA", "CREMA", "CUCHARAS", "DESCONGESTIONADORES NASALES", 
-                    "ESPONJA", "HIGIENE BUCAL", "HISOPOS", "JABON", 
-                    "LECHE", "LIMPIEZA ROPA", "MAMADERA", "MOCHILA MATERNAL", "MORDILLOS", 
-                    "OLEO CALCAREO", "PAÑALES", "PAÑALES ADULTOS", "PLATOS", "PROTECTOR MAMARIO", 
-                    "SACALECHES", "SEGURIDAD", "SHAMPOO", "TALCO", 
-                    "TETINAS", "TIJERAS", "TOALLITAS FEMENINAS", 
-                    "TOALLITAS HUMEDAS", "VASOS"
-                ])
-
                 col_m1, col_m2, col_m3 = st.columns(3)
                 with col_m1:
                     rubro_m = st.selectbox("Rubro", lista_rubros_modal)
                 with col_m2:
-                    marca_m = st.text_input("Marca (Ej: Huggies, Enterox)")
+                    marca_m = st.selectbox("Marca", marcas_modal)
                 with col_m3:
-                    linea_m = st.text_input("Línea / Modelo")
+                    linea_m = st.selectbox("Línea / Modelo", lineas_modal)
 
                 col_m4, col_m5 = st.columns(2)
                 with col_m4:
-                    talle_m = st.text_input("Talle (Ej: G, XG)")
+                    talle_m = st.selectbox("Talle", talles_modal)
                 with col_m5:
-                    etapa_m = st.text_input("Etapa / Formato Leche")
+                    etapa_m = st.selectbox("Etapa / Formato Leche", etapas_modal)
+
+                # Si querés incluir también el formato de leche por separado:
+                # formato_m = st.selectbox("Formato Leche", formatos_modal)
 
                 btn_guardar_aviso = st.form_submit_button("💾 Guardar en Agenda Pendiente", type="primary")
                 
