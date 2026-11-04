@@ -5965,10 +5965,11 @@ else:
                                             if av_formato != p_formato:
                                                 match = False
                                                 
-                                        # Si pasó todas las validaciones de los campos cargados, habilitamos el aviso
+                                        # Si hace match, guardamos el ID del producto exacto Y cambiamos el estado
                                         if match:
                                             db.table("avisos_clientes").update({
-                                                "estado": "HABILITADO"
+                                                "id_producto": id_p_str,
+                                                "estado": "HABILITADO"  # 👈 Actualizamos el estado para que aparezca listo en la bandeja
                                             }).eq("id", aviso['id']).execute()
                     except Exception as e:
                         print(f"Error al evaluar avisos automáticos: {e}")
