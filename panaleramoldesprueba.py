@@ -1395,20 +1395,76 @@ else:
                                 texto_esperaba = " ".join(partes) if partes else "Sin filtros específicos"
                                 st.caption(f"🛍️ **Esperaba:** {texto_esperaba}")
                             with c_acciones:
-                                tel_limpio = str(row['telefono']).replace(".0", "").strip()
-                                mensaje_wsp = f"¡Hola {row['cliente_nombre']}! Te escribimos de la pañalera porque acaban de ingresar los productos que estabas esperando. 🛍️"
-                                link_wsp = f"https://wa.me/{tel_limpio}?text={mensaje_wsp.replace(' ', '%20')}"
-                                st.markdown(f"[💬 Enviar WhatsApp]({link_wsp})", unsafe_allow_html=True)
+                                # Botón para generar el mensaje de WhatsApp con los productos que hicieron match
+                                if st.button("💬 Generar texto para WhatsApp", key=f"btn_wsp_{row['id']}"):
+                                    # 1. Consultamos los productos en stock que coinciden con los filtros del aviso
+                                    query_prod = db.table("productos").select("*")
+                                    
+                                    for campo in ['rubro', 'marca', 'linea', 'talle', 'etapa', 'formato_leche']:
+                                        val_filtro = row.get(campo)
+                                        if val_filtro and str(val_filtro).strip() and str(val_filtro).strip().lower() not in ('none', ''):
+                                            query_prod = query_prod.eq(campo, val_filtro)
+                                            
+                                    res_prods = query_prod.execute()
+                                    df_para_wsp = pd.DataFrame(res_prods.data) if res_prods and res_prods.data else pd.DataFrame()
+                                    
+                                    # 2. Armamos el listado de productos con tu lógica de precios
+                                    lineas_mensaje = []
+                                    if not df_para_wsp.empty:
+                                        for _, prod in df_para_wsp.iterrows():
+                                            nombre_art = str(prod.get('nombre', prod.get('Nombre', ''))).strip()
+                                            
+                                            try:
+                                                p1 = int(float(prod.get('precio_1', prod.get('Precio_1', 0))))
+                                                p2 = int(float(prod.get('precio_2', prod.get('Precio_2', 0))))
+                                                p3 = int(float(prod.get('precio_3', prod.get('Precio_3', 0))))
+                                            except (ValueError, TypeError):
+                                                p1, p2, p3 = 0, 0, 0
+                                            
+                                            # Reglas de precios exactas
+                                            if p1 == p2:
+                                                linea = f"• *{nombre_art}* ${p1}"
+                                            elif p1 != p2 and p2 == p3:
+                                                linea = f"• *{nombre_art}* ${p1} x1 o ${p2} cada uno llevando 2"
+                                            elif p2 != p3:
+                                                linea = f"• *{nombre_art}* ${p1} x1 o ${p3} cada uno llevando 3"
+                                            else:
+                                                linea = f"• *{nombre_art}* ${p1}"
+                                                
+                                            lineas_mensaje.append(linea)
+                                    
+                                    msg_articulos = "\n".join(lineas_mensaje) if lineas_mensaje else "• (Consultar productos ingresados)"
+                                    
+                                    # 3. Estructura exacta del mensaje solicitada
+                                    nombre_cliente = str(row['cliente_nombre']).strip()
+                                    st.session_state[f"msg_gen_{row['id']}"] = (
+                                        f"Hola {nombre_cliente}! Te escribo para avisarte que llego {texto_esperaba}:\n\n"
+                                        f"{msg_articulos}\n\n"
+                                        f"Si queres que te separemos o enviemos avisame lo antes que puedas que vuelan 🙏"
+                                    )
+
+                                # Si ya se generó el texto para este cliente, mostramos el textarea para copiar
+                                if f"msg_gen_{row['id']}" in st.session_state:
+                                    st.text_area(
+                                        "Mensaje listo para copiar:",
+                                        value=st.session_state[f"msg_gen_{row['id']}"],
+                                        height=150,
+                                        key=f"txt_wsp_{row['id']}"
+                                    )
+
+                                # Botones de estado (Avisado / Desestimar)
                                 b1, b2 = st.columns(2)
                                 with b1:
                                     if st.button("✔️ Avisado", key=f"av_{row['id']}", use_container_width=True):
-                                        # ⬇️ Cambiamos a minúsculas "avisos_clientes"
                                         db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
+                                        if f"msg_gen_{row['id']}" in st.session_state:
+                                            del st.session_state[f"msg_gen_{row['id']}"]
                                         st.rerun()
                                 with b2:
                                     if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
-                                        # ⬇️ Cambiamos a minúsculas "avisos_clientes"
                                         db.table("avisos_clientes").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
+                                        if f"msg_gen_{row['id']}" in st.session_state:
+                                            del st.session_state[f"msg_gen_{row['id']}"]
                                         st.rerun()
             except Exception as e:
                 st.error(f"Error al leer la bandeja de avisos: {e}")
