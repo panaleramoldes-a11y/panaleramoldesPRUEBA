@@ -1533,16 +1533,23 @@ else:
                         except Exception as e:
                             st.error(f"Detalle exacto del error de Supabase: {e}")
     
-        # D. Diálogo de Bandeja de Avisos Habilitados
-        @st.dialog("🔔 Bandeja de Clientes a Avisar", width="large")
-        def abrir_bandeja_avisos():
+        # ==========================================
+        # BANDEJA DE CLIENTES A AVISAR (INLINE / SIN CERRARSE)
+        # ==========================================
+        if st.session_state.get("mostrar_bandeja", False):
+            st.divider()
+            col_tit_b, col_cerrar_b = st.columns([6, 1])
+            col_tit_b.markdown("### 🔔 Bandeja de Clientes a Avisar (Mercadería Ingresada)")
+            if col_cerrar_b.button("✖️ Cerrar Bandeja", use_container_width=True):
+                st.session_state.mostrar_bandeja = False
+                st.rerun()
+    
             try:
                 avisos_hab = db.table("avisos_clientes").select("*").eq("estado", "HABILITADO").execute().data
                 
                 if not avisos_hab:
                     st.info("📭 No hay avisos habilitados pendientes de notificar.")
                 else:
-                    st.markdown("### 📋 Listado de Clientes listos para contactar (Mercadería Ingresada)")
                     for row in avisos_hab:
                         with st.container(border=True):
                             c_info, c_filtros, c_acciones = st.columns([2, 2, 2], vertical_alignment="center")
@@ -1561,6 +1568,7 @@ else:
                                 texto_esperaba = " ".join(partes) if partes else "Sin filtros específicos"
                                 st.caption(f"🛍️ **Esperaba:** {texto_esperaba}")
                             with c_acciones:
+                                # Botón para generar el texto de WhatsApp
                                 if st.button("💬 Generar texto para WhatsApp", key=f"btn_wsp_{row['id']}"):
                                     id_prod_buscado = row.get('id_producto')
                                     prod_data = None
@@ -1578,6 +1586,7 @@ else:
                                         except (ValueError, TypeError):
                                             p1, p2, p3 = 0, 0, 0
                                         
+                                        # Reglas de precios exactas
                                         if p1 == p2 and p2 == p3:
                                             linea_mensaje = f"• *{nombre_art}* ${p1}"
                                         elif p1 != p2 and p2 == p3:
@@ -1597,6 +1606,7 @@ else:
                                     )
                                     st.rerun()
     
+                                # Si ya se generó el texto, se muestra el textarea permanente
                                 if f"msg_gen_{row['id']}" in st.session_state:
                                     st.text_area(
                                         "Mensaje listo para copiar:",
@@ -1637,7 +1647,8 @@ else:
                 
         with col_avis:
             if st.button(f"🔔 Avisos ({cant_avisos_hab})", width='stretch'):
-                abrir_bandeja_avisos()
+                st.session_state.mostrar_bandeja = not st.session_state.get("mostrar_bandeja", False)
+                st.rerun()
                 
         with col_t2:
             if st.button("🧹 Limpiar Todo", type="secondary", width='stretch'):
