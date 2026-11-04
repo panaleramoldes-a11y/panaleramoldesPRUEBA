@@ -1478,7 +1478,7 @@ else:
                                 # Botones de estado (Avisado / Desestimar)
                                 b1, b2 = st.columns(2)
                                 with b1:
-                                    if st.button("✔️ Avisado", key=f>arribar_av_{row['id']}", use_container_width=True):
+                                    if st.button("✔️ Avisado", key=f"arribar_av_{row['id']}", use_container_width=True):
                                         db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
                                         if f"msg_gen_{row['id']}" in st.session_state:
                                             del st.session_state[f"msg_gen_{row['id']}"]
