@@ -1409,27 +1409,38 @@ else:
                             with c_acciones:
                                 # Botón para generar el mensaje de WhatsApp con los productos que hicieron match
                                 if st.button("💬 Generar texto para WhatsApp", key=f"btn_wsp_{row['id']}"):
-                                    # 1. Consultamos los productos en stock que coinciden con los filtros del aviso
-                                    query_prod = db.table("productos").select("*")
+                                    # 1. Consultamos los productos en stock usando la tabla en mayúsculas "PRODUCTOS"
+                                    query_prod = db.table("PRODUCTOS").select("*")
                                     
-                                    for campo in ['rubro', 'marca', 'linea', 'talle', 'etapa', 'formato_leche']:
-                                        val_filtro = row.get(campo)
+                                    # Mapeo de nombres de campos en la tabla avisos_clientes vs PRODUCTOS
+                                    # (en tu tabla avisos_clientes están en minúscula, en PRODUCTOS con mayúscula inicial)
+                                    mapeo_campos = {
+                                        'rubro': 'Rubro',
+                                        'marca': 'Marca',
+                                        'linea': 'Linea',
+                                        'talle': 'Talle',
+                                        'etapa': 'Etapa',
+                                        'formato_leche': 'Formato_Leche'
+                                    }
+                                    
+                                    for campo_aviso, campo_prod in mapeo_campos.items():
+                                        val_filtro = row.get(campo_aviso)
                                         if val_filtro and str(val_filtro).strip() and str(val_filtro).strip().lower() not in ('none', ''):
-                                            query_prod = query_prod.eq(campo, val_filtro)
+                                            query_prod = query_prod.eq(campo_prod, val_filtro)
                                             
                                     res_prods = query_prod.execute()
                                     df_para_wsp = pd.DataFrame(res_prods.data) if res_prods and res_prods.data else pd.DataFrame()
                                     
-                                    # 2. Armamos el listado de productos con tu lógica de precios
+                                    # 2. Armamos el listado de productos con tus columnas reales y lógica de precios
                                     lineas_mensaje = []
                                     if not df_para_wsp.empty:
                                         for _, prod in df_para_wsp.iterrows():
-                                            nombre_art = str(prod.get('nombre', prod.get('Nombre', ''))).strip()
+                                            nombre_art = str(prod.get('Nombre', '')).strip()
                                             
                                             try:
-                                                p1 = int(float(prod.get('precio_1', prod.get('Precio_1', 0))))
-                                                p2 = int(float(prod.get('precio_2', prod.get('Precio_2', 0))))
-                                                p3 = int(float(prod.get('precio_3', prod.get('Precio_3', 0))))
+                                                p1 = int(float(prod.get('Precio_1', 0)))
+                                                p2 = int(float(prod.get('Precio_2', 0)))
+                                                p3 = int(float(prod.get('Precio_3', 0)))
                                             except (ValueError, TypeError):
                                                 p1, p2, p3 = 0, 0, 0
                                             
@@ -1467,7 +1478,7 @@ else:
                                 # Botones de estado (Avisado / Desestimar)
                                 b1, b2 = st.columns(2)
                                 with b1:
-                                    if st.button("✔️ Avisado", key=f"av_{row['id']}", use_container_width=True):
+                                    if st.button("✔️ Avisado", key=f>arribar_av_{row['id']}", use_container_width=True):
                                         db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
                                         if f"msg_gen_{row['id']}" in st.session_state:
                                             del st.session_state[f"msg_gen_{row['id']}"]
