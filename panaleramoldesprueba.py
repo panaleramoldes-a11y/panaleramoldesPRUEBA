@@ -1619,13 +1619,13 @@ else:
                                     if st.button("✔️ Avisado", key=f"arribar_av_{row['id']}", use_container_width=True):
                                         db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
                                         if f"msg_gen_{row['id']}" in st.session_state:
-                                            del st.session_state[f"msg_gen_{row['id']}"]}
+                                            del st.session_state[f"msg_gen_{row['id']}"]  # 👈 SIN la llave extra al final
                                         st.rerun()
                                 with b2:
                                     if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
                                         db.table("avisos_clientes").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
                                         if f"msg_gen_{row['id']}" in st.session_state:
-                                            del st.session_state[f"msg_gen_{row['id']}"]}
+                                            del st.session_state[f"msg_gen_{row['id']}"]  # 👈 SIN la llave extra al final
                                         st.rerun()
             except Exception as e:
                 st.error(f"Error al leer la bandeja de avisos: {e}")
