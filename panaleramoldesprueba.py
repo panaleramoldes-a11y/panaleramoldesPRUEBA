@@ -5776,9 +5776,12 @@ else:
                 st.success("Orden guardada correctamente.")
                 st.rerun()
 
-            # --- BOTÓN REGISTRAR STOCK (dentro de tu loop de registro) ---
+            # --- BOTÓN REGISTRAR STOCK (CON DEBUG DE ENTRADA) ---
             if col_reg2.button("💾 REGISTRAR Y CARGAR STOCK", type="primary"):
+                print(">>> ¡SE HIZO CLIC EN REGISTRAR Y CARGAR STOCK! <<<")
+                
                 es_valido, nro_fact = validar_y_grabar(es_obligatorio=True)
+                print(f">>> Resultado de validación: es_valido={es_valido}, nro_fact={nro_fact}")
                 
                 if es_valido:
                     id_c = f"COM-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -5808,7 +5811,6 @@ else:
                             "Precio_5": float(item.get('Precio_5', 0))
                         }
                         
-                        # Obtener datos del producto desde df_prod
                         prod_info = df_prod[df_prod['ID_Producto'].astype(str) == id_p_str]
                         
                         es_stockeable = False
@@ -5823,7 +5825,6 @@ else:
                             if not nombre_producto:
                                 nombre_producto = str(fila_p.get('Nombre', ''))
                             
-                            # --- ACTUALIZACIÓN AUTOMÁTICA DE PROVEEDORES ---
                             if prov_sel and str(prov_sel).strip():
                                 prov_compra_limpio = str(prov_sel).strip()
                                 prov_actual_raw = fila_p.get('ID_Proveedor')
@@ -5842,10 +5843,8 @@ else:
                             stock_nuevo = stock_anterior + cant_comprada
                             data_update["Stock_Actual"] = stock_nuevo
                         
-                        # Ejecutamos el update en la tabla PRODUCTOS
                         db.table("PRODUCTOS").update(data_update).eq("ID_Producto", id_p_str).execute()
                         
-                        # B. Guardar Detalle (en la tabla DETALLE_COMPRAS)
                         db.table("DETALLE_COMPRAS").insert({
                             "ID_Compra": id_c,
                             "ID_Producto": id_p_str,
@@ -5854,7 +5853,6 @@ else:
                             "Subtotal": float(item['subtotal'])
                         }).execute()
                         
-                        # C. REGISTRO EN MOVIMIENTOS_STOCK (KARDEX - ENTRADA POR COMPRA)
                         if es_stockeable:
                             db.table("MOVIMIENTOS_STOCK").insert({
                                 "id_producto": id_p_str,
@@ -5867,12 +5865,12 @@ else:
                                 "usuario": str(usuario_logueado)
                             }).execute()
                     
-                    # --- 3. VERIFICAR Y ACTIVAR AVISOS DE CLIENTES (FALTANTES - CON LOGS) ---
+                    # --- 3. VERIFICAR Y ACTIVAR AVISOS DE CLIENTES (CON COMPARACIÓN ROBUSTA) ---
                     try:
                         res_pendientes_aviso = db.table("avisos_clientes").select("*").eq("estado", "PENDIENTE").execute()
                         avisos_pendientes = res_pendientes_aviso.data if res_pendientes_aviso and res_pendientes_aviso.data else []
                         
-                        print(f"--- [DEBUG AVISOS] Avisos pendientes encontrados: {len(avisos_pendientes)} ---")
+                        print(f"--- [DEBUG AVISOS] Avisos pendientes en BD: {len(avisos_pendientes)} ---")
                         
                         if avisos_pendientes:
                             for item in st.session_state.carrito_compra:
@@ -5883,7 +5881,7 @@ else:
                                     continue
                                 
                                 fila_p = prod_info.iloc[0]
-                                print(f"[DEBUG AVISOS] Producto comprado analizado: ID {id_p_str} - {fila_p.get('Nombre')}")
+                                print(f"[DEBUG AVISOS] Analizando producto comprado: ID {id_p_str}")
                                 
                                 for aviso in avisos_pendientes:
                                     if aviso.get("estado") != "PENDIENTE":
@@ -5894,10 +5892,17 @@ else:
                                     
                                     for campo in campos_a_comparar:
                                         val_aviso = aviso.get(campo)
-                                        if val_aviso and str(val_aviso).strip() and str(val_aviso).strip().lower() not in ('none', ''):
-                                            val_prod = fila_p.get(campo.capitalize()) or fila_p.get(campo) or ""
+                                        # Si el aviso tiene un filtro seteado
+                                        if val_aviso and str(val_aviso).strip() and str(val_aviso).strip().lower() not in ('none', 'null', ''):
+                                            # Buscamos en el producto probando variaciones de nombre de columna
+                                            val_prod = (
+                                                fila_p.get(campo.capitalize()) or 
+                                                fila_p.get(campo) or 
+                                                fila_p.get(campo.upper()) or 
+                                                fila_p.get(campo.title()) or ""
+                                            )
                                             
-                                            print(f"   -> Comparando {campo}: Aviso='{val_aviso}' vs Producto='{val_prod}'")
+                                            print(f"   -> Campo [{campo}]: Buscado='{val_aviso}' vs Producto='{val_prod}'")
                                             
                                             if str(val_prod).strip().upper() != str(val_aviso).strip().upper():
                                                 coincide = False
@@ -5912,22 +5917,22 @@ else:
                                         
                                         aviso["estado"] = "HABILITADO"
                     except Exception as e:
-                        print(f"Error al verificar avisos pendientes: {e}")
+                        print(f"❌ Error crítico en bloque de avisos: {e}")
 
-                    # --- Limpieza de Órdenes en Edición ---
                     if 'oc_en_edicion' in st.session_state:
                         id_a_borrar = st.session_state.oc_en_edicion
                         db.table("DETALLE_ORDENES").delete().eq("ID_Compra", id_a_borrar).execute()
                         db.table("ORDENES_COMPRA").delete().eq("ID_Compra", id_a_borrar).execute()
                         del st.session_state.oc_en_edicion
                     
-                    # Limpiar caché de dataframe de productos para refrescar datos
                     if 'df_prod' in st.session_state:
                         del st.session_state['df_prod']
                     
                     st.success("¡Compra registrada, stock cargado y Kardex actualizado correctamente!")
                     st.session_state.carrito_compra = []
                     st.rerun()
+                else:
+                    print(">>> La validación de la factura falló (es_valido = False) <<<")
                     
     # =====================================================================
     # MODULO: 👤 VENDEDORES
