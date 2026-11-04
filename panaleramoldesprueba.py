@@ -5867,10 +5867,12 @@ else:
                                 "usuario": str(usuario_logueado)
                             }).execute()
                     
-                    # --- 3. VERIFICAR Y ACTIVAR AVISOS DE CLIENTES (FALTANTES) ---
+                    # --- 3. VERIFICAR Y ACTIVAR AVISOS DE CLIENTES (FALTANTES - CON LOGS) ---
                     try:
                         res_pendientes_aviso = db.table("avisos_clientes").select("*").eq("estado", "PENDIENTE").execute()
                         avisos_pendientes = res_pendientes_aviso.data if res_pendientes_aviso and res_pendientes_aviso.data else []
+                        
+                        print(f"--- [DEBUG AVISOS] Avisos pendientes encontrados: {len(avisos_pendientes)} ---")
                         
                         if avisos_pendientes:
                             for item in st.session_state.carrito_compra:
@@ -5881,6 +5883,7 @@ else:
                                     continue
                                 
                                 fila_p = prod_info.iloc[0]
+                                print(f"[DEBUG AVISOS] Producto comprado analizado: ID {id_p_str} - {fila_p.get('Nombre')}")
                                 
                                 for aviso in avisos_pendientes:
                                     if aviso.get("estado") != "PENDIENTE":
@@ -5893,11 +5896,15 @@ else:
                                         val_aviso = aviso.get(campo)
                                         if val_aviso and str(val_aviso).strip() and str(val_aviso).strip().lower() not in ('none', ''):
                                             val_prod = fila_p.get(campo.capitalize()) or fila_p.get(campo) or ""
+                                            
+                                            print(f"   -> Comparando {campo}: Aviso='{val_aviso}' vs Producto='{val_prod}'")
+                                            
                                             if str(val_prod).strip().upper() != str(val_aviso).strip().upper():
                                                 coincide = False
                                                 break
-                                            
+                                        
                                     if coincide:
+                                        print(f"   ✅ ¡MATCH EXITOSO! Activando aviso ID {aviso['id']} para cliente {aviso['cliente_nombre']}")
                                         db.table("avisos_clientes").update({
                                             "estado": "HABILITADO",
                                             "id_producto": id_p_str
