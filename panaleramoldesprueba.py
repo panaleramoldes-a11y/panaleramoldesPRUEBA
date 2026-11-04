@@ -1407,66 +1407,50 @@ else:
                                 texto_esperaba = " ".join(partes) if partes else "Sin filtros específicos"
                                 st.caption(f"🛍️ **Esperaba:** {texto_esperaba}")
                             with c_acciones:
-                                # Botón para generar el mensaje de WhatsApp con los productos que hicieron match
+                                # Botón para generar el mensaje de WhatsApp con el producto exacto y reglas de precio
                                 if st.button("💬 Generar texto para WhatsApp", key=f"btn_wsp_{row['id']}"):
-                                    # 1. Consultamos los productos en stock usando la tabla en mayúsculas "PRODUCTOS"
-                                    query_prod = db.table("PRODUCTOS").select("*")
+                                    id_prod_buscado = row.get('id_producto')
                                     
-                                    # Mapeo de nombres de campos en la tabla avisos_clientes vs PRODUCTOS
-                                    # (en tu tabla avisos_clientes están en minúscula, en PRODUCTOS con mayúscula inicial)
-                                    mapeo_campos = {
-                                        'rubro': 'Rubro',
-                                        'marca': 'Marca',
-                                        'linea': 'Linea',
-                                        'talle': 'Talle',
-                                        'etapa': 'Etapa',
-                                        'formato_leche': 'Formato_Leche'
-                                    }
+                                    prod_data = None
+                                    if id_prod_buscado:
+                                        # Consultamos directamente el producto exacto por su ID en la tabla "PRODUCTOS"
+                                        res_prod = db.table("PRODUCTOS").select("*").eq("ID_Producto", id_prod_buscado).maybe_single().execute()
+                                        prod_data = res_prod.data if res_prod else None
                                     
-                                    for campo_aviso, campo_prod in mapeo_campos.items():
-                                        val_filtro = row.get(campo_aviso)
-                                        if val_filtro and str(val_filtro).strip() and str(val_filtro).strip().lower() not in ('none', ''):
-                                            query_prod = query_prod.eq(campo_prod, val_filtro)
-                                            
-                                    res_prods = query_prod.execute()
-                                    df_para_wsp = pd.DataFrame(res_prods.data) if res_prods and res_prods.data else pd.DataFrame()
+                                    # Armamos la línea del producto único según las reglas de precios solicitadas
+                                    linea_mensaje = ""
+                                    if prod_data:
+                                        nombre_art = str(prod_data.get('Nombre', '')).strip()
+                                        try:
+                                            p1 = int(float(prod_data.get('Precio_1', 0)))
+                                            p2 = int(float(prod_data.get('Precio_2', 0)))
+                                            p3 = int(float(prod_data.get('Precio_3', 0)))
+                                        except (ValueError, TypeError):
+                                            p1, p2, p3 = 0, 0, 0
+                                        
+                                        # Reglas de precios exactas:
+                                        if p1 == p2 and p2 == p3:
+                                            linea_mensaje = f"• *{nombre_art}* ${p1}"
+                                        elif p1 != p2 and p2 == p3:
+                                            linea_mensaje = f"• *{nombre_art}* ${p1} x1 o ${p2} cada uno llevando 2"
+                                        elif p2 != p3:
+                                            linea_mensaje = f"• *{nombre_art}* ${p1} x1 o ${p3} cada uno llevando 3"
+                                        else:
+                                            linea_mensaje = f"• *{nombre_art}* ${p1}"
+                                    else:
+                                        linea_mensaje = "• (Producto no encontrado en el catálogo)"
                                     
-                                    # 2. Armamos el listado de productos con tus columnas reales y lógica de precios
-                                    lineas_mensaje = []
-                                    if not df_para_wsp.empty:
-                                        for _, prod in df_para_wsp.iterrows():
-                                            nombre_art = str(prod.get('Nombre', '')).strip()
-                                            
-                                            try:
-                                                p1 = int(float(prod.get('Precio_1', 0)))
-                                                p2 = int(float(prod.get('Precio_2', 0)))
-                                                p3 = int(float(prod.get('Precio_3', 0)))
-                                            except (ValueError, TypeError):
-                                                p1, p2, p3 = 0, 0, 0
-                                            
-                                            # Reglas de precios exactas
-                                            if p1 == p2:
-                                                linea = f"• *{nombre_art}* ${p1}"
-                                            elif p1 != p2 and p2 == p3:
-                                                linea = f"• *{nombre_art}* ${p1} x1 o ${p2} cada uno llevando 2"
-                                            elif p2 != p3:
-                                                linea = f"• *{nombre_art}* ${p1} x1 o ${p3} cada uno llevando 3"
-                                            else:
-                                                linea = f"• *{nombre_art}* ${p1}"
-                                                
-                                            lineas_mensaje.append(linea)
-                                    
-                                    msg_articulos = "\n".join(lineas_mensaje) if lineas_mensaje else "• (Consultar productos ingresados)"
-                                    
-                                    # 3. Estructura exacta del mensaje solicitada
+                                    # Estructura exacta del mensaje solicitada
                                     nombre_cliente = str(row['cliente_nombre']).strip()
                                     st.session_state[f"msg_gen_{row['id']}"] = (
                                         f"Hola {nombre_cliente}! Te escribo para avisarte que llego {texto_esperaba}:\n\n"
-                                        f"{msg_articulos}\n\n"
+                                        f"{linea_mensaje}\n\n"
                                         f"Si queres que te separemos o enviemos avisame lo antes que puedas que vuelan 🙏"
                                     )
+                                    
+                                    st.rerun()
 
-                                # Si ya se generó el texto para este cliente, mostramos el textarea para copiar
+                                # Si ya se generó el texto, mostramos el textarea para copiar
                                 if f"msg_gen_{row['id']}" in st.session_state:
                                     st.text_area(
                                         "Mensaje listo para copiar:",
