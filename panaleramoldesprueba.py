@@ -1379,103 +1379,6 @@ else:
             except Exception as e:
                 st.error(f"Error al leer pendientes: {e}")
     
-        @st.dialog("🔔 Bandeja de Clientes a Avisar", width="large")
-        def abrir_bandeja_avisos():
-            try:
-                # ⬇️ Cambiamos a minúsculas "avisos_clientes"
-                avisos_hab = db.table("avisos_clientes").select("*").eq("estado", "HABILITADO").execute().data
-                
-                if not avisos_hab:
-                    st.info("📭 No hay avisos habilitados pendientes de notificar.")
-                else:
-                    st.markdown("### 📋 Listado de Clientes listos para contactar (Mercadería Ingresada)")
-                    for row in avisos_hab:
-                        with st.container(border=True):
-                            c_info, c_filtros, c_acciones = st.columns([2, 2, 2], vertical_alignment="center")
-                            with c_info:
-                                st.markdown(f"👤 **{row['cliente_nombre']}**")
-                                st.markdown(f"📞 `{row['telefono']}`")
-                            with c_filtros:
-                                # Construimos dinámicamente el texto con los filtros cargados en orden
-                                campos_ordenados = ['rubro', 'marca', 'linea', 'talle', 'etapa', 'formato_leche']
-                                partes = []
-                                for campo in campos_ordenados:
-                                    val = row.get(campo)
-                                    if val and str(val).strip() and str(val).strip().lower() not in ('none', ''):
-                                        partes.append(str(val).strip().upper())
-                                        
-                                texto_esperaba = " ".join(partes) if partes else "Sin filtros específicos"
-                                st.caption(f"🛍️ **Esperaba:** {texto_esperaba}")
-                            with c_acciones:
-                                # Botón para generar el mensaje de WhatsApp con el producto exacto y reglas de precio
-                                if st.button("💬 Generar texto para WhatsApp", key=f"btn_wsp_{row['id']}"):
-                                    id_prod_buscado = row.get('id_producto')
-                                    
-                                    prod_data = None
-                                    if id_prod_buscado:
-                                        # Consultamos directamente el producto exacto por su ID en la tabla "PRODUCTOS"
-                                        res_prod = db.table("PRODUCTOS").select("*").eq("ID_Producto", id_prod_buscado).maybe_single().execute()
-                                        prod_data = res_prod.data if res_prod else None
-                                    
-                                    # Armamos la línea del producto único según las reglas de precios solicitadas
-                                    linea_mensaje = ""
-                                    if prod_data:
-                                        nombre_art = str(prod_data.get('Nombre', '')).strip()
-                                        try:
-                                            p1 = int(float(prod_data.get('Precio_1', 0)))
-                                            p2 = int(float(prod_data.get('Precio_2', 0)))
-                                            p3 = int(float(prod_data.get('Precio_3', 0)))
-                                        except (ValueError, TypeError):
-                                            p1, p2, p3 = 0, 0, 0
-                                        
-                                        # Reglas de precios exactas:
-                                        if p1 == p2 and p2 == p3:
-                                            linea_mensaje = f"• *{nombre_art}* ${p1}"
-                                        elif p1 != p2 and p2 == p3:
-                                            linea_mensaje = f"• *{nombre_art}* ${p1} x1 o ${p2} cada uno llevando 2"
-                                        elif p2 != p3:
-                                            linea_mensaje = f"• *{nombre_art}* ${p1} x1 o ${p3} cada uno llevando 3"
-                                        else:
-                                            linea_mensaje = f"• *{nombre_art}* ${p1}"
-                                    else:
-                                        linea_mensaje = "• (Producto no encontrado en el catálogo)"
-                                    
-                                    # Estructura exacta del mensaje solicitada
-                                    nombre_cliente = str(row['cliente_nombre']).strip()
-                                    st.session_state[f"msg_gen_{row['id']}"] = (
-                                        f"Hola {nombre_cliente}! Te escribo para avisarte que llego {texto_esperaba}:\n\n"
-                                        f"{linea_mensaje}\n\n"
-                                        f"Si queres que te separemos o enviemos avisame lo antes que puedas que vuelan 🙏"
-                                    )
-                                    
-                                    st.rerun()
-
-                                # Si ya se generó el texto, mostramos el textarea para copiar
-                                if f"msg_gen_{row['id']}" in st.session_state:
-                                    st.text_area(
-                                        "Mensaje listo para copiar:",
-                                        value=st.session_state[f"msg_gen_{row['id']}"],
-                                        height=150,
-                                        key=f"txt_wsp_{row['id']}"
-                                    )
-
-                                # Botones de estado (Avisado / Desestimar)
-                                b1, b2 = st.columns(2)
-                                with b1:
-                                    if st.button("✔️ Avisado", key=f"arribar_av_{row['id']}", use_container_width=True):
-                                        db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
-                                        if f"msg_gen_{row['id']}" in st.session_state:
-                                            del st.session_state[f"msg_gen_{row['id']}"]
-                                        st.rerun()
-                                with b2:
-                                    if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
-                                        db.table("avisos_clientes").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
-                                        if f"msg_gen_{row['id']}" in st.session_state:
-                                            del st.session_state[f"msg_gen_{row['id']}"]
-                                        st.rerun()
-            except Exception as e:
-                st.error(f"Error al leer la bandeja de avisos: {e}")
-    
         @st.dialog("📌 Anotar Cliente para Aviso (Faltante)", width="large")
         def abrir_crear_aviso_pos():
             st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
@@ -1668,20 +1571,112 @@ else:
         if col_t2.button(f"📂 Pendientes ({cant_pendientes})", use_container_width=True):
             abrir_pendientes()
     
-        # Al hacer clic en el botón, encendemos la "banderita" en la sesión
+        # Al hacer clic, activamos la bandera de sesión para mostrar la bandeja abajo
         if col_t3.button(f"🔔 Avisos ({cant_avisos_hab})", type="secondary", use_container_width=True):
-            st.session_state.mostrar_bandeja = True
+            st.session_state.mostrar_bandeja = not st.session_state.get("mostrar_bandeja", False)
             st.rerun()
 
-        # Si la banderita está encendida, mantenemos el diálogo abierto permanentemente
-        if st.session_state.get("mostrar_bandeja", False):
-            abrir_bandeja_avisos()
+
+    # ==========================================
+    # BANDEJA DE CLIENTES A AVISAR (SIN DIÁLOGO)
+    # ==========================================
+    if st.session_state.get("mostrar_bandeja", False):
+        st.divider()
+        col_tit_b, col_cerrar_b = st.columns([6, 1])
+        col_tit_b.markdown("### 🔔 Bandeja de Clientes a Avisar (Mercadería Ingresada)")
+        if col_cerrar_b.button("✖️ Cerrar", use_container_width=True):
+            st.session_state.mostrar_bandeja = False
+            st.rerun()
+
+        try:
+            avisos_hab = db.table("avisos_clientes").select("*").eq("estado", "HABILITADO").execute().data
             
-        if col_t4.button("➕ Faltante", type="secondary", use_container_width=True):
-            abrir_crear_aviso_pos()
-            
-        if col_t5.button("🧹 Limpiar", type="secondary", use_container_width=True):
-            resetear_punto_venta()
+            if not avisos_hab:
+                st.info("📭 No hay avisos habilitados pendientes de notificar.")
+            else:
+                for row in avisos_hab:
+                    with st.container(border=True):
+                        c_info, c_filtros, c_acciones = st.columns([2, 2, 2], vertical_alignment="center")
+                        with c_info:
+                            st.markdown(f"👤 **{row['cliente_nombre']}**")
+                            tel = row.get('telefono') or row.get('cliente_telefono') or 'Sin teléfono'
+                            st.markdown(f"📞 `{tel}`")
+                        with c_filtros:
+                            campos_ordenados = ['rubro', 'marca', 'linea', 'talle', 'etapa', 'formato_leche']
+                            partes = []
+                            for campo in campos_ordenados:
+                                val = row.get(campo)
+                                if val and str(val).strip() and str(val).strip().lower() not in ('none', ''):
+                                    partes.append(str(val).strip().upper())
+                                    
+                            texto_esperaba = " ".join(partes) if partes else "Sin filtros específicos"
+                            st.caption(f"🛍️ **Esperaba:** {texto_esperaba}")
+                        with c_acciones:
+                            # Botón para generar el texto de WhatsApp con el producto exacto
+                            if st.button("💬 Generar texto para WhatsApp", key=f"btn_wsp_{row['id']}"):
+                                id_prod_buscado = row.get('id_producto')
+                                
+                                prod_data = None
+                                if id_prod_buscado:
+                                    res_prod = db.table("PRODUCTOS").select("*").eq("ID_Producto", id_prod_buscado).maybe_single().execute()
+                                    prod_data = res_prod.data if res_prod else None
+                                
+                                linea_mensaje = ""
+                                if prod_data:
+                                    nombre_art = str(prod_data.get('Nombre', '')).strip()
+                                    try:
+                                        p1 = int(float(prod_data.get('Precio_1', 0)))
+                                        p2 = int(float(prod_data.get('Precio_2', 0)))
+                                        p3 = int(float(prod_data.get('Precio_3', 0)))
+                                    except (ValueError, TypeError):
+                                        p1, p2, p3 = 0, 0, 0
+                                    
+                                    # Reglas de precios exactas solicitadas
+                                    if p1 == p2 and p2 == p3:
+                                        linea_mensaje = f"• *{nombre_art}* ${p1}"
+                                    elif p1 != p2 and p2 == p3:
+                                        linea_mensaje = f"• *{nombre_art}* ${p1} x1 o ${p2} cada uno llevando 2"
+                                    elif p2 != p3:
+                                        linea_mensaje = f"• *{nombre_art}* ${p1} x1 o ${p3} cada uno llevando 3"
+                                    else:
+                                        linea_mensaje = f"• *{nombre_art}* ${p1}"
+                                else:
+                                    linea_mensaje = "• (Producto no encontrado en el catálogo)"
+                                
+                                nombre_cliente = str(row['cliente_nombre']).strip()
+                                st.session_state[f"msg_gen_{row['id']}"] = (
+                                    f"Hola {nombre_cliente}! Te escribo para avisarte que llego {texto_esperaba}:\n\n"
+                                    f"{linea_mensaje}\n\n"
+                                    f"Si queres que te separemos o enviemos avisame lo antes que puedas que vuelan 🙏"
+                                )
+                                st.rerun()
+
+                            # Si ya se generó el texto, mostramos el textarea para copiar
+                            if f"msg_gen_{row['id']}" in st.session_state:
+                                st.text_area(
+                                    "Mensaje listo para copiar:",
+                                    value=st.session_state[f"msg_gen_{row['id']}"],
+                                    height=150,
+                                    key=f"txt_wsp_{row['id']}"
+                                )
+
+                            # Botones de estado (Avisado / Desestimar)
+                            b1, b2 = st.columns(2)
+                            with b1:
+                                if st.button("✔️ Avisado", key=f"arribar_av_{row['id']}", use_container_width=True):
+                                    db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
+                                    if f"msg_gen_{row['id']}" in st.session_state:
+                                        del st.session_state[f"msg_gen_{row['id']}"]
+                                    st.rerun()
+                            with b2:
+                                if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
+                                    db.table("avisos_clientes").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
+                                    if f"msg_gen_{row['id']}" in st.session_state:
+                                        del st.session_state[f"msg_gen_{row['id']}"]
+                                    st.rerun()
+                                    
+        except Exception as e:
+            st.error(f"Error al leer la bandeja de avisos: {e}")
 
         # 1. CARGA DE DATOS DESDE SUPABASE
         # Cargamos las tablas necesarias
