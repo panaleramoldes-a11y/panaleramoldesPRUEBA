@@ -1,5 +1,4 @@
 import streamlit as st
-st.write("DEBUG: Iniciando app...")
 from supabase import create_client # Importamos el cliente de Supabase
 import pandas as pd
 from datetime import datetime, timedelta
@@ -28,7 +27,6 @@ def init_connection():
 
 # Inicializamos la conexión globalmente
 db = init_connection()
-st.write("DEBUG: Conectado a BD y cargando datos...")
 
 # 2. LÓGICA DE LOGIN
 if 'logeado' not in st.session_state:
