@@ -1280,16 +1280,41 @@ else:
         except Exception:
             cant_avisos_hab = 0
     
-        # --- 2. DEFINIMOS LAS FUNCIONES DE DIÁLOGO ---
-        
-        # A. Diálogo de Ventas Pendientes (Tu código original intacto)
+        # --- 2. DEFINIMOS LAS FUNCIONES DE DIÁLOGO Y HELPERS ---
+    
+        # A. Funciones auxiliares globales para el módulo
+        def limpiar_val(val):
+            if pd.isna(val) or val is None or str(val).strip().upper() in ["NAN", "NONE", "NULL"]:
+                return ""
+            return str(val).strip()
+    
+        def obtener_display_cliente(row):
+            razon = limpiar_val(row.get("Razón Social"))
+            nombre = limpiar_val(row.get("Nombre"))
+            apellido = limpiar_val(row.get("Apellido"))
+            tel = limpiar_val(row.get("Telefono"))
+            id_c = row.get("ID_Cliente")
+            txt_tel = f" ({tel})" if tel else ""
+    
+            if razon:
+                nombre_completo = f"{nombre} {apellido}".strip()
+                if nombre_completo:
+                    return f"{razon.upper()} | {nombre_completo.upper()}{txt_tel} - ID: {id_c}"
+                else:
+                    return f"{razon.upper()}{txt_tel} - ID: {id_c}"
+            else:
+                nombre_completo = f"{nombre} {apellido}".strip()
+                if not nombre_completo:
+                    nombre_completo = "SIN NOMBRE"
+                return f"{nombre_completo.upper()}{txt_tel} - ID: {id_c}"
+    
+        # B. Diálogo de Ventas Pendientes
         @st.dialog("Ventas Pendientes", width="large")
         def abrir_pendientes():
             import json
             import re
         
             def limpiar_monto(texto):
-                """Extrae números de un string como 'Transferencia: $59,600'"""
                 solo_numeros = re.sub(r"[^\d.]", "", texto.replace(",", ""))
                 try:
                     return float(solo_numeros)
@@ -1326,26 +1351,18 @@ else:
         
                             with c_id:
                                 id_corto = v["ID_Pendiente"].replace("PEND-", "")
-                                st.markdown(
-                                    f"🆔 **#{id_corto}**\n\n📅 {v['Fecha']}"
-                                )
+                                st.markdown(f"🆔 **#{id_corto}**\n\n📅 {v['Fecha']}")
         
                             with c_cliente:
                                 id_vendedor_str = str(v.get("Vendedor", "1"))
                                 nombre_vendedor = vendedores_dict.get(
                                     id_vendedor_str, f"Vendedor {id_vendedor_str}"
                                 )
-                                st.markdown(
-                                    f"👤 **{v['Cliente']}**\n\n👔 {nombre_vendedor}"
-                                )
+                                st.markdown(f"👤 **{v['Cliente']}**\n\n👔 {nombre_vendedor}")
         
                             with c_monto:
-                                monto_numerico = limpiar_monto(
-                                    v.get("Metodo_Pago", "0")
-                                )
-                                st.markdown(
-                                    f"💰 **Total:**\n\n### ${monto_numerico:,.0f}"
-                                )
+                                monto_numerico = limpiar_monto(v.get("Metodo_Pago", "0"))
+                                st.markdown(f"💰 **Total:**\n\n### ${monto_numerico:,.0f}")
         
                             with c_acciones:
                                 btn_col1, btn_col2 = st.columns(2, gap="small")
@@ -1386,7 +1403,7 @@ else:
             except Exception as e:
                 st.error(f"Error al leer pendientes: {e}")
     
-        # B. Diálogo para registrar Faltante / Aviso de Cliente
+        # C. Diálogo para registrar Faltante / Aviso de Cliente
         @st.dialog("📌 Anotar Cliente para Aviso (Faltante)", width="large")
         def abrir_crear_aviso_pos():
             st.markdown("Registrá qué producto está buscando el cliente para avisarle automáticamente cuando ingrese stock.")
@@ -1400,31 +1417,6 @@ else:
                 df_prod_modal = pd.DataFrame(db.table("PRODUCTOS").select("*").execute().data)
             except Exception:
                 df_prod_modal = pd.DataFrame()
-    
-            def limpiar_val(val):
-                if pd.isna(val) or val is None or str(val).strip().upper() in ["NAN", "NONE", "NULL"]:
-                    return ""
-                return str(val).strip()
-    
-            def obtener_display_cliente(row):
-                razon = limpiar_val(row.get("Razón Social"))
-                nombre = limpiar_val(row.get("Nombre"))
-                apellido = limpiar_val(row.get("Apellido"))
-                tel = limpiar_val(row.get("Telefono"))
-                id_c = row.get("ID_Cliente")
-                txt_tel = f" ({tel})" if tel else ""
-    
-                if razon:
-                    nombre_completo = f"{nombre} {apellido}".strip()
-                    if nombre_completo:
-                        return f"{razon.upper()} | {nombre_completo.upper()}{txt_tel} - ID: {id_c}"
-                    else:
-                        return f"{razon.upper()}{txt_tel} - ID: {id_c}"
-                else:
-                    nombre_completo = f"{nombre} {apellido}".strip()
-                    if not nombre_completo:
-                        nombre_completo = "SIN NOMBRE"
-                    return f"{nombre_completo.upper()}{txt_tel} - ID: {id_c}"
     
             if not df_cli_modal.empty:
                 df_cli_modal["Display"] = df_cli_modal.apply(obtener_display_cliente, axis=1)
@@ -1541,7 +1533,7 @@ else:
                         except Exception as e:
                             st.error(f"Detalle exacto del error de Supabase: {e}")
     
-        # C. Diálogo de Bandeja de Avisos Habilitados (El que armamos con las reglas de precio y WhatsApp)
+        # D. Diálogo de Bandeja de Avisos Habilitados
         @st.dialog("🔔 Bandeja de Clientes a Avisar", width="large")
         def abrir_bandeja_avisos():
             try:
@@ -1586,7 +1578,6 @@ else:
                                         except (ValueError, TypeError):
                                             p1, p2, p3 = 0, 0, 0
                                         
-                                        # Reglas de precios exactas solicitadas
                                         if p1 == p2 and p2 == p3:
                                             linea_mensaje = f"• *{nombre_art}* ${p1}"
                                         elif p1 != p2 and p2 == p3:
@@ -1619,13 +1610,13 @@ else:
                                     if st.button("✔️ Avisado", key=f"arribar_av_{row['id']}", use_container_width=True):
                                         db.table("avisos_clientes").update({"estado": "AVISADO"}).eq("id", row['id']).execute()
                                         if f"msg_gen_{row['id']}" in st.session_state:
-                                            del st.session_state[f"msg_gen_{row['id']}"]  # 👈 SIN la llave extra al final
+                                            del st.session_state[f"msg_gen_{row['id']}"]
                                         st.rerun()
                                 with b2:
                                     if st.button("❌ Desestimar", key=f"des_{row['id']}", use_container_width=True):
                                         db.table("avisos_clientes").update({"estado": "DESESTIMADO"}).eq("id", row['id']).execute()
                                         if f"msg_gen_{row['id']}" in st.session_state:
-                                            del st.session_state[f"msg_gen_{row['id']}"]  # 👈 SIN la llave extra al final
+                                            del st.session_state[f"msg_gen_{row['id']}"]
                                         st.rerun()
             except Exception as e:
                 st.error(f"Error al leer la bandeja de avisos: {e}")
@@ -1651,6 +1642,18 @@ else:
         with col_t2:
             if st.button("🧹 Limpiar Todo", type="secondary", width='stretch'):
                 resetear_punto_venta()
+
+        # --- CARGA DE DATOS DESDE SUPABASE ---
+        try:
+            df_clie = pd.DataFrame(db.table("CLIENTES").select("*").execute().data)
+            df_prod = pd.DataFrame(db.table("PRODUCTOS").select("*").execute().data)
+            df_vend = pd.DataFrame(db.table("VENDEDORES").select("*").execute().data)
+        except Exception as e:
+            st.error(f"Error al conectar con Supabase: {e}")
+            st.stop()
+
+        if 'carrito_vta' not in st.session_state:
+            st.session_state.carrito_vta = []
 
         # 2. INTERFAZ: SELECTORES
         with st.container(border=True):
