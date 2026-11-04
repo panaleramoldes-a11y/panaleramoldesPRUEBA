@@ -1384,10 +1384,16 @@ else:
                                 st.markdown(f"👤 **{row['cliente_nombre']}**")
                                 st.markdown(f"📞 `{row['telefono']}`")
                             with c_filtros:
-                                f_rubro = row.get('rubro') or '-'
-                                f_marca = row.get('marca') or '-'
-                                f_talle = row.get('talle') or '-'
-                                st.caption(f"🛍️ **Esperaba:** {f_rubro} / {f_marca} / {f_talle}")
+                                # Construimos dinámicamente el texto con los filtros cargados en orden
+                                campos_ordenados = ['rubro', 'marca', 'linea', 'talle', 'etapa', 'formato_leche']
+                                partes = []
+                                for campo in campos_ordenados:
+                                    val = row.get(campo)
+                                    if val and str(val).strip() and str(val).strip().lower() not in ('none', ''):
+                                        partes.append(str(val).strip().upper())
+                                        
+                                texto_esperaba = " ".join(partes) if partes else "Sin filtros específicos"
+                                st.caption(f"🛍️ **Esperaba:** {texto_esperaba}")
                             with c_acciones:
                                 tel_limpio = str(row['telefono']).replace(".0", "").strip()
                                 mensaje_wsp = f"¡Hola {row['cliente_nombre']}! Te escribimos de la pañalera porque acaban de ingresar los productos que estabas esperando. 🛍️"
