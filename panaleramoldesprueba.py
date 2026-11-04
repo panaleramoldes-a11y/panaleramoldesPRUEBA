@@ -1668,7 +1668,13 @@ else:
         if col_t2.button(f"📂 Pendientes ({cant_pendientes})", use_container_width=True):
             abrir_pendientes()
     
+        # Al hacer clic en el botón, encendemos la "banderita" en la sesión
         if col_t3.button(f"🔔 Avisos ({cant_avisos_hab})", type="secondary", use_container_width=True):
+            st.session_state.mostrar_bandeja = True
+            st.rerun()
+
+        # Si la banderita está encendida, mantenemos el diálogo abierto permanentemente
+        if st.session_state.get("mostrar_bandeja", False):
             abrir_bandeja_avisos()
             
         if col_t4.button("➕ Faltante", type="secondary", use_container_width=True):
