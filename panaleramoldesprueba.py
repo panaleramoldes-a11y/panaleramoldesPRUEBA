@@ -5856,6 +5856,46 @@ else:
                                 "usuario": str(usuario_logueado)
                             }).execute()
                     
+                    # --- 3. VERIFICAR Y ACTIVAR AVISOS DE CLIENTES (FALTANTES) ---
+                    try:
+                        res_pendientes_aviso = db.table("avisos_clientes").select("*").eq("estado", "PENDIENTE").execute()
+                        avisos_pendientes = res_pendientes_aviso.data if res_pendientes_aviso and res_pendientes_aviso.data else []
+                        
+                        if avisos_pendientes:
+                            for item in st.session_state.carrito_compra:
+                                id_p_str = str(item['id'])
+                                prod_info = df_prod[df_prod['ID_Producto'].astype(str) == id_p_str]
+                                
+                                if prod_info.empty:
+                                    continue
+                                
+                                fila_p = prod_info.iloc[0]
+                                
+                                for aviso in avisos_pendientes:
+                                    if aviso.get("estado") != "PENDIENTE":
+                                        continue
+                                    
+                                    coincide = True
+                                    campos_a_comparar = ['rubro', 'marca', 'linea', 'talle', 'etapa', 'formato_leche']
+                                    
+                                    for campo in campos_a_comparar:
+                                        val_aviso = aviso.get(campo)
+                                        if val_aviso and str(val_aviso).strip() and str(val_aviso).strip().lower() not in ('none', ''):
+                                            val_prod = fila_p.get(campo.capitalize()) or fila_p.get(campo) or ""
+                                            if str(val_prod).strip().upper() != str(val_aviso).strip().upper():
+                                                coincide = False
+                                                break
+                                            
+                                    if coincide:
+                                        db.table("avisos_clientes").update({
+                                            "estado": "HABILITADO",
+                                            "id_producto": id_p_str
+                                        }).eq("id", aviso['id']).execute()
+                                        
+                                        aviso["estado"] = "HABILITADO"
+                    except Exception as e:
+                        print(f"Error al verificar avisos pendientes: {e}")
+
                     # --- Limpieza de Órdenes en Edición ---
                     if 'oc_en_edicion' in st.session_state:
                         id_a_borrar = st.session_state.oc_en_edicion
