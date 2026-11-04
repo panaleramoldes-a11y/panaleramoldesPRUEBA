@@ -1,4 +1,12 @@
 import streamlit as st
+import sys
+import os
+
+# Nos aseguramos de que el directorio actual esté en el path de Python
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
+
 from supabase import create_client # Importamos el cliente de Supabase
 import pandas as pd
 from datetime import datetime, timedelta
@@ -8,13 +16,17 @@ import math
 import json
 import pydeck as pdk
 import uuid
-import os
 import numpy as np
 from math import radians, cos, sin, asin, sqrt
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
-from modulos import reportes
-from modulos.modulo_desempenio import render_modulo_desempenio
+
+# Importación segura de módulos personalizados
+try:
+    from modulos import reportes
+    from modulos.modulo_desempenio import render_modulo_desempenio
+except Exception as e:
+    st.error(f"⚠️ Error al importar los módulos: {e}")
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -54,7 +66,7 @@ else:
 
     if 'lista_global_vta' not in st.session_state:
         st.session_state.lista_global_vta = "Automática (P1/P2)"
-
+        
     # --- FUNCIONES DE UTILIDAD ---    
     def normalizar_numero(valor):
         """Convierte cualquier valor a float de forma segura."""
