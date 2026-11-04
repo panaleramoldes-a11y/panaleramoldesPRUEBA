@@ -1598,9 +1598,12 @@ else:
                                     else:
                                         linea_mensaje = "• (Producto no encontrado en el catálogo)"
                                     
-                                    nombre_cliente = str(row['cliente_nombre']).strip()
+                                    # Extraemos solo el primer nombre (la primera palabra antes del espacio)
+                                    nombre_completo_raw = str(row['cliente_nombre']).strip()
+                                    primer_nombre = nombre_completo_raw.split()[0] if nombre_completo_raw else "Cliente"
+                                    
                                     st.session_state[f"msg_gen_{row['id']}"] = (
-                                        f"Hola {nombre_cliente}! Te escribo para avisarte que llego {texto_esperaba}:\n\n"
+                                        f"Hola {primer_nombre}! Te escribo para avisarte que llego {texto_esperaba}:\n\n"
                                         f"{linea_mensaje}\n\n"
                                         f"Si queres que te separemos o enviemos avisame lo antes que puedas que vuelan 🙏"
                                     )
