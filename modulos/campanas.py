@@ -9,9 +9,7 @@ def render_modulo_campanas(db):
     try:
         # 1. Carga de datos desde Supabase
         res_prefs = db.table("preferencias_clientes").select("*").execute()
-        res_cli = db.table("CLIENTES").select(
-            "ID_Cliente", "Nombre", "Apellido", "Razón Social", "Telefono", "Tipo_Cliente", "Zona"
-        ).execute()
+        res_cli = db.table("CLIENTES").select("*").execute()
 
         df_prefs = pd.DataFrame(res_prefs.data) if (res_prefs and res_prefs.data) else pd.DataFrame()
         df_cli = pd.DataFrame(res_cli.data) if (res_cli and res_cli.data) else pd.DataFrame()
