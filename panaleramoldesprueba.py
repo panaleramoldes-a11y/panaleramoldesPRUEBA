@@ -15,6 +15,7 @@ from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 from modulos import reportes
 from modulos.modulo_desempenio import render_modulo_desempenio
+from modulos.campanas import render_modulo_campanas
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Cargamos los datos de forma segura desde secrets.toml
@@ -6407,3 +6408,10 @@ else:
     # =====================================================================
     elif menu == "🛡️ Desempeño y Tareas":
         render_modulo_desempenio(db)
+
+    # =====================================================================
+    # MODULO: 🎯 CAMPAÑAS
+    # =====================================================================
+    elif menu == "🎯 Campañas":
+    render_modulo_campanas(db)
+
