@@ -2207,8 +2207,8 @@ else:
                                             "usuario": str(nombre_usuario_actual)
                                         }).execute()
 
-                                    # --- RECOPILAR PREFERENCIA SI EL CLIENTE ESTÁ IDENTIFICADO ---
-                                    if str(id_cliente_final) != "0" and p_dict:
+                                    # --- RECOPILAR PREFERENCIA SI EL CLIENTE ESTÁ IDENTIFICADO (Excluye ID 0 y 1) ---
+                                    if str(id_cliente_final) not in ("0", "1") and p_dict:
                                         rubro_p = limpiar_attr(p_dict.get("Rubro"))
                                         marca_p = limpiar_attr(p_dict.get("Marca"))
                                         
@@ -2234,7 +2234,7 @@ else:
                                             })
 
                                 # Ejecutar actualización de preferencias en 1 sola llamada (no bloquea la venta si falla)
-                                if str(id_cliente_final) != "0" and prefs_para_registrar:
+                                if str(id_cliente_final) not in ("0", "1") and prefs_para_registrar:
                                     try:
                                         db.rpc("registrar_preferencias_venta", {
                                             "p_id_cliente": int(id_cliente_final),
