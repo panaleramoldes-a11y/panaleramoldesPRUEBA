@@ -6413,5 +6413,5 @@ else:
     # MODULO: 🎯 CAMPAÑAS
     # =====================================================================
     elif menu == "🎯 Campañas":
-    render_modulo_campanas(db)
+        render_modulo_campanas(db)
 
