@@ -1113,7 +1113,7 @@ else:
         
         if st.session_state.rol == "Administrador":
             opciones_disponibles.extend([
-                "🛒 Punto de Venta", "👥 Clientes", "📋 Historial de Ventas", 
+                "🛒 Punto de Venta", "👥 Clientes", "🎯 Campañas", "📋 Historial de Ventas", 
                 "⚙️ Configuración Pagos", "📦 Productos",
                 "📦 Stock", "🚚 Proveedores", "📦 Compras", "👥 Vendedores", 
                 "⚙️ Auditoría", "📈 Reporte de Utilidades", "🚚 Gestión de Repartos", 
@@ -2665,6 +2665,12 @@ else:
                             else:
                                 st.warning("⚠️ Debes marcar la casilla de confirmación.")
 
+    # =====================================================================
+    # MODULO: 🎯 CAMPAÑAS
+    # =====================================================================
+    elif menu == "🎯 Campañas":
+        render_modulo_campanas(db)
+    
     # =====================================================================
     # MODULO: 📋 HISTORIAL DE VENTAS
     # =====================================================================
@@ -6408,10 +6414,3 @@ else:
     # =====================================================================
     elif menu == "🛡️ Desempeño y Tareas":
         render_modulo_desempenio(db)
-
-    # =====================================================================
-    # MODULO: 🎯 CAMPAÑAS
-    # =====================================================================
-    elif menu == "🎯 Campañas":
-        render_modulo_campanas(db)
-
