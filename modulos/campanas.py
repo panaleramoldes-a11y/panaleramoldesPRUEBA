@@ -263,29 +263,30 @@ def render_modulo_campanas(db):
             use_container_width=True
         )
 
-        plantilla_msg = st.text_area(
-            "Editá el mensaje (usá {nombre} para insertar el primer nombre automáticamente):",
-            value=plantilla_default,
-            height=100,
-            key=f"camp_plantilla_{prefijo_key}"
-        )
+        col_txt, col_btn = st.columns([4, 1.3], vertical_alignment="center")
+        with col_txt:
+            plantilla_msg = st.text_area(
+                "Editá el mensaje (usá {nombre} para insertar el primer nombre automáticamente):",
+                value=plantilla_default,
+                height=100,
+                key=f"camp_plantilla_{prefijo_key}"
+            )
+        with col_btn:
+            st.write("")
+            if st.button("✨ Aplicar a todos", key=f"btn_aplicar_{prefijo_key}", type="primary", use_container_width=True):
+                for _, r_ap in df_clientes.iterrows():
+                    n_raw = str(r_ap["Nombre"] or "").strip()
+                    rz_raw = str(r_ap["Razón Social"] or "").strip()
+                    if n_raw:
+                        p_nom = n_raw.split()[0].upper()
+                    elif rz_raw:
+                        p_nom = rz_raw.split()[0].upper()
+                    else:
+                        p_nom = "Cliente"
 
-        # Botón para forzar la aplicación del texto a todas las tarjetas del listado
-        col_btn_ap, _ = st.columns([1.5, 3])
-        if col_btn_ap.button("✨ Aplicar mensaje a todos", key=f"btn_aplicar_{prefijo_key}", type="secondary", use_container_width=True):
-            for _, r_ap in df_clientes.iterrows():
-                n_raw = str(r_ap["Nombre"] or "").strip()
-                rz_raw = str(r_ap["Razón Social"] or "").strip()
-                if n_raw:
-                    p_nom = n_raw.split()[0].upper()
-                elif rz_raw:
-                    p_nom = rz_raw.split()[0].upper()
-                else:
-                    p_nom = "Cliente"
-
-                card_key = f"txt_camp_{prefijo_key}_{r_ap['ID_Cliente']}"
-                st.session_state[card_key] = plantilla_msg.replace("{nombre}", p_nom)
-            st.toast("✅ Mensaje aplicado a todos los clientes del listado.")
+                    card_key = f"txt_camp_{prefijo_key}_{r_ap['ID_Cliente']}"
+                    st.session_state[card_key] = plantilla_msg.replace("{nombre}", p_nom)
+                st.toast("✅ Mensaje actualizado en todas las tarjetas.")
 
         st.markdown("#### 📋 3. Listado de Clientes Segmentados")
         for _, row in df_clientes.iterrows():
