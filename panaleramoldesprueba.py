@@ -2158,27 +2158,39 @@ else:
                                     "Observaciones": st.session_state.get('observaciones_entrega', '')
                                 }).execute()
                                 
-                                # 3. Registrar Detalle y Actualizar Stock (Solo si es_stockeable)
+                                # 3. Registrar Detalle, Actualizar Stock y Recopilar Preferencias
+                                prefs_para_registrar = []
+                                
+                                def limpiar_attr(val):
+                                    if val is None or str(val).strip().upper() in ("", "NONE", "NULL", "NAN"):
+                                        return ""
+                                    return str(val).strip().upper()
+
                                 for art in st.session_state.carrito_vta:
-                                    prod_data = db.table("PRODUCTOS").select("Precio_Costo", "Nombre", "Stock_Actual", "Es_Stockeable").eq("ID_Producto", str(art['id'])).single().execute()
+                                    prod_data = db.table("PRODUCTOS").select(
+                                        "Precio_Costo", "Nombre", "Stock_Actual", "Es_Stockeable",
+                                        "Rubro", "Marca", "Linea", "Talle", "Etapa", "Formato_Leche"
+                                    ).eq("ID_Producto", str(art['id'])).single().execute()
                                     
-                                    costo_historico = prod_data.data.get('Precio_Costo', 0) if prod_data.data else 0
-                                    nombre_prod = art.get('nombre') or (prod_data.data.get('Nombre') if prod_data.data else 'Artículo')
-                                    es_stockeable = prod_data.data.get('Es_Stockeable', True) if prod_data.data else True
+                                    p_dict = prod_data.data if (prod_data and prod_data.data) else {}
+                                    
+                                    costo_historico = p_dict.get('Precio_Costo', 0)
+                                    nombre_prod = art.get('nombre') or p_dict.get('Nombre', 'Artículo')
+                                    es_stockeable = p_dict.get('Es_Stockeable', True)
+                                    cantidad_vendida = int(art['cantidad'])
         
                                     db.table("VENTAS_DETALLE").insert({
                                         "ID_Venta": id_v,
                                         "ID_Producto": str(art['id']),
-                                        "Cantidad": int(art['cantidad']),
+                                        "Cantidad": cantidad_vendida,
                                         "Precio_Unitario": float(art['precio']),
                                         "Precio_Costo_Unitario": float(costo_historico),
                                         "Subtotal": float(art['subtotal'])
                                     }).execute()
                                     
                                     # Descontar stock SOLO si es producto stockeable
-                                    if es_stockeable and prod_data.data:
-                                        stock_actual = int(prod_data.data.get('Stock_Actual', 0))
-                                        cantidad_vendida = int(art['cantidad'])
+                                    if es_stockeable and p_dict:
+                                        stock_actual = int(p_dict.get('Stock_Actual', 0))
                                         stock_nuevo = stock_actual - cantidad_vendida
         
                                         db.table("PRODUCTOS").update({"Stock_Actual": stock_nuevo}).eq("ID_Producto", str(art['id'])).execute()
@@ -2193,6 +2205,42 @@ else:
                                             "origen_referencia": f"Venta ID: {id_v}",
                                             "usuario": str(nombre_usuario_actual)
                                         }).execute()
+
+                                    # --- RECOPILAR PREFERENCIA SI EL CLIENTE ESTÁ IDENTIFICADO ---
+                                    if str(id_cliente_final) != "0" and p_dict:
+                                        rubro_p = limpiar_attr(p_dict.get("Rubro"))
+                                        marca_p = limpiar_attr(p_dict.get("Marca"))
+                                        
+                                        if "PAÑAL" in rubro_p:
+                                            prefs_para_registrar.append({
+                                                "rubro": rubro_p,
+                                                "marca": marca_p,
+                                                "linea": limpiar_attr(p_dict.get("Linea")),
+                                                "talle": limpiar_attr(p_dict.get("Talle")),
+                                                "etapa": "",
+                                                "formato_leche": "",
+                                                "cantidad": cantidad_vendida
+                                            })
+                                        elif "LECHE" in rubro_p:
+                                            prefs_para_registrar.append({
+                                                "rubro": rubro_p,
+                                                "marca": marca_p,
+                                                "linea": "",
+                                                "talle": "",
+                                                "etapa": limpiar_attr(p_dict.get("Etapa")),
+                                                "formato_leche": limpiar_attr(p_dict.get("Formato_Leche")),
+                                                "cantidad": cantidad_vendida
+                                            })
+
+                                # Ejecutar actualización de preferencias en 1 sola llamada (no bloquea la venta si falla)
+                                if str(id_cliente_final) != "0" and prefs_para_registrar:
+                                    try:
+                                        db.rpc("registrar_preferencias_venta", {
+                                            "p_id_cliente": int(id_cliente_final),
+                                            "p_items": prefs_para_registrar
+                                        }).execute()
+                                    except Exception as e_pref:
+                                        print(f"⚠️ Aviso: No se pudieron actualizar preferencias del cliente: {e_pref}")
         
                                 # 4. Registrar Pagos en VENTAS_PAGOS
                                 for pago in st.session_state.pagos_split:
