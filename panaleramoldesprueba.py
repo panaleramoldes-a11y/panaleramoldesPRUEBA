@@ -2364,7 +2364,7 @@ else:
     # MODULO: 📄 PRESUPUESTOS
     # =====================================================================
     elif menu == "📄 Presupuestos":
-    render_modulo_presupuestos(db, nombre_usuario_actual)
+        render_modulo_presupuestos(db, nombre_usuario_actual)
 
     # =====================================================================
     # MODULO: 👥 CLIENTES
