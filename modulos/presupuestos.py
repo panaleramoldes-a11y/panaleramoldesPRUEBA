@@ -295,17 +295,15 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
         st.session_state.carrito_pres = []
     if "ultimo_pdf_presupuesto" not in st.session_state:
         st.session_state.ultimo_pdf_presupuesto = None
+    if "pres_form_id" not in st.session_state:
+        st.session_state.pres_form_id = 0
 
-    def resetear_presupuesto():
+    def limpiar_todo_presupuesto():
         st.session_state.carrito_pres = []
         st.session_state.ultimo_pdf_presupuesto = None
-        for k in [
-            "pres_cli_sel", "pres_ev_nombre", "pres_prod_manual_key",
-            "pres_ajuste_monto", "pres_tipo_entrega", "pres_dir_txt", "pres_email_ed"
-        ]:
-            if k in st.session_state:
-                del st.session_state[k]
-        st.rerun()
+        st.session_state.pres_form_id += 1
+
+    fid = st.session_state.pres_form_id
 
     # ==========================================================================
     # BOTONERA SUPERIOR ALINEADA (IDÉNTICA AL PUNTO DE VENTA)
@@ -314,8 +312,13 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
     with col_t1:
         st.header("📄 Presupuestos - Pañalera Moldes")
     with col_t2:
-        if st.button("🧹 Limpiar Todo", type="secondary", use_container_width=True, key="pres_limpiar_todo"):
-            resetear_presupuesto()
+        st.button(
+            "🧹 Limpiar Todo",
+            type="secondary",
+            use_container_width=True,
+            key=f"pres_limpiar_todo_{fid}",
+            on_click=limpiar_todo_presupuesto
+        )
 
     tab_nuevo, tab_hist = st.tabs(["📝 Armar Presupuesto", "📜 Historial Emitidos"])
 
@@ -344,7 +347,7 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                 "Tipo Cliente",
                 ["Registrado", "Eventual"],
                 horizontal=True,
-                key="pres_tipo_cli_radio"
+                key=f"pres_tipo_cli_radio_{fid}"
             )
 
             cliente_sel_row = None
@@ -361,7 +364,7 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                     options=df_clie["Display"].tolist(),
                     index=None,
                     placeholder="Seleccione o busque un cliente...",
-                    key="pres_cli_sel"
+                    key=f"pres_cli_sel_{fid}"
                 )
 
                 if cliente_display:
@@ -391,7 +394,7 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                 ev_nom = c1.text_input(
                     "👤 Nombre / Razón Social del Cliente Eventual",
                     placeholder="Ej: María Gómez / Jardín Maternal...",
-                    key="pres_ev_nombre"
+                    key=f"pres_ev_nombre_{fid}"
                 )
                 cliente_nombre_final = ev_nom.strip().upper() if ev_nom.strip() else "CONSUMIDOR FINAL"
 
@@ -409,20 +412,20 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                     options=lista_opciones_v,
                     format_func=lambda x: dict_vendedores[x],
                     index=0,
-                    key="pres_vendedor_selector"
+                    key=f"pres_vendedor_selector_{fid}"
                 )
                 if vendedor_id_sel:
                     vendedor_id_final = str(vendedor_id_sel)
                     vendedor_nombre_final = dict_vendedores[vendedor_id_final]
             else:
-                c3.selectbox("👔 Vendedor", options=["1"], format_func=lambda x: "Vendedor Genérico", key="pres_vend_fb")
+                c3.selectbox("👔 Vendedor", options=["1"], format_func=lambda x: "Vendedor Genérico", key=f"pres_vend_fb_{fid}")
 
-            # Campos extra opcionales del cliente (Teléfono / Email / Subtítulo)
+            # Campos extra opcionales del cliente
             with st.expander("📋 Completar o editar teléfono, dirección o email del cliente (Opcional)", expanded=(modo_cli == "Eventual")):
                 ce1, ce2, ce3 = st.columns(3)
-                cliente_tel_final = ce1.text_input("Teléfono / WhatsApp", value=cliente_tel_final, key=f"pres_tel_ed_{cliente_nombre_final}")
-                cliente_detalle_final = ce2.text_input("Dirección / Empresa", value=cliente_detalle_final, key=f"pres_det_ed_{cliente_nombre_final}")
-                cliente_email_final = ce3.text_input("Email (Opcional)", value="", key="pres_email_ed")
+                cliente_tel_final = ce1.text_input("Teléfono / WhatsApp", value=cliente_tel_final, key=f"pres_tel_ed_{fid}_{cliente_nombre_final}")
+                cliente_detalle_final = ce2.text_input("Dirección / Empresa", value=cliente_detalle_final, key=f"pres_det_ed_{fid}_{cliente_nombre_final}")
+                cliente_email_final = ce3.text_input("Email (Opcional)", value="", key=f"pres_email_ed_{fid}")
 
         # ----------------------------------------------------------------------
         # 2. BUSCADOR INSTANTÁNEO DE PRODUCTOS (MISMA MECÁNICA ON_CHANGE DEL POS)
@@ -430,8 +433,10 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
         st.divider()
         st.subheader("🔍 Añadir Productos")
 
+        key_buscador = f"pres_prod_manual_key_{fid}"
+
         def procesar_seleccion_presupuesto():
-            seleccion = st.session_state.get("pres_prod_manual_key")
+            seleccion = st.session_state.get(key_buscador)
             if not seleccion:
                 return
             st.session_state.ultimo_pdf_presupuesto = None
@@ -458,7 +463,7 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                         "precio": p1_val,
                         "subtotal": p1_val
                     })
-            st.session_state.pres_prod_manual_key = None
+            st.session_state[key_buscador] = None
 
         opciones_productos = (
             df_prod["Nombre"] + " - " + df_prod["ID_Producto"].astype(str)
@@ -470,15 +475,15 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
             options=opciones_productos,
             index=None,
             placeholder="Escriba para buscar producto y añadirlo al instante...",
-            key="pres_prod_manual_key",
+            key=key_buscador,
             on_change=procesar_seleccion_presupuesto
         )
 
         with col_bus2.popover("✏️ Ítem manual (fuera de catálogo)", use_container_width=True):
-            man_desc = st.text_input("Descripción", key="pres_man_desc")
-            man_cant = st.number_input("Cantidad", min_value=1, value=1, key="pres_man_cant")
-            man_prec = st.number_input("Precio Unitario ($)", min_value=0.0, step=100.0, key="pres_man_prec")
-            if st.button("➕ Sumar al presupuesto", type="primary", use_container_width=True, key="pres_man_btn"):
+            man_desc = st.text_input("Descripción", key=f"pres_man_desc_{fid}")
+            man_cant = st.number_input("Cantidad", min_value=1, value=1, key=f"pres_man_cant_{fid}")
+            man_prec = st.number_input("Precio Unitario ($)", min_value=0.0, step=100.0, key=f"pres_man_prec_{fid}")
+            if st.button("➕ Sumar al presupuesto", type="primary", use_container_width=True, key=f"pres_man_btn_{fid}"):
                 if man_desc.strip():
                     st.session_state.ultimo_pdf_presupuesto = None
                     st.session_state.carrito_pres.append({
@@ -533,17 +538,17 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                         "Lista",
                         opciones_lista,
                         index=idx_l,
-                        key=f"pres_L_{i}"
+                        key=f"pres_L_{fid}_{i}"
                     )
                     if lista_item != lista_actual_producto:
                         item["lista_local"] = lista_item
                         st.rerun()
                 else:
                     lista_item = "Manual"
-                    c2.text_input("Lista", value="Manual", disabled=True, key=f"pres_L_man_{i}")
+                    c2.text_input("Lista", value="Manual", disabled=True, key=f"pres_L_man_{fid}_{i}")
 
                 n_cant = c3.number_input(
-                    "Cant.", min_value=1, value=int(item["cantidad"]), key=f"pres_Q_{i}"
+                    "Cant.", min_value=1, value=int(item["cantidad"]), key=f"pres_Q_{fid}_{i}"
                 )
 
                 if p_data is not None:
@@ -557,10 +562,10 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                     else:
                         col_p = lista_item.replace("Lista ", "Precio_")
                     precio_sugerido = float(p_data.get(col_p) or 0.0)
-                    key_precio = f"pres_P_{i}_{lista_item}_{n_cant}_{precio_sugerido}"
+                    key_precio = f"pres_P_{fid}_{i}_{lista_item}_{n_cant}_{precio_sugerido}"
                 else:
                     precio_sugerido = float(item["precio"])
-                    key_precio = f"pres_P_man_{i}"
+                    key_precio = f"pres_P_man_{fid}_{i}"
 
                 n_prec = c4.number_input(
                     "Precio",
@@ -578,7 +583,7 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                 })
 
                 c5.write(f"Sub: **${sub:,.2f}**")
-                if c6.button("🗑️", key=f"pres_del_{i}"):
+                if c6.button("🗑️", key=f"pres_del_{fid}_{i}"):
                     st.session_state.carrito_pres.pop(i)
                     st.rerun()
 
@@ -589,13 +594,17 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
             st.divider()
 
             col_tot1, col_tot2, col_tot3 = st.columns([1.2, 1.2, 2], vertical_alignment="center")
-            dias_validez = col_tot1.number_input("⏳ Validez del presupuesto (días)", min_value=1, max_value=60, value=7, key="pres_dias_val")
+            dias_validez = col_tot1.number_input(
+                "⏳ Validez del presupuesto (días)",
+                min_value=1, max_value=60, value=7,
+                key=f"pres_dias_val_{fid}"
+            )
             ajuste_monto = col_tot2.number_input(
                 "Descuento (-) / Envío (+) ($)",
                 value=0.0,
                 step=100.0,
                 help="Ingresá un valor negativo (ej. -1000) para aplicar un descuento global.",
-                key="pres_ajuste_monto"
+                key=f"pres_ajuste_monto_{fid}"
             )
             total_final_pres = round(subtotal_pres + float(ajuste_monto), 2)
             col_tot3.markdown(f"### 💰 **Total Presupuestado: ${total_final_pres:,.2f}**")
@@ -604,7 +613,12 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
             st.subheader("🚚 Forma de Entrega y Condiciones del PDF")
 
             col_e1, col_e2 = st.columns([1, 2.5])
-            tipo_entrega_pres = col_e1.radio("Modalidad cotizada", ["Mostrador", "Reparto"], index=0, key="pres_tipo_entrega")
+            tipo_entrega_pres = col_e1.radio(
+                "Modalidad cotizada",
+                ["Mostrador", "Reparto"],
+                index=0,
+                key=f"pres_tipo_entrega_{fid}"
+            )
 
             direccion_pres = "Retira en local (Mendoza 1797)"
             if tipo_entrega_pres == "Reparto":
@@ -615,38 +629,38 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                         if d_val:
                             opciones_dir.append(d_val)
                 if opciones_dir:
-                    direccion_pres = col_e2.selectbox("Dirección de entrega", opciones_dir, key="pres_dir_sel")
+                    direccion_pres = col_e2.selectbox("Dirección de entrega", opciones_dir, key=f"pres_dir_sel_{fid}")
                 else:
-                    direccion_pres = col_e2.text_input("Dirección / Zona de entrega", value=cliente_detalle_final, key="pres_dir_txt")
+                    direccion_pres = col_e2.text_input("Dirección / Zona de entrega", value=cliente_detalle_final, key=f"pres_dir_txt_{fid}")
             else:
-                col_e2.text_input("Lugar de retiro", value="Mendoza 1797 - Salta Capital", disabled=True, key="pres_retiro_txt")
+                col_e2.text_input("Lugar de retiro", value="Mendoza 1797 - Salta Capital", disabled=True, key=f"pres_retiro_txt_{fid}")
 
             with st.expander("⚙️ Personalizar textos legales / medios de pago del PDF", expanded=False):
                 datos_pago_txt = st.text_area(
                     "Datos de Pago (bloque superior derecho del PDF):",
                     value="Efectivo / Transferencia / Tarjetas\nPañalera Moldes",
                     height=68,
-                    key="pres_datos_pago"
+                    key=f"pres_datos_pago_{fid}"
                 )
                 cond_pago_txt = st.text_area(
                     "Condiciones de Pago:",
                     value="Los precios expresados son finales e incluyen IVA. Presupuesto válido hasta la fecha de vencimiento indicada, sujeto a disponibilidad de stock.",
                     height=72,
-                    key="pres_cond_pago"
+                    key=f"pres_cond_pago_{fid}"
                 )
                 default_det = f"Modalidad: {tipo_entrega_pres} ({direccion_pres}). Consultá por envíos a domicilio en Salta Capital."
                 otros_det_txt = st.text_area(
                     "Otros Detalles:",
                     value=default_det,
                     height=68,
-                    key="pres_otros_det"
+                    key=f"pres_otros_det_{fid}"
                 )
 
             # ------------------------------------------------------------------
-            # 5. BOTÓN ÚNICO DE EMISIÓN (EMITE, LIMPIA CAMPOS Y REFRESCA)
+            # 5. BOTÓN DE EMISIÓN
             # ------------------------------------------------------------------
             st.divider()
-            if st.button("📄 EMITIR PRESUPUESTO", use_container_width=True, type="primary", key="btn_emitir_pres"):
+            if st.button("📄 EMITIR PRESUPUESTO", use_container_width=True, type="primary", key=f"btn_emitir_pres_{fid}"):
                 try:
                     ahora = datetime.now()
                     venc = ahora + timedelta(days=int(dias_validez))
@@ -702,16 +716,6 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                         "numero": num_formateado,
                         "cliente": cliente_nombre_final
                     }
-
-                    # Limpiar carrito y campos de la vista antes del rerun
-                    st.session_state.carrito_pres = []
-                    for k_clean in [
-                        "pres_cli_sel", "pres_ev_nombre", "pres_prod_manual_key",
-                        "pres_ajuste_monto", "pres_tipo_entrega", "pres_dir_txt", "pres_email_ed"
-                    ]:
-                        if k_clean in st.session_state:
-                            del st.session_state[k_clean]
-
                     st.rerun()
 
                 except Exception as e_em:
@@ -719,20 +723,23 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
         else:
             st.info("El presupuesto está vacío. Buscá un producto arriba para comenzar.")
 
-        # Banner permanente con descarga del último presupuesto emitido (sobrevive al rerun)
+        # ----------------------------------------------------------------------
+        # 6. BANNER DE DESCARGA CON LIMPIEZA AUTOMÁTICA AL HACER CLIC
+        # ----------------------------------------------------------------------
         if st.session_state.ultimo_pdf_presupuesto:
             ult = st.session_state.ultimo_pdf_presupuesto
             with st.container(border=True):
-                c_ok, c_dl = st.columns([2.5, 1.3], vertical_alignment="center")
-                c_ok.success(f"✅ Presupuesto **N° {ult['numero']}** ({ult.get('cliente', '')}) emitido y guardado. Campos reiniciados.")
+                c_ok, c_dl = st.columns([2.3, 1.5], vertical_alignment="center")
+                c_ok.success(f"✅ Presupuesto **N° {ult['numero']}** ({ult.get('cliente', '')}) generado. Al descargar el PDF se limpiará la pantalla.")
                 c_dl.download_button(
-                    label=f"📥 DESCARGAR PDF (N° {ult['numero']})",
+                    label=f"📥 DESCARGAR PDF Y LIMPIAR (N° {ult['numero']})",
                     data=ult["bytes"],
                     file_name=ult["filename"],
                     mime="application/pdf",
                     type="primary",
                     use_container_width=True,
-                    key="btn_descargar_pdf_pres"
+                    key=f"btn_descargar_pdf_pres_{ult['numero']}",
+                    on_click=limpiar_todo_presupuesto
                 )
 
     # ==========================================================================
