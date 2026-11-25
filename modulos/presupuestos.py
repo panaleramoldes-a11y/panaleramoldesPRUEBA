@@ -299,7 +299,10 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
     def resetear_presupuesto():
         st.session_state.carrito_pres = []
         st.session_state.ultimo_pdf_presupuesto = None
-        for k in ["pres_cli_sel", "pres_prod_manual_key", "pres_obs_entrega"]:
+        for k in [
+            "pres_cli_sel", "pres_ev_nombre", "pres_prod_manual_key",
+            "pres_ajuste_monto", "pres_tipo_entrega", "pres_dir_txt", "pres_email_ed"
+        ]:
             if k in st.session_state:
                 del st.session_state[k]
         st.rerun()
@@ -431,6 +434,7 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
             seleccion = st.session_state.get("pres_prod_manual_key")
             if not seleccion:
                 return
+            st.session_state.ultimo_pdf_presupuesto = None
             id_buscado = seleccion.split(" - ")[-1]
             res = df_prod[df_prod["ID_Producto"].astype(str) == str(id_buscado)]
             if not res.empty:
@@ -439,7 +443,6 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                 nom_p = str(p_row["Nombre"])
                 p1_val = float(p_row.get("Precio_1") or 0.0)
 
-                # Si ya está en el carrito con lista automática, incrementa cantidad; si no, lo añade
                 existente = next(
                     (x for x in st.session_state.carrito_pres if str(x["id"]) == id_p and x.get("lista_local") == "Automática (P1/P2)"),
                     None
@@ -477,6 +480,7 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
             man_prec = st.number_input("Precio Unitario ($)", min_value=0.0, step=100.0, key="pres_man_prec")
             if st.button("➕ Sumar al presupuesto", type="primary", use_container_width=True, key="pres_man_btn"):
                 if man_desc.strip():
+                    st.session_state.ultimo_pdf_presupuesto = None
                     st.session_state.carrito_pres.append({
                         "id": "MANUAL",
                         "nombre": man_desc.strip().upper(),
@@ -639,84 +643,97 @@ def render_modulo_presupuestos(db, nombre_usuario_actual="Administrador"):
                 )
 
             # ------------------------------------------------------------------
-            # 5. BOTÓN ÚNICO DE EMISIÓN (SOLO GENERA PDF, NO TOCA STOCK NI CAJA)
+            # 5. BOTÓN ÚNICO DE EMISIÓN (EMITE, LIMPIA CAMPOS Y REFRESCA)
             # ------------------------------------------------------------------
             st.divider()
-            col_b1, col_b2 = st.columns(2)
+            if st.button("📄 EMITIR PRESUPUESTO", use_container_width=True, type="primary", key="btn_emitir_pres"):
+                try:
+                    ahora = datetime.now()
+                    venc = ahora + timedelta(days=int(dias_validez))
 
-            with col_b1:
-                if st.button("📄 EMITIR PRESUPUESTO", use_container_width=True, type="primary", key="btn_emitir_pres"):
-                    try:
-                        ahora = datetime.now()
-                        venc = ahora + timedelta(days=int(dias_validez))
+                    payload_db = {
+                        "Fecha": ahora.isoformat(),
+                        "Fecha_Vencimiento": venc.strftime("%Y-%m-%d"),
+                        "ID_Cliente": id_cliente_final,
+                        "Cliente_Nombre": cliente_nombre_final,
+                        "Cliente_Detalle": cliente_detalle_final,
+                        "Cliente_Telefono": cliente_tel_final,
+                        "Cliente_Email": cliente_email_final,
+                        "Lista_Precio": "Mixta / POS",
+                        "Items_JSON": st.session_state.carrito_pres,
+                        "Subtotal": subtotal_pres,
+                        "Descuento_Recargo": float(ajuste_monto),
+                        "Total": total_final_pres,
+                        "Datos_Pago": datos_pago_txt.strip(),
+                        "Condiciones_Pago": cond_pago_txt.strip(),
+                        "Otros_Detalles": otros_det_txt.strip(),
+                        "Usuario_Emisor": vendedor_nombre_final
+                    }
 
-                        payload_db = {
-                            "Fecha": ahora.isoformat(),
-                            "Fecha_Vencimiento": venc.strftime("%Y-%m-%d"),
-                            "ID_Cliente": id_cliente_final,
-                            "Cliente_Nombre": cliente_nombre_final,
-                            "Cliente_Detalle": cliente_detalle_final,
-                            "Cliente_Telefono": cliente_tel_final,
-                            "Cliente_Email": cliente_email_final,
-                            "Lista_Precio": "Mixta / POS",
-                            "Items_JSON": st.session_state.carrito_pres,
-                            "Subtotal": subtotal_pres,
-                            "Descuento_Recargo": float(ajuste_monto),
-                            "Total": total_final_pres,
-                            "Datos_Pago": datos_pago_txt.strip(),
-                            "Condiciones_Pago": cond_pago_txt.strip(),
-                            "Otros_Detalles": otros_det_txt.strip(),
-                            "Usuario_Emisor": vendedor_nombre_final
-                        }
+                    res_ins = db.table("PRESUPUESTOS").insert(payload_db).execute()
+                    nuevo_id = res_ins.data[0]["ID_Presupuesto"]
+                    num_formateado = f"001-{int(nuevo_id):06d}"
 
-                        res_ins = db.table("PRESUPUESTOS").insert(payload_db).execute()
-                        nuevo_id = res_ins.data[0]["ID_Presupuesto"]
-                        num_formateado = f"001-{int(nuevo_id):06d}"
+                    db.table("PRESUPUESTOS").update(
+                        {"Numero_Formateado": num_formateado}
+                    ).eq("ID_Presupuesto", nuevo_id).execute()
 
-                        db.table("PRESUPUESTOS").update(
-                            {"Numero_Formateado": num_formateado}
-                        ).eq("ID_Presupuesto", nuevo_id).execute()
+                    datos_pdf = {
+                        "numero": num_formateado,
+                        "fecha_str": ahora.strftime("%d/%m/%Y"),
+                        "vencimiento_str": venc.strftime("%d/%m/%Y"),
+                        "cliente_nombre": cliente_nombre_final,
+                        "cliente_detalle": cliente_detalle_final,
+                        "cliente_telefono": cliente_tel_final,
+                        "cliente_email": cliente_email_final,
+                        "datos_pago": datos_pago_txt.strip(),
+                        "condiciones_pago": cond_pago_txt.strip(),
+                        "otros_detalles": otros_det_txt.strip(),
+                        "items": st.session_state.carrito_pres,
+                        "subtotal": subtotal_pres,
+                        "descuento_recargo": float(ajuste_monto),
+                        "total": total_final_pres
+                    }
 
-                        datos_pdf = {
-                            "numero": num_formateado,
-                            "fecha_str": ahora.strftime("%d/%m/%Y"),
-                            "vencimiento_str": venc.strftime("%d/%m/%Y"),
-                            "cliente_nombre": cliente_nombre_final,
-                            "cliente_detalle": cliente_detalle_final,
-                            "cliente_telefono": cliente_tel_final,
-                            "cliente_email": cliente_email_final,
-                            "datos_pago": datos_pago_txt.strip(),
-                            "condiciones_pago": cond_pago_txt.strip(),
-                            "otros_detalles": otros_det_txt.strip(),
-                            "items": st.session_state.carrito_pres,
-                            "subtotal": subtotal_pres,
-                            "descuento_recargo": float(ajuste_monto),
-                            "total": total_final_pres
-                        }
+                    pdf_bytes = generar_pdf_presupuesto(datos_pdf)
+                    st.session_state.ultimo_pdf_presupuesto = {
+                        "bytes": pdf_bytes,
+                        "filename": f"Presupuesto_{num_formateado}_{cliente_nombre_final.replace(' ', '_')}.pdf",
+                        "numero": num_formateado,
+                        "cliente": cliente_nombre_final
+                    }
 
-                        pdf_bytes = generar_pdf_presupuesto(datos_pdf)
-                        st.session_state.ultimo_pdf_presupuesto = {
-                            "bytes": pdf_bytes,
-                            "filename": f"Presupuesto_{num_formateado}_{cliente_nombre_final.replace(' ', '_')}.pdf",
-                            "numero": num_formateado
-                        }
-                        st.success(f"✅ Presupuesto **N° {num_formateado}** emitido (sin descontar stock ni movimientos de caja).")
+                    # Limpiar carrito y campos de la vista antes del rerun
+                    st.session_state.carrito_pres = []
+                    for k_clean in [
+                        "pres_cli_sel", "pres_ev_nombre", "pres_prod_manual_key",
+                        "pres_ajuste_monto", "pres_tipo_entrega", "pres_dir_txt", "pres_email_ed"
+                    ]:
+                        if k_clean in st.session_state:
+                            del st.session_state[k_clean]
 
-                    except Exception as e_em:
-                        st.error(f"Error al emitir presupuesto: {e_em}")
+                    st.rerun()
 
-            with col_b2:
-                if st.session_state.ultimo_pdf_presupuesto:
-                    st.download_button(
-                        label=f"📥 DESCARGAR PDF (N° {st.session_state.ultimo_pdf_presupuesto['numero']})",
-                        data=st.session_state.ultimo_pdf_presupuesto["bytes"],
-                        file_name=st.session_state.ultimo_pdf_presupuesto["filename"],
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="btn_descargar_pdf_pres"
-                    )
+                except Exception as e_em:
+                    st.error(f"Error al emitir presupuesto: {e_em}")
         else:
             st.info("El presupuesto está vacío. Buscá un producto arriba para comenzar.")
+
+        # Banner permanente con descarga del último presupuesto emitido (sobrevive al rerun)
+        if st.session_state.ultimo_pdf_presupuesto:
+            ult = st.session_state.ultimo_pdf_presupuesto
+            with st.container(border=True):
+                c_ok, c_dl = st.columns([2.5, 1.3], vertical_alignment="center")
+                c_ok.success(f"✅ Presupuesto **N° {ult['numero']}** ({ult.get('cliente', '')}) emitido y guardado. Campos reiniciados.")
+                c_dl.download_button(
+                    label=f"📥 DESCARGAR PDF (N° {ult['numero']})",
+                    data=ult["bytes"],
+                    file_name=ult["filename"],
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True,
+                    key="btn_descargar_pdf_pres"
+                )
 
     # ==========================================================================
     # PESTAÑA 2: HISTORIAL DE PRESUPUESTOS EMITIDOS
