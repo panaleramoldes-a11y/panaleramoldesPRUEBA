@@ -1352,6 +1352,131 @@ else:
                         st.success("✅ Registro realizado.")
                         st.rerun()
 
+            # --- EDITAR O ELIMINAR MOVIMIENTOS MANUALES DEL TURNO ACTUAL ---
+            with st.expander("✏️ Editar o Eliminar Movimiento Manual (Turno Actual)"):
+                if not turno_actual:
+                    st.info("No hay un turno abierto para editar movimientos.")
+                else:
+                    movs_turno = (
+                        db.table("CAJA")
+                        .select("*")
+                        .eq("ID_Turno", turno_actual["ID_Turno"])
+                        .order("ID_Movimiento", desc=True)
+                        .execute()
+                        .data
+                    ) or []
+
+                    # Filtramos SOLO los manuales (los que están en lista_c y no son automáticos del sistema)
+                    set_conceptos_manuales = {c.upper() for c in lista_c}
+                    movs_manuales = [
+                        m for m in movs_turno
+                        if str(m.get("Concepto", "")).strip().upper() in set_conceptos_manuales
+                        and not str(m.get("Concepto", "")).startswith("Venta ")
+                        and not str(m.get("Concepto", "")).startswith("RETIRO PAGO ")
+                    ]
+
+                    if not movs_manuales:
+                        st.info("No hay movimientos manuales editables en el turno abierto.")
+                    else:
+                        opciones_mov = {
+                            m["ID_Movimiento"]: (
+                                f"#{m['ID_Movimiento']} | {str(m.get('Fecha', ''))[11:16]} hs | "
+                                f"{m['Tipo'].upper()} | {m['Concepto']} | ${float(m['Monto']):,.2f} ({m['Forma_Pago']})"
+                            )
+                            for m in movs_manuales
+                        }
+
+                        id_mov_sel = st.selectbox(
+                            "Seleccioná el movimiento manual a corregir:",
+                            options=list(opciones_mov.keys()),
+                            format_func=lambda x: opciones_mov[x],
+                            key="caja_sel_mov_editar"
+                        )
+
+                        mov_obj = next(m for m in movs_manuales if m["ID_Movimiento"] == id_mov_sel)
+
+                        with st.form(f"form_editar_mov_manual_{id_mov_sel}"):
+                            c_ed1, c_ed2 = st.columns(2)
+                            idx_conc = lista_c.index(mov_obj["Concepto"]) if mov_obj["Concepto"] in lista_c else 0
+                            ed_concepto = c_ed1.selectbox("Concepto", lista_c, index=idx_conc)
+                            ed_tipo = c_ed2.radio(
+                                "Tipo",
+                                ["Ingreso", "Egreso"],
+                                index=0 if mov_obj["Tipo"] == "Ingreso" else 1,
+                                horizontal=True
+                            )
+
+                            c_ed3, c_ed4 = st.columns(2)
+                            ed_importe = c_ed3.number_input(
+                                "Importe ($)",
+                                min_value=0.0,
+                                value=float(mov_obj["Monto"]),
+                                step=100.0
+                            )
+                            lista_fp_ed = ["Efectivo", "Crédito", "Débito", "Transferencia"]
+                            idx_fp = lista_fp_ed.index(mov_obj["Forma_Pago"]) if mov_obj["Forma_Pago"] in lista_fp_ed else 0
+                            ed_forma_pago = c_ed4.selectbox("Forma de Pago", lista_fp_ed, index=idx_fp)
+
+                            b_guardar_ed, b_elim_ed = st.columns(2)
+                            btn_upd = b_guardar_ed.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
+                            btn_del = b_elim_ed.form_submit_button("🗑️ Eliminar Movimiento", use_container_width=True)
+
+                        # Helper para localizar si tuvo un retiro automático gemelo (Ingreso != Efectivo)
+                        def _buscar_contramovimiento_gemelo(mov_original):
+                            if mov_original["Tipo"] == "Ingreso" and mov_original["Forma_Pago"] != "Efectivo":
+                                concepto_gemelo = f"RETIRO PAGO {mov_original['Forma_Pago'].upper()}"
+                                candidatos = [
+                                    x for x in movs_turno
+                                    if x["ID_Movimiento"] > mov_original["ID_Movimiento"]
+                                    and x["Tipo"] == "Egreso"
+                                    and x["Concepto"] == concepto_gemelo
+                                    and abs(float(x["Monto"]) - float(mov_original["Monto"])) < 0.01
+                                    and x["Forma_Pago"] == mov_original["Forma_Pago"]
+                                ]
+                                return candidatos[-1] if candidatos else None
+                            return None
+
+                        if btn_upd:
+                            gemelo = _buscar_contramovimiento_gemelo(mov_obj)
+
+                            db.table("CAJA").update({
+                                "Concepto": ed_concepto,
+                                "Tipo": ed_tipo,
+                                "Monto": float(ed_importe),
+                                "Forma_Pago": ed_forma_pago
+                            }).eq("ID_Movimiento", id_mov_sel).execute()
+
+                            # Sincronizar contramovimiento si cambió tipo, monto o forma de pago
+                            requiere_gemelo = (ed_tipo == "Ingreso" and ed_forma_pago != "Efectivo")
+                            if gemelo and requiere_gemelo:
+                                db.table("CAJA").update({
+                                    "Concepto": f"RETIRO PAGO {ed_forma_pago.upper()}",
+                                    "Monto": float(ed_importe),
+                                    "Forma_Pago": ed_forma_pago
+                                }).eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
+                            elif gemelo and not requiere_gemelo:
+                                db.table("CAJA").delete().eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
+                            elif not gemelo and requiere_gemelo:
+                                db.table("CAJA").insert({
+                                    "ID_Turno": turno_actual["ID_Turno"],
+                                    "Fecha": mov_obj["Fecha"],
+                                    "Tipo": "Egreso",
+                                    "Concepto": f"RETIRO PAGO {ed_forma_pago.upper()}",
+                                    "Monto": float(ed_importe),
+                                    "Forma_Pago": ed_forma_pago
+                                }).execute()
+
+                            st.success("✅ Movimiento manual actualizado correctamente.")
+                            st.rerun()
+
+                        if btn_del:
+                            gemelo = _buscar_contramovimiento_gemelo(mov_obj)
+                            if gemelo:
+                                db.table("CAJA").delete().eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
+                            db.table("CAJA").delete().eq("ID_Movimiento", id_mov_sel).execute()
+                            st.warning("🗑️ Movimiento manual eliminado.")
+                            st.rerun()
+
     # =====================================================================
     # MODULO: 🛒 PUNTO DE VENTA
     # =====================================================================
