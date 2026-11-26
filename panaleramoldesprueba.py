@@ -1230,11 +1230,23 @@ else:
         usuario_registro = str(st.session_state.get("usuario_actual") or "Sistema").strip()
 
         es_admin = (rol_sesion == "administrador") or (usuario_registro.lower() == "martiny")
+
+        def registrar_auditoria_caja(accion, id_entidad, detalles_dict):
+            try:
+                db.table("AUDITORIA").insert({
+                    "Fecha_Hora": datetime.now().isoformat(),
+                    "Tabla_Afectada": "CAJA",
+                    "Accion": accion,
+                    "ID_Entidad": str(id_entidad),
+                    "Detalles": detalles_dict,
+                    "Usuario": usuario_registro
+                }).execute()
+            except Exception:
+                pass
         
         # 1. Obtenemos estado
-        turno_actual = obtener_turno_activo()
+        turno_actual = obtener_turno_activo() 
         
-        # Reducimos los tabs únicamente a las dos vistas útiles
         tab_turno, tab_explorar = st.tabs(["🕒 Turno Actual", "🔍 Explorador"])
         
         with tab_turno:
@@ -1243,6 +1255,14 @@ else:
                 monto_inicial = st.number_input("Ingrese monto de apertura (efectivo inicial)", min_value=0.0)
                 if st.button("🚀 Abrir Turno"):
                     iniciar_turno(monto_inicial, usuario_registro)
+                    registrar_auditoria_caja(
+                        "INSERT",
+                        "APERTURA",
+                        {
+                            "evento": "APERTURA DE CAJA",
+                            "monto_apertura": float(monto_inicial)
+                        }
+                    )
                     st.rerun()
             else:
                 st.success(f"✅ Turno Activo: {turno_actual['ID_Turno']}")
@@ -1259,7 +1279,7 @@ else:
                             }).eq("ID_Turno", turno_actual['ID_Turno']).execute()
                             
                             # B. Registrar egreso en CAJA
-                            db.table("CAJA").insert({
+                            res_cierre = db.table("CAJA").insert({
                                 "Fecha": datetime.now().isoformat(),
                                 "Tipo": "Egreso",
                                 "Concepto": "CIERRE CAJA DIARIO",
@@ -1268,11 +1288,21 @@ else:
                                 "ID_Turno": turno_actual['ID_Turno'],
                                 "Usuario": usuario_registro
                             }).execute()
+
+                            id_cierre = res_cierre.data[0]["ID_Movimiento"] if res_cierre.data else turno_actual['ID_Turno']
+                            registrar_auditoria_caja(
+                                "INSERT",
+                                id_cierre,
+                                {
+                                    "id_turno": turno_actual['ID_Turno'],
+                                    "concepto": "CIERRE CAJA DIARIO",
+                                    "monto_cierre": float(monto_cierre)
+                                }
+                            )
                             st.success("Turno cerrado correctamente.")
                             st.rerun()
 
         with tab_explorar:
-            # Carga datos
             try:
                 res_caja = db.table("CAJA").select("*").order("Fecha", desc=True).execute()
                 df_caja = pd.DataFrame(res_caja.data)
@@ -1326,7 +1356,6 @@ else:
                     key=lambda x: x.upper()
                 )
 
-                # Conceptos exclusivos de Administrador
                 conceptos_solo_admin = {"INGRESO DE EFECTIVO A CAJA", "RETIRO DE EFECTIVO"}
                 if es_admin:
                     lista_c_disp = lista_c_completa
@@ -1348,8 +1377,9 @@ else:
                         elif importe <= 0:
                             st.warning("⚠️ El importe debe ser mayor a $0.")
                         else:
-                            db.table("CAJA").insert({
-                                "ID_Turno": turno_actual['ID_Turno'] if turno_actual else "SIN_TURNO",
+                            id_turno_val = turno_actual['ID_Turno'] if turno_actual else "SIN_TURNO"
+                            res_ins = db.table("CAJA").insert({
+                                "ID_Turno": id_turno_val,
                                 "Fecha": datetime.now().isoformat(),
                                 "Tipo": tipo,
                                 "Concepto": concepto,
@@ -1357,10 +1387,23 @@ else:
                                 "Forma_Pago": forma_pago,
                                 "Usuario": usuario_registro
                             }).execute()
+
+                            id_nuevo_mov = res_ins.data[0]["ID_Movimiento"] if res_ins.data else "N/A"
+                            registrar_auditoria_caja(
+                                "INSERT",
+                                id_nuevo_mov,
+                                {
+                                    "id_turno": id_turno_val,
+                                    "tipo": tipo,
+                                    "concepto": concepto,
+                                    "monto": float(importe),
+                                    "forma_pago": forma_pago
+                                }
+                            )
                             
                             if tipo == "Ingreso" and forma_pago != "Efectivo":
-                                db.table("CAJA").insert({
-                                    "ID_Turno": turno_actual['ID_Turno'] if turno_actual else "SIN_TURNO",
+                                res_gem = db.table("CAJA").insert({
+                                    "ID_Turno": id_turno_val,
                                     "Fecha": datetime.now().isoformat(),
                                     "Tipo": "Egreso",
                                     "Concepto": f"RETIRO PAGO {forma_pago.upper()}",
@@ -1368,6 +1411,20 @@ else:
                                     "Forma_Pago": forma_pago,
                                     "Usuario": usuario_registro
                                 }).execute()
+                                id_gem = res_gem.data[0]["ID_Movimiento"] if res_gem.data else "N/A"
+                                registrar_auditoria_caja(
+                                    "INSERT",
+                                    id_gem,
+                                    {
+                                        "id_turno": id_turno_val,
+                                        "tipo": "Egreso",
+                                        "concepto": f"RETIRO PAGO {forma_pago.upper()}",
+                                        "monto": float(importe),
+                                        "forma_pago": forma_pago,
+                                        "origen_movimiento_id": id_nuevo_mov
+                                    }
+                                )
+
                             st.success("✅ Registro realizado.")
                             st.rerun()
 
@@ -1465,6 +1522,26 @@ else:
                                     "Forma_Pago": ed_forma_pago
                                 }).eq("ID_Movimiento", id_mov_sel).execute()
 
+                                registrar_auditoria_caja(
+                                    "UPDATE",
+                                    id_mov_sel,
+                                    {
+                                        "usuario_original": mov_obj.get("Usuario"),
+                                        "antes": {
+                                            "concepto": mov_obj["Concepto"],
+                                            "tipo": mov_obj["Tipo"],
+                                            "monto": float(mov_obj["Monto"]),
+                                            "forma_pago": mov_obj["Forma_Pago"]
+                                        },
+                                        "despues": {
+                                            "concepto": ed_concepto,
+                                            "tipo": ed_tipo,
+                                            "monto": float(ed_importe),
+                                            "forma_pago": ed_forma_pago
+                                        }
+                                    }
+                                )
+
                                 requiere_gemelo = (ed_tipo == "Ingreso" and ed_forma_pago != "Efectivo")
                                 if gemelo and requiere_gemelo:
                                     db.table("CAJA").update({
@@ -1493,6 +1570,21 @@ else:
                                 if gemelo:
                                     db.table("CAJA").delete().eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
                                 db.table("CAJA").delete().eq("ID_Movimiento", id_mov_sel).execute()
+
+                                registrar_auditoria_caja(
+                                    "DELETE",
+                                    id_mov_sel,
+                                    {
+                                        "usuario_original": mov_obj.get("Usuario"),
+                                        "registro_eliminado": {
+                                            "concepto": mov_obj["Concepto"],
+                                            "tipo": mov_obj["Tipo"],
+                                            "monto": float(mov_obj["Monto"]),
+                                            "forma_pago": mov_obj["Forma_Pago"]
+                                        }
+                                    }
+                                )
+
                                 st.warning("🗑️ Movimiento manual eliminado.")
                                 st.rerun()
 
