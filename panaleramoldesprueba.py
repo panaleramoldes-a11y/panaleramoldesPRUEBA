@@ -1223,6 +1223,26 @@ else:
     # =====================================================================
     if menu == "💰 Caja":
         st.title("💰 Gestión de Caja")
+
+        # --- DETECCIÓN DE PERMISOS Y USUARIO ACTUAL ---
+        rol_sesion = str(
+            st.session_state.get("rol")
+            or st.session_state.get("usuario_rol")
+            or st.session_state.get("role")
+            or ""
+        ).strip().lower()
+        user_sesion = str(
+            st.session_state.get("usuario")
+            or st.session_state.get("usuario_nombre")
+            or ""
+        ).strip().lower()
+
+        es_admin = (rol_sesion == "administrador") or (user_sesion == "martiny")
+        usuario_registro = str(
+            st.session_state.get("usuario_nombre")
+            or st.session_state.get("usuario")
+            or "Martin"
+        )
         
         # 1. Obtenemos estado
         turno_actual = obtener_turno_activo() 
@@ -1235,7 +1255,7 @@ else:
                 st.warning("⚠️ No hay ningún turno abierto.")
                 monto_inicial = st.number_input("Ingrese monto de apertura (efectivo inicial)", min_value=0.0)
                 if st.button("🚀 Abrir Turno"):
-                    iniciar_turno(monto_inicial, "Martin")
+                    iniciar_turno(monto_inicial, usuario_registro)
                     st.rerun()
             else:
                 st.success(f"✅ Turno Activo: {turno_actual['ID_Turno']}")
@@ -1258,7 +1278,8 @@ else:
                                 "Concepto": "CIERRE CAJA DIARIO",
                                 "Monto": float(monto_cierre),
                                 "Forma_Pago": "Efectivo",
-                                "ID_Turno": turno_actual['ID_Turno']
+                                "ID_Turno": turno_actual['ID_Turno'],
+                                "Usuario": usuario_registro
                             }).execute()
                             st.success("Turno cerrado correctamente.")
                             st.rerun()
@@ -1266,7 +1287,6 @@ else:
         with tab_explorar:
             # Carga datos
             try:
-                # 1. Agregamos order("Fecha", desc=True) para traerlos ordenados desde la base de datos
                 res_caja = db.table("CAJA").select("*").order("Fecha", desc=True).execute()
                 df_caja = pd.DataFrame(res_caja.data)
             except Exception:
@@ -1276,14 +1296,11 @@ else:
             
             if not df_caja.empty:
                 df_caja['Fecha'] = pd.to_datetime(df_caja['Fecha'])
-                # 2. Filtración y ordenamiento explícito (de más reciente a más antiguo)
                 df_filtrado = df_caja[df_caja['Fecha'].dt.date == fecha_sel].sort_values(by="Fecha", ascending=False)
             else:
-                df_filtrado = pd.DataFrame() # Tabla vacía si no hay datos
+                df_filtrado = pd.DataFrame()
 
             # --- MOSTRAR MÉTRICAS (SOLO SALDO) ---
-            col_saldo = st.columns(1)
-            
             if not df_filtrado.empty:
                 ingresos = df_filtrado[df_filtrado['Tipo'] == 'Ingreso']['Monto'].sum()
                 egresos = df_filtrado[df_filtrado['Tipo'] == 'Egreso']['Monto'].sum()
@@ -1291,21 +1308,19 @@ else:
             else:
                 saldo_final = 0.0
             
-            # Mostramos únicamente la métrica del saldo
             st.metric("Saldo", f"${saldo_final:,.2f}")
-            
-            st.divider() # Un separador visual para que quede más prolijo
+            st.divider()
 
             # --- MOSTRAR TABLA O AVISO ---
             if not df_filtrado.empty:
-                # Definimos las columnas que SÍ queremos mostrar
-                columnas_a_mostrar = ['Fecha', 'Tipo', 'Concepto', 'Monto', 'Forma_Pago']
-                
-                # Renderizamos solo esas columnas y ocultamos el índice
+                columnas_a_mostrar = [
+                    c for c in ['Fecha', 'Tipo', 'Concepto', 'Monto', 'Forma_Pago', 'Usuario']
+                    if c in df_filtrado.columns
+                ]
                 st.dataframe(
                     df_filtrado[columnas_a_mostrar], 
                     width='stretch', 
-                    hide_index=True  # Esto oculta el número de fila a la izquierda
+                    hide_index=True
                 )
             else:
                 st.info("No hay movimientos registrados para la fecha seleccionada.")
@@ -1319,163 +1334,180 @@ else:
                     .execute()
                     .data
                 )
-                lista_c = sorted(
+                lista_c_completa = sorted(
                     [str(c["CONCEPTO"]).strip() for c in (conceptos_data or []) if c.get("CONCEPTO")],
                     key=lambda x: x.upper()
                 )
+
+                # Conceptos exclusivos de Administrador
+                conceptos_solo_admin = {"INGRESO DE EFECTIVO A CAJA", "RETIRO DE EFECTIVO"}
+                if es_admin:
+                    lista_c_disp = lista_c_completa
+                else:
+                    lista_c_disp = [
+                        c for c in lista_c_completa
+                        if c.upper() not in conceptos_solo_admin
+                    ]
                 
                 with st.form("nuevo_movimiento", clear_on_submit=True):
-                    concepto = st.selectbox("Concepto", lista_c)
+                    concepto = st.selectbox("Concepto", lista_c_disp)
                     tipo = st.radio("Tipo", ["Ingreso", "Egreso"])
                     importe = st.number_input("Importe", min_value=0.0)
                     forma_pago = st.selectbox("Forma de Pago", ["Efectivo", "Crédito", "Débito", "Transferencia"])
                     
                     if st.form_submit_button("Guardar"):
-                        db.table("CAJA").insert({
-                            "ID_Turno": turno_actual['ID_Turno'] if turno_actual else "SIN_TURNO",
-                            "Fecha": datetime.now().isoformat(),
-                            "Tipo": tipo,
-                            "Concepto": concepto,
-                            "Monto": float(importe),
-                            "Forma_Pago": forma_pago
-                        }).execute()
-                        
-                        if tipo == "Ingreso" and forma_pago != "Efectivo":
+                        if not es_admin and str(concepto).strip().upper() in conceptos_solo_admin:
+                            st.error("⛔ No tenés permisos para registrar este concepto. Solicitalo a un Administrador.")
+                        elif importe <= 0:
+                            st.warning("⚠️ El importe debe ser mayor a $0.")
+                        else:
                             db.table("CAJA").insert({
                                 "ID_Turno": turno_actual['ID_Turno'] if turno_actual else "SIN_TURNO",
                                 "Fecha": datetime.now().isoformat(),
-                                "Tipo": "Egreso",
-                                "Concepto": f"RETIRO PAGO {forma_pago.upper()}",
+                                "Tipo": tipo,
+                                "Concepto": concepto,
                                 "Monto": float(importe),
-                                "Forma_Pago": forma_pago
+                                "Forma_Pago": forma_pago,
+                                "Usuario": usuario_registro
                             }).execute()
-                        st.success("✅ Registro realizado.")
-                        st.rerun()
-
-            # --- EDITAR O ELIMINAR MOVIMIENTOS MANUALES DEL TURNO ACTUAL ---
-            with st.expander("✏️ Editar o Eliminar Movimiento Manual (Turno Actual)"):
-                if not turno_actual:
-                    st.info("No hay un turno abierto para editar movimientos.")
-                else:
-                    movs_turno = (
-                        db.table("CAJA")
-                        .select("*")
-                        .eq("ID_Turno", turno_actual["ID_Turno"])
-                        .order("ID_Movimiento", desc=True)
-                        .execute()
-                        .data
-                    ) or []
-
-                    # Filtramos SOLO los manuales (los que están en lista_c y no son automáticos del sistema)
-                    set_conceptos_manuales = {c.upper() for c in lista_c}
-                    movs_manuales = [
-                        m for m in movs_turno
-                        if str(m.get("Concepto", "")).strip().upper() in set_conceptos_manuales
-                        and not str(m.get("Concepto", "")).startswith("Venta ")
-                        and not str(m.get("Concepto", "")).startswith("RETIRO PAGO ")
-                    ]
-
-                    if not movs_manuales:
-                        st.info("No hay movimientos manuales editables en el turno abierto.")
-                    else:
-                        opciones_mov = {
-                            m["ID_Movimiento"]: (
-                                f"#{m['ID_Movimiento']} | {str(m.get('Fecha', ''))[11:16]} hs | "
-                                f"{m['Tipo'].upper()} | {m['Concepto']} | ${float(m['Monto']):,.2f} ({m['Forma_Pago']})"
-                            )
-                            for m in movs_manuales
-                        }
-
-                        id_mov_sel = st.selectbox(
-                            "Seleccioná el movimiento manual a corregir:",
-                            options=list(opciones_mov.keys()),
-                            format_func=lambda x: opciones_mov[x],
-                            key="caja_sel_mov_editar"
-                        )
-
-                        mov_obj = next(m for m in movs_manuales if m["ID_Movimiento"] == id_mov_sel)
-
-                        with st.form(f"form_editar_mov_manual_{id_mov_sel}"):
-                            c_ed1, c_ed2 = st.columns(2)
-                            idx_conc = lista_c.index(mov_obj["Concepto"]) if mov_obj["Concepto"] in lista_c else 0
-                            ed_concepto = c_ed1.selectbox("Concepto", lista_c, index=idx_conc)
-                            ed_tipo = c_ed2.radio(
-                                "Tipo",
-                                ["Ingreso", "Egreso"],
-                                index=0 if mov_obj["Tipo"] == "Ingreso" else 1,
-                                horizontal=True
-                            )
-
-                            c_ed3, c_ed4 = st.columns(2)
-                            ed_importe = c_ed3.number_input(
-                                "Importe ($)",
-                                min_value=0.0,
-                                value=float(mov_obj["Monto"]),
-                                step=100.0
-                            )
-                            lista_fp_ed = ["Efectivo", "Crédito", "Débito", "Transferencia"]
-                            idx_fp = lista_fp_ed.index(mov_obj["Forma_Pago"]) if mov_obj["Forma_Pago"] in lista_fp_ed else 0
-                            ed_forma_pago = c_ed4.selectbox("Forma de Pago", lista_fp_ed, index=idx_fp)
-
-                            b_guardar_ed, b_elim_ed = st.columns(2)
-                            btn_upd = b_guardar_ed.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
-                            btn_del = b_elim_ed.form_submit_button("🗑️ Eliminar Movimiento", use_container_width=True)
-
-                        # Helper para localizar si tuvo un retiro automático gemelo (Ingreso != Efectivo)
-                        def _buscar_contramovimiento_gemelo(mov_original):
-                            if mov_original["Tipo"] == "Ingreso" and mov_original["Forma_Pago"] != "Efectivo":
-                                concepto_gemelo = f"RETIRO PAGO {mov_original['Forma_Pago'].upper()}"
-                                candidatos = [
-                                    x for x in movs_turno
-                                    if x["ID_Movimiento"] > mov_original["ID_Movimiento"]
-                                    and x["Tipo"] == "Egreso"
-                                    and x["Concepto"] == concepto_gemelo
-                                    and abs(float(x["Monto"]) - float(mov_original["Monto"])) < 0.01
-                                    and x["Forma_Pago"] == mov_original["Forma_Pago"]
-                                ]
-                                return candidatos[-1] if candidatos else None
-                            return None
-
-                        if btn_upd:
-                            gemelo = _buscar_contramovimiento_gemelo(mov_obj)
-
-                            db.table("CAJA").update({
-                                "Concepto": ed_concepto,
-                                "Tipo": ed_tipo,
-                                "Monto": float(ed_importe),
-                                "Forma_Pago": ed_forma_pago
-                            }).eq("ID_Movimiento", id_mov_sel).execute()
-
-                            # Sincronizar contramovimiento si cambió tipo, monto o forma de pago
-                            requiere_gemelo = (ed_tipo == "Ingreso" and ed_forma_pago != "Efectivo")
-                            if gemelo and requiere_gemelo:
-                                db.table("CAJA").update({
-                                    "Concepto": f"RETIRO PAGO {ed_forma_pago.upper()}",
-                                    "Monto": float(ed_importe),
-                                    "Forma_Pago": ed_forma_pago
-                                }).eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
-                            elif gemelo and not requiere_gemelo:
-                                db.table("CAJA").delete().eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
-                            elif not gemelo and requiere_gemelo:
+                            
+                            if tipo == "Ingreso" and forma_pago != "Efectivo":
                                 db.table("CAJA").insert({
-                                    "ID_Turno": turno_actual["ID_Turno"],
-                                    "Fecha": mov_obj["Fecha"],
+                                    "ID_Turno": turno_actual['ID_Turno'] if turno_actual else "SIN_TURNO",
+                                    "Fecha": datetime.now().isoformat(),
                                     "Tipo": "Egreso",
-                                    "Concepto": f"RETIRO PAGO {ed_forma_pago.upper()}",
+                                    "Concepto": f"RETIRO PAGO {forma_pago.upper()}",
+                                    "Monto": float(importe),
+                                    "Forma_Pago": forma_pago,
+                                    "Usuario": usuario_registro
+                                }).execute()
+                            st.success("✅ Registro realizado.")
+                            st.rerun()
+
+            # --- EDITAR O ELIMINAR MOVIMIENTOS MANUALES (EXCLUSIVO ADMINISTRADOR) ---
+            if es_admin:
+                with st.expander("✏️ Editar o Eliminar Movimiento Manual (Turno Actual)"):
+                    if not turno_actual:
+                        st.info("No hay un turno abierto para editar movimientos.")
+                    else:
+                        movs_turno = (
+                            db.table("CAJA")
+                            .select("*")
+                            .eq("ID_Turno", turno_actual["ID_Turno"])
+                            .order("ID_Movimiento", desc=True)
+                            .execute()
+                            .data
+                        ) or []
+
+                        set_conceptos_manuales = {c.upper() for c in lista_c_completa}
+                        movs_manuales = [
+                            m for m in movs_turno
+                            if str(m.get("Concepto", "")).strip().upper() in set_conceptos_manuales
+                            and not str(m.get("Concepto", "")).startswith("Venta ")
+                            and not str(m.get("Concepto", "")).startswith("RETIRO PAGO ")
+                        ]
+
+                        if not movs_manuales:
+                            st.info("No hay movimientos manuales editables en el turno abierto.")
+                        else:
+                            opciones_mov = {
+                                m["ID_Movimiento"]: (
+                                    f"#{m['ID_Movimiento']} | {str(m.get('Fecha', ''))[11:16]} hs | "
+                                    f"{m['Tipo'].upper()} | {m['Concepto']} | ${float(m['Monto']):,.2f} ({m['Forma_Pago']}) "
+                                    f"- Por: {m.get('Usuario') or 'S/D'}"
+                                )
+                                for m in movs_manuales
+                            }
+
+                            id_mov_sel = st.selectbox(
+                                "Seleccioná el movimiento manual a corregir:",
+                                options=list(opciones_mov.keys()),
+                                format_func=lambda x: opciones_mov[x],
+                                key="caja_sel_mov_editar"
+                            )
+
+                            mov_obj = next(m for m in movs_manuales if m["ID_Movimiento"] == id_mov_sel)
+
+                            with st.form(f"form_editar_mov_manual_{id_mov_sel}"):
+                                c_ed1, c_ed2 = st.columns(2)
+                                idx_conc = lista_c_completa.index(mov_obj["Concepto"]) if mov_obj["Concepto"] in lista_c_completa else 0
+                                ed_concepto = c_ed1.selectbox("Concepto", lista_c_completa, index=idx_conc)
+                                ed_tipo = c_ed2.radio(
+                                    "Tipo",
+                                    ["Ingreso", "Egreso"],
+                                    index=0 if mov_obj["Tipo"] == "Ingreso" else 1,
+                                    horizontal=True
+                                )
+
+                                c_ed3, c_ed4 = st.columns(2)
+                                ed_importe = c_ed3.number_input(
+                                    "Importe ($)",
+                                    min_value=0.0,
+                                    value=float(mov_obj["Monto"]),
+                                    step=100.0
+                                )
+                                lista_fp_ed = ["Efectivo", "Crédito", "Débito", "Transferencia"]
+                                idx_fp = lista_fp_ed.index(mov_obj["Forma_Pago"]) if mov_obj["Forma_Pago"] in lista_fp_ed else 0
+                                ed_forma_pago = c_ed4.selectbox("Forma de Pago", lista_fp_ed, index=idx_fp)
+
+                                b_guardar_ed, b_elim_ed = st.columns(2)
+                                btn_upd = b_guardar_ed.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
+                                btn_del = b_elim_ed.form_submit_button("🗑️ Eliminar Movimiento", use_container_width=True)
+
+                            def _buscar_contramovimiento_gemelo(mov_original):
+                                if mov_original["Tipo"] == "Ingreso" and mov_original["Forma_Pago"] != "Efectivo":
+                                    concepto_gemelo = f"RETIRO PAGO {mov_original['Forma_Pago'].upper()}"
+                                    candidatos = [
+                                        x for x in movs_turno
+                                        if x["ID_Movimiento"] > mov_original["ID_Movimiento"]
+                                        and x["Tipo"] == "Egreso"
+                                        and x["Concepto"] == concepto_gemelo
+                                        and abs(float(x["Monto"]) - float(mov_original["Monto"])) < 0.01
+                                        and x["Forma_Pago"] == mov_original["Forma_Pago"]
+                                    ]
+                                    return candidatos[-1] if candidatos else None
+                                return None
+
+                            if btn_upd:
+                                gemelo = _buscar_contramovimiento_gemelo(mov_obj)
+
+                                db.table("CAJA").update({
+                                    "Concepto": ed_concepto,
+                                    "Tipo": ed_tipo,
                                     "Monto": float(ed_importe),
                                     "Forma_Pago": ed_forma_pago
-                                }).execute()
+                                }).eq("ID_Movimiento", id_mov_sel).execute()
 
-                            st.success("✅ Movimiento manual actualizado correctamente.")
-                            st.rerun()
+                                requiere_gemelo = (ed_tipo == "Ingreso" and ed_forma_pago != "Efectivo")
+                                if gemelo and requiere_gemelo:
+                                    db.table("CAJA").update({
+                                        "Concepto": f"RETIRO PAGO {ed_forma_pago.upper()}",
+                                        "Monto": float(ed_importe),
+                                        "Forma_Pago": ed_forma_pago
+                                    }).eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
+                                elif gemelo and not requiere_gemelo:
+                                    db.table("CAJA").delete().eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
+                                elif not gemelo and requiere_gemelo:
+                                    db.table("CAJA").insert({
+                                        "ID_Turno": turno_actual["ID_Turno"],
+                                        "Fecha": mov_obj["Fecha"],
+                                        "Tipo": "Egreso",
+                                        "Concepto": f"RETIRO PAGO {ed_forma_pago.upper()}",
+                                        "Monto": float(ed_importe),
+                                        "Forma_Pago": ed_forma_pago,
+                                        "Usuario": mov_obj.get("Usuario") or usuario_registro
+                                    }).execute()
 
-                        if btn_del:
-                            gemelo = _buscar_contramovimiento_gemelo(mov_obj)
-                            if gemelo:
-                                db.table("CAJA").delete().eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
-                            db.table("CAJA").delete().eq("ID_Movimiento", id_mov_sel).execute()
-                            st.warning("🗑️ Movimiento manual eliminado.")
-                            st.rerun()
+                                st.success("✅ Movimiento manual actualizado correctamente.")
+                                st.rerun()
+
+                            if btn_del:
+                                gemelo = _buscar_contramovimiento_gemelo(mov_obj)
+                                if gemelo:
+                                    db.table("CAJA").delete().eq("ID_Movimiento", gemelo["ID_Movimiento"]).execute()
+                                db.table("CAJA").delete().eq("ID_Movimiento", id_mov_sel).execute()
+                                st.warning("🗑️ Movimiento manual eliminado.")
+                                st.rerun()
 
     # =====================================================================
     # MODULO: 🛒 PUNTO DE VENTA
