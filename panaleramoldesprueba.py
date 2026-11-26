@@ -1312,8 +1312,17 @@ else:
 
             # --- REGISTRO MANUAL (Fuera del if para que siempre se vea) ---
             with st.expander("➕ Registrar Movimiento Manual"):
-                conceptos_data = db.table("LISTA_CONCEPTOS").select("CONCEPTO").execute().data
-                lista_c = [c['CONCEPTO'] for c in conceptos_data]
+                conceptos_data = (
+                    db.table("LISTA_CONCEPTOS")
+                    .select("CONCEPTO")
+                    .order("CONCEPTO", desc=False)
+                    .execute()
+                    .data
+                )
+                lista_c = sorted(
+                    [str(c["CONCEPTO"]).strip() for c in (conceptos_data or []) if c.get("CONCEPTO")],
+                    key=lambda x: x.upper()
+                )
                 
                 with st.form("nuevo_movimiento", clear_on_submit=True):
                     concepto = st.selectbox("Concepto", lista_c)
