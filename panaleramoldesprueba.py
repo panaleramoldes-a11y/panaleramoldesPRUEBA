@@ -2469,9 +2469,13 @@ else:
                                 turno_res = db.table("CONTROL_TURNOS").select("ID_Turno").eq("Estado", "Abierto").maybe_single().execute()
                                 id_turno_val = turno_res.data['ID_Turno'] if (turno_res and turno_res.data) else "SIN_TURNO"
         
-                                nombre_usuario_actual = st.session_state.get('usuario_nombre')
+                                nombre_usuario_actual = str(
+                                    st.session_state.get('usuario_actual')
+                                    or st.session_state.get('usuario_nombre')
+                                    or ""
+                                ).strip()
                                 if not nombre_usuario_actual:
-                                    u_res = db.table("USUARIOS").select("Nombre").eq("ID_Usuario", vendedor_id_final).single().execute()
+                                    u_res = db.table("USUARIOS").select("Nombre").eq("ID_Usuario", vendedor_id_final).maybe_single().execute()
                                     nombre_usuario_actual = u_res.data.get('Nombre') if (u_res and u_res.data) else str(vendedor_id_final)
         
                                 # 2. Registrar Cabecera
@@ -2591,7 +2595,8 @@ else:
                                         "Tipo": "Ingreso",
                                         "Concepto": f"Venta {id_v} ({metodo})",
                                         "Monto": monto,
-                                        "Forma_Pago": metodo
+                                        "Forma_Pago": metodo,
+                                        "Usuario": nombre_usuario_actual
                                     }).execute()
         
                                     es_efectivo_reparto = (metodo == "Efectivo" and st.session_state.tipo_entrega == "Reparto")
@@ -2614,7 +2619,8 @@ else:
                                             "Tipo": "Egreso",
                                             "Concepto": f"RETIRO PAGO {metodo.upper()} (Venta {id_v})",
                                             "Monto": monto,
-                                            "Forma_Pago": metodo
+                                            "Forma_Pago": metodo,
+                                            "Usuario": nombre_usuario_actual
                                         }).execute()
         
                                 if 'id_pendiente_cargado' in st.session_state:
