@@ -106,7 +106,8 @@ else:
             "Tipo": "Ingreso",
             "Concepto": "APERTURA DE CAJA",
             "Monto": float(monto_inicial),
-            "Forma_Pago": "Efectivo"
+            "Forma_Pago": "Efectivo",
+            "Usuario": str(usuario)
         }).execute()
 
     def modulo_ventas():
@@ -1225,27 +1226,13 @@ else:
         st.title("💰 Gestión de Caja")
 
         # --- DETECCIÓN DE PERMISOS Y USUARIO ACTUAL ---
-        rol_sesion = str(
-            st.session_state.get("rol")
-            or st.session_state.get("usuario_rol")
-            or st.session_state.get("role")
-            or ""
-        ).strip().lower()
-        user_sesion = str(
-            st.session_state.get("usuario")
-            or st.session_state.get("usuario_nombre")
-            or ""
-        ).strip().lower()
+        rol_sesion = str(st.session_state.get("rol") or "").strip().lower()
+        usuario_registro = str(st.session_state.get("usuario_actual") or "Sistema").strip()
 
-        es_admin = (rol_sesion == "administrador") or (user_sesion == "martiny")
-        usuario_registro = str(
-            st.session_state.get("usuario_nombre")
-            or st.session_state.get("usuario")
-            or "Martin"
-        )
+        es_admin = (rol_sesion == "administrador") or (usuario_registro.lower() == "martiny")
         
         # 1. Obtenemos estado
-        turno_actual = obtener_turno_activo() 
+        turno_actual = obtener_turno_activo()
         
         # Reducimos los tabs únicamente a las dos vistas útiles
         tab_turno, tab_explorar = st.tabs(["🕒 Turno Actual", "🔍 Explorador"])
