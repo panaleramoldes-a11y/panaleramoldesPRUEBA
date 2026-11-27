@@ -2468,14 +2468,43 @@ else:
                         st.error(f"¡Error! La suma de los pagos (${suma_pagos:.2f}) no coincide con el total (${total_final_vta:.2f})")
                     else:
                         # ---------------------------------------------------------
-                        # 🔒 VALIDACIÓN OBLIGATORIA DE N° DE OPERACIÓN
+                        # 🔒 VALIDACIÓN OBLIGATORIA Y UNICIDAD DE N° DE OPERACIÓN
                         # ---------------------------------------------------------
                         hay_error_op = False
+                        ops_en_esta_venta = set()
+
                         for idx_p, p_val in enumerate(st.session_state.pagos_split):
                             if float(p_val.get("monto", 0)) > 0 and requiere_nro_operacion(p_val.get("metodo", "")):
                                 nro_ingresado = str(p_val.get("nro_operacion", "")).strip()
                                 if not nro_ingresado:
                                     st.error(f"❌ Falta ingresar el N° de Operación / Comprobante para el pago #{idx_p + 1} ({p_val['metodo']}).")
+                                    hay_error_op = True
+                                    break
+
+                                nro_norm = nro_ingresado.upper()
+
+                                # 1. Controlar duplicado dentro de la misma venta (pago dividido)
+                                if nro_norm in ops_en_esta_venta:
+                                    st.error(f"❌ El N° de Operación '{nro_ingresado}' está repetido en esta misma venta.")
+                                    hay_error_op = True
+                                    break
+                                ops_en_esta_venta.add(nro_norm)
+
+                                # 2. Controlar que no exista previamente en VENTAS_PAGOS
+                                op_existente = (
+                                    db.table("VENTAS_PAGOS")
+                                    .select("ID_Venta, Metodo_Pago, Monto")
+                                    .ilike("Nro_Operacion", nro_ingresado)
+                                    .limit(1)
+                                    .execute()
+                                    .data
+                                )
+                                if op_existente:
+                                    vta_prev = op_existente[0]
+                                    st.error(
+                                        f"⛔ El N° de Operación '{nro_ingresado}' ya fue registrado previamente "
+                                        f"en la Venta #{vta_prev['ID_Venta']} ({vta_prev['Metodo_Pago']} por ${float(vta_prev['Monto']):,.2f})."
+                                    )
                                     hay_error_op = True
                                     break
 
