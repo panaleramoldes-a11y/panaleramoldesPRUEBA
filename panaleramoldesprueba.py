@@ -2401,12 +2401,15 @@ else:
             # Ajustamos las columnas para incluir la tercera (col_e3)
             col_e1, col_e2, col_e3 = st.columns([1.3, 1.8, 1]) 
 
-            # 1. Determinamos el índice inicial del radio
             opciones_entrega = ["Mostrador", "Cadete", "Reparto"]
-            estado_tipo = st.session_state.get("tipo_entrega", "Mostrador")
-            idx_radio = opciones_entrega.index(estado_tipo) if estado_tipo in opciones_entrega else 0
+            if st.session_state.get("tipo_entrega") not in opciones_entrega:
+                st.session_state.tipo_entrega = "Mostrador"
                 
-            tipo_entrega = col_e1.radio("¿Cómo se entrega?", opciones_entrega, index=idx_radio)
+            tipo_entrega = col_e1.radio(
+                "¿Cómo se entrega?",
+                opciones_entrega,
+                key="tipo_entrega"
+            )
 
             from datetime import datetime
 
