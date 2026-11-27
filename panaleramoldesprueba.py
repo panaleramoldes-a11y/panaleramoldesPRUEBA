@@ -2468,25 +2468,38 @@ else:
                         st.error(f"¡Error! La suma de los pagos (${suma_pagos:.2f}) no coincide con el total (${total_final_vta:.2f})")
                     else:
                         # ---------------------------------------------------------
+                        # 🔒 VALIDACIÓN OBLIGATORIA DE N° DE OPERACIÓN
+                        # ---------------------------------------------------------
+                        hay_error_op = False
+                        for idx_p, p_val in enumerate(st.session_state.pagos_split):
+                            if float(p_val.get("monto", 0)) > 0 and requiere_nro_operacion(p_val.get("metodo", "")):
+                                nro_ingresado = str(p_val.get("nro_operacion", "")).strip()
+                                if not nro_ingresado:
+                                    st.error(f"❌ Falta ingresar el N° de Operación / Comprobante para el pago #{idx_p + 1} ({p_val['metodo']}).")
+                                    hay_error_op = True
+                                    break
+
+                        # ---------------------------------------------------------
                         # 🔥 VALIDACIÓN DE STOCK REAL EN BASE DE DATOS
                         # ---------------------------------------------------------
                         hay_error_stock = False
-                        for item in st.session_state.carrito_vta:
-                            p_check = db.table("PRODUCTOS").select("Nombre", "Stock_Actual", "Es_Stockeable").eq("ID_Producto", str(item["id"])).single().execute()
-                            if p_check.data:
-                                es_stockeable = p_check.data.get("Es_Stockeable", True)
-                                stock_actual = float(p_check.data.get("Stock_Actual", 0))
-                                cant_solicitada = float(item["cantidad"])
-        
-                                if es_stockeable and cant_solicitada > stock_actual:
-                                    nombre_prod = p_check.data.get("Nombre", "Desconocido")
-                                    st.error(f'El artículo "{nombre_prod}" no posee esa cantidad para facturar, revisar código y stock')
-                                    hay_error_stock = True
-                                    break
+                        if not hay_error_op:
+                            for item in st.session_state.carrito_vta:
+                                p_check = db.table("PRODUCTOS").select("Nombre", "Stock_Actual", "Es_Stockeable").eq("ID_Producto", str(item["id"])).single().execute()
+                                if p_check.data:
+                                    es_stockeable = p_check.data.get("Es_Stockeable", True)
+                                    stock_actual = float(p_check.data.get("Stock_Actual", 0))
+                                    cant_solicitada = float(item["cantidad"])
+            
+                                    if es_stockeable and cant_solicitada > stock_actual:
+                                        nombre_prod = p_check.data.get("Nombre", "Desconocido")
+                                        st.error(f'El artículo "{nombre_prod}" no posee esa cantidad para facturar, revisar código y stock')
+                                        hay_error_stock = True
+                                        break
         
                         # --- BLINDAJE DE SEGURIDAD PARA GIFT CARDS ---
                         hay_error_gc = False
-                        if not hay_error_stock:
+                        if not hay_error_op and not hay_error_stock:
                             for pago in st.session_state.pagos_split:
                                 if "Gift Card" in pago["metodo"]:
                                     gc_check = db.table("GIFT_CARDS") \
@@ -2502,7 +2515,7 @@ else:
                                         break
         
                         # PROCESAR VENTA SOLO SI NO HAY ERRORES
-                        if not hay_error_stock and not hay_error_gc:
+                        if not hay_error_op and not hay_error_stock and not hay_error_gc:
                             try:
                                 # 1. DEFINIR DATOS BÁSICOS
                                 id_v = datetime.now().strftime("%Y%m%d%H%M%S")
