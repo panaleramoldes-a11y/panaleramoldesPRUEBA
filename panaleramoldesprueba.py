@@ -2399,13 +2399,14 @@ else:
             st.subheader("🚚 Forma de Entrega")
 
             # Ajustamos las columnas para incluir la tercera (col_e3)
-            col_e1, col_e2, col_e3 = st.columns([1, 2, 1]) 
+            col_e1, col_e2, col_e3 = st.columns([1.3, 1.8, 1]) 
 
             # 1. Determinamos el índice inicial del radio
+            opciones_entrega = ["Mostrador", "Cadete", "Reparto"]
             estado_tipo = st.session_state.get("tipo_entrega", "Mostrador")
-            idx_radio = 0 if estado_tipo == "Mostrador" else 1
+            idx_radio = opciones_entrega.index(estado_tipo) if estado_tipo in opciones_entrega else 0
                 
-            tipo_entrega = col_e1.radio("¿Cómo se entrega?", ["Mostrador", "Reparto"], index=idx_radio)
+            tipo_entrega = col_e1.radio("¿Cómo se entrega?", opciones_entrega, index=idx_radio)
 
             from datetime import datetime
 
