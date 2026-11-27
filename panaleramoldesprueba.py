@@ -2304,20 +2304,27 @@ else:
             
             # Aquí sigue tu código original que genera los selectores (el for loop)
             if 'pagos_split' not in st.session_state:
-                st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0}]
+                st.session_state.pagos_split = [{"metodo": "Efectivo", "monto": 0.0, "nro_operacion": ""}]
 
-            # Esta función se ejecuta apenas el usuario cambia el número y presiona TAB
             def actualizar_valor_pago(indice):
-                # El valor nuevo ya está en st.session_state porque la key del input 
-                # coincide con el nombre de la variable
                 valor_nuevo = st.session_state[f"temp_mon_{indice}"]
                 st.session_state.pagos_split[indice]["monto"] = float(valor_nuevo)
 
-            # --- CALCULADOR DE SALDO (Se recalcula al inicio de cada rerun) ---
+            def actualizar_nro_op(indice):
+                st.session_state.pagos_split[indice]["nro_operacion"] = str(st.session_state[f"temp_op_{indice}"]).strip()
+
+            def requiere_nro_operacion(nombre_metodo):
+                m_norm = (
+                    str(nombre_metodo).strip().lower()
+                    .replace("é", "e").replace("í", "i").replace("ó", "o").replace("á", "a").replace("ú", "u")
+                )
+                return any(clave in m_norm for clave in ("debito", "credito", "transferencia"))
+
+            # --- CALCULADOR DE SALDO ---
             suma_pagos_actual = sum(float(p["monto"]) for p in st.session_state.pagos_split)
             saldo_pendiente = total_final_vta - suma_pagos_actual
 
-            if saldo_pendiente > 0.01: # 0.01 por tolerancia de flotantes
+            if saldo_pendiente > 0.01:
                 st.warning(f"⚠️ Faltan completar: **${saldo_pendiente:,.2f}**")
             elif saldo_pendiente < -0.01:
                 st.error(f"❌ Exceso de: **${abs(saldo_pendiente):,.2f}**")
@@ -2326,29 +2333,65 @@ else:
 
             # Iteración para mostrar los inputs
             for i, p in enumerate(st.session_state.pagos_split):
-                col_p1, col_p2, col_p3 = st.columns([2, 1, 0.5])
-                
-                # Selector de método
-                st.session_state.pagos_split[i]["metodo"] = col_p1.selectbox(
-                    f"Método {i+1}", lista_pagos, key=f"p_met_{i}"
+                # Determinamos primero el método seleccionado para armar las columnas dinámicamente
+                metodo_previo = st.session_state.get(f"p_met_{i}", p.get("metodo", "Efectivo"))
+                if metodo_previo not in lista_pagos:
+                    metodo_previo = lista_pagos[0] if lista_pagos else "Efectivo"
+
+                if requiere_nro_operacion(metodo_previo):
+                    col_p1, col_p2, col_op, col_p3 = st.columns([1.6, 1.1, 1.5, 0.4], vertical_alignment="bottom")
+                else:
+                    col_p1, col_p2, col_p3 = st.columns([2, 1, 0.4], vertical_alignment="bottom")
+                    col_op = None
+
+                metodo_sel = col_p1.selectbox(
+                    f"Método {i+1}",
+                    lista_pagos,
+                    index=lista_pagos.index(metodo_previo),
+                    key=f"p_met_{i}"
                 )
-                
-                # Monto con callback inmediato
+                st.session_state.pagos_split[i]["metodo"] = metodo_sel
+
                 col_p2.number_input(
-                    f"Monto {i+1}", 
-                    min_value=0.0, 
-                    value=float(p["monto"]), 
-                    key=f"temp_mon_{i}", 
-                    on_change=actualizar_valor_pago, 
-                    args=(i,) # Le pasamos el índice a la función
+                    f"Monto {i+1}",
+                    min_value=0.0,
+                    value=float(p["monto"]),
+                    key=f"temp_mon_{i}",
+                    on_change=actualizar_valor_pago,
+                    args=(i,)
                 )
-                
+
+                # Campo N° Operación SOLO si es Débito, Crédito o Transferencia
+                if requiere_nro_operacion(metodo_sel):
+                    if col_op is None:
+                        # Si acaba de cambiar en este rerun desde Efectivo a Transferencia/Débito/Crédito
+                        nro_actual = col_p1.text_input(
+                            f"N° Operación / Comprobante {i+1}",
+                            value=str(p.get("nro_operacion", "")),
+                            placeholder="Pegar N° de operación...",
+                            key=f"temp_op_{i}",
+                            on_change=actualizar_nro_op,
+                            args=(i,)
+                        )
+                    else:
+                        nro_actual = col_op.text_input(
+                            f"N° Operación / Comprobante {i+1}",
+                            value=str(p.get("nro_operacion", "")),
+                            placeholder="Pegar N° de operación...",
+                            key=f"temp_op_{i}",
+                            on_change=actualizar_nro_op,
+                            args=(i,)
+                        )
+                    st.session_state.pagos_split[i]["nro_operacion"] = str(nro_actual).strip()
+                else:
+                    st.session_state.pagos_split[i]["nro_operacion"] = ""
+
                 if col_p3.button("🗑️", key=f"del_p_{i}"):
                     st.session_state.pagos_split.pop(i)
                     st.rerun()
 
             if st.button("➕ Añadir otro método de pago"):
-                st.session_state.pagos_split.append({"metodo": "Efectivo", "monto": 0.0})
+                st.session_state.pagos_split.append({"metodo": "Efectivo", "monto": 0.0, "nro_operacion": ""})
                 st.rerun()
 
         # --- 5. FORMA DE ENTREGA ---
@@ -2479,13 +2522,26 @@ else:
                                     nombre_usuario_actual = u_res.data.get('Nombre') if (u_res and u_res.data) else str(vendedor_id_final)
         
                                 # 2. Registrar Cabecera
-                                desglose_pagos = " | ".join([f"{p['metodo']}: ${p['monto']:,.0f}" for p in st.session_state.pagos_split])
+                                partes_pago = []
+                                ops_registradas = []
+                                for p in st.session_state.pagos_split:
+                                    nro_op = str(p.get("nro_operacion", "")).strip()
+                                    if nro_op:
+                                        partes_pago.append(f"{p['metodo']} (Op: {nro_op}): ${p['monto']:,.0f}")
+                                        ops_registradas.append(f"{p['metodo']}: {nro_op}")
+                                    else:
+                                        partes_pago.append(f"{p['metodo']}: ${p['monto']:,.0f}")
+
+                                desglose_pagos = " | ".join(partes_pago)
+                                nro_op_cabecera = " | ".join(ops_registradas) if ops_registradas else None
+
                                 db.table("VENTAS_CABECERA").insert({
                                     "ID_Venta": id_v,
                                     "Fecha": f,
                                     "ID_Cliente": id_cliente_final,
                                     "ID_Vendedor": vendedor_id_final, 
                                     "Forma_Pago": desglose_pagos,
+                                    "Nro_Operacion": nro_op_cabecera,
                                     "Total": total_final_vta,
                                     "Forma_Entrega": st.session_state.tipo_entrega,
                                     "Direccion_Entrega": st.session_state.direccion_entrega if st.session_state.tipo_entrega == "Reparto" else "N/A",
@@ -2578,10 +2634,12 @@ else:
         
                                 # 4. Registrar Pagos en VENTAS_PAGOS
                                 for pago in st.session_state.pagos_split:
+                                    nro_op_pago = str(pago.get("nro_operacion", "")).strip() or None
                                     db.table("VENTAS_PAGOS").insert({
                                         "ID_Venta": id_v,
                                         "Metodo_Pago": pago["metodo"],
-                                        "Monto": float(pago["monto"])
+                                        "Monto": float(pago["monto"]),
+                                        "Nro_Operacion": nro_op_pago
                                     }).execute()
         
                                 # 5. Registrar en Caja y procesar Gift Cards
